@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="298fd64b-89fc-43c6-83e2-8d333bd785cf" name="Default" comment="Second commit">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
+    <list default="true" id="298fd64b-89fc-43c6-83e2-8d333bd785cf" name="Default" comment="fixed parsing&#10;">
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/src/mqtt_parser_test.erl" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_parser.erl" afterPath="$PROJECT_DIR$/src/mqtt_parser.erl" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="Mqtt.iws" />
     <ignored path=".idea/workspace.xml" />
@@ -70,19 +71,19 @@
   </component>
   <component name="FileEditorManager">
     <leaf>
-      <file leaf-file-name="Mqtt.iml" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/Mqtt.iml">
+      <file leaf-file-name="mqtt_parser.erl" pinned="false" current="true" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408">
+            <state line="46" column="2" selection-start="1279" selection-end="1279" vertical-scroll-proportion="0.6820513" vertical-offset="383" max-vertical-offset="3043">
               <folding />
             </state>
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="mqtt_parser.erl" pinned="false" current="true" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
+      <file leaf-file-name="mqtt_parser_test.erl" pinned="false" current="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/src/mqtt_parser_test.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="24" column="2" selection-start="444" selection-end="444" vertical-scroll-proportion="0.31924883" vertical-offset="204" max-vertical-offset="2805">
+            <state line="14" column="21" selection-start="416" selection-end="416" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1581">
               <folding />
             </state>
           </provider>
@@ -118,15 +119,17 @@
         <option value="$PROJECT_DIR$/Mqtt.iml" />
         <option value="$PROJECT_DIR$/src/mqtt_parser.app" />
         <option value="$PROJECT_DIR$/src/mqtt_parser_backup.erl" />
+        <option value="$PROJECT_DIR$/test/mqtt_parser_test.erl" />
         <option value="$PROJECT_DIR$/src/mqtt_parser.erl" />
+        <option value="$PROJECT_DIR$/src/mqtt_parser_test.erl" />
       </list>
     </option>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="x" value="-8" />
+    <option name="x" value="-1688" />
     <option name="y" value="-8" />
-    <option name="width" value="1936" />
-    <option name="height" value="1056" />
+    <option name="width" value="1696" />
+    <option name="height" value="1066" />
   </component>
   <component name="ProjectLevelVcsManager" settingsEditedManually="true">
     <OptionsSetting value="true" id="Add" />
@@ -237,8 +240,11 @@
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Development\Erlang\Mqtt\src" />
     </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Development\Erlang\Mqtt\src" />
+    </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Erlang Console.Console">
     <configuration default="true" type="#org.jetbrains.idea.devkit.run.PluginConfigurationType" factoryName="Plugin" singleton="true">
       <module name="" />
       <option name="VM_PARAMETERS" value="-Xmx512m -Xms256m -XX:MaxPermSize=250m -ea" />
@@ -364,7 +370,7 @@
       <method />
     </configuration>
     <configuration default="true" type="ErlangConsoleRunConfigurationType" factoryName="Erlang Console">
-      <module name="" />
+      <module name="Mqtt" />
       <option name="consoleArgs" value="" />
       <option name="name" value="Erlang Shell" />
       <option name="saveOutputToFile" value="false" />
@@ -414,7 +420,21 @@
       <option name="SHOW_LOGCAT_AUTOMATICALLY" value="true" />
       <method />
     </configuration>
-    <list size="0" />
+    <configuration default="false" name="Console" type="ErlangConsoleRunConfigurationType" factoryName="Erlang Console">
+      <module name="Mqtt" />
+      <option name="consoleArgs" value="" />
+      <option name="name" value="Console" />
+      <option name="saveOutputToFile" value="false" />
+      <option name="showConsoleOnStdErr" value="false" />
+      <option name="showConsoleOnStdOut" value="false" />
+      <option name="workingDirPath" value="C:\Development\Erlang\Mqtt" />
+      <RunnerSettings RunnerId="Run" />
+      <ConfigurationWrapper RunnerId="Run" />
+      <method />
+    </configuration>
+    <list size="1">
+      <item index="0" class="java.lang.String" itemvalue="Erlang Console.Console" />
+    </list>
     <configuration name="&lt;template&gt;" type="WebApp" default="true" selected="false">
       <Host>localhost</Host>
       <Port>5050</Port>
@@ -452,7 +472,11 @@
       <created>1417845739289</created>
       <updated>1417845739289</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="fixed parsing">
+      <created>1417888283755</created>
+      <updated>1417888283755</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TodoView" selected-index="0">
@@ -476,11 +500,11 @@
     </todo-panel>
   </component>
   <component name="ToolWindowManager">
-    <frame x="-8" y="-8" width="1936" height="1056" extended-state="6" />
+    <frame x="-1688" y="-8" width="1696" height="1066" extended-state="6" />
     <editor active="true" />
     <layout>
       <window_info id="Palette&#9;" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
-      <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32930845" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Designer" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Palette" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32963374" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
@@ -490,14 +514,14 @@
       <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="true" content_ui="tabs" />
       <window_info id="Favorites" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="true" content_ui="tabs" />
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Messages" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.26193118" sideWeight="0.5" order="8" side_tool="false" content_ui="tabs" />
+      <window_info id="Messages" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.2579583" sideWeight="0.5" order="8" side_tool="false" content_ui="tabs" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32963374" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.24973376" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Maven Projects" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="SLIDING" type="SLIDING" visible="false" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Application Servers" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.19488817" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
-      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.22344323" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.32930845" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
@@ -519,7 +543,8 @@
     <option name="SHORT_DIFF_EXTRA_LINES" value="1" />
     <MESSAGE value="Inital commit" />
     <MESSAGE value="Second commit" />
-    <option name="LAST_COMMIT_MESSAGE" value="Second commit" />
+    <MESSAGE value="fixed parsing" />
+    <option name="LAST_COMMIT_MESSAGE" value="fixed parsing" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager />
@@ -683,13 +708,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="77" column="21" selection-start="1929" selection-end="1929" vertical-scroll-proportion="0.0" vertical-offset="925" max-vertical-offset="1564">
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/.idea/workspace.xml">
       <provider selected="true" editor-type-id="text-editor">
         <state line="2" column="33" selection-start="94" selection-end="94" vertical-scroll-proportion="0.0543131" vertical-offset="0" max-vertical-offset="12002">
@@ -697,9 +715,23 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="77" column="21" selection-start="1929" selection-end="1929" vertical-scroll-proportion="0.0" vertical-offset="925" max-vertical-offset="1564">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_parser_test.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="14" column="21" selection-start="416" selection-end="416" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1581">
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="24" column="2" selection-start="444" selection-end="444" vertical-scroll-proportion="0.31924883" vertical-offset="204" max-vertical-offset="2805">
+        <state line="46" column="2" selection-start="1279" selection-end="1279" vertical-scroll-proportion="0.6820513" vertical-offset="383" max-vertical-offset="3043">
           <folding />
         </state>
       </provider>

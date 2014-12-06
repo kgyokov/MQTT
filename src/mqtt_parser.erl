@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([read/1, parse_string/1]).
+-export([read/1, parse_string/1, read/3]).
 
 
 -record(state, { parse_state } ).
@@ -26,21 +26,35 @@
 %% Communication Adaptors
 %%
 %%
+read(_ReadFun, MaxBufferSize, Buffer) when byte_size(Buffer) > MaxBufferSize  ->
+  throw({error, buffer_overflow });
+read(ReadFun, _MaxBufferSize, Buffer) ->
+  case ReadFun() of
+    {ok,NewFragment} -> <<Buffer/binary,NewFragment/binary>>; %% append the newly retrieved bytes
+    {error,Reason} -> throw({error,Reason})
+  end.
+
 read(#parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer}) when byte_size(Buffer) > MaxBufferSize  ->
   throw({error, buffer_overflow });
 
 read(S = #parse_state{readfun = ReadFun, buffer = Buffer})->
   case ReadFun() of
-    {ok,NewBytes} -> S#parse_state{buffer = <<Buffer,NewBytes>>}; %%append the newly retrieved bytes
+    {ok,NewBytes} -> S#parse_state{buffer = <<Buffer/binary,NewBytes/binary>>}; %% append the newly retrieved bytes
     {error,Reason} -> throw({error,Reason})
   end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%%      PRIMITIVES:
+%%
+%%      strings
+%%      variable lengths
+%%      etc
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 %%[MQTT-1.5.3]
-%%
-%%
-%%
-%%
 parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
   {{ok,Str},Rest};
 parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
