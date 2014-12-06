@@ -17,9 +17,6 @@
 
 -record(state, { readfun = undefined, buffer }).
 
-read(S)->
-
-
 
 
 parse_fixed_header(<<HeaderStart:8,Rest>>)->
@@ -28,7 +25,7 @@ parse_fixed_header(<<HeaderStart:8,Rest>>)->
   PacketId = case Type of
     { 'SUBSCRIBE', _ } -> 0;
     { 'UNSUBSCRIBE', _ } -> 0;
-    { 'PUBLISH ', { _, QoS, _} } when QoS > 0 -> 0;
+    { 'PUBLISH ', { _, QoS, _} } when QoS > 0 -> 0
   end
 .
 
@@ -80,7 +77,7 @@ variable_length(<<HasMore:1,Length:7, Rest>> , Sum, Multiplier) ->
   NewSum = Sum + Length * Multiplier,
   if HasMore =:= 1 ->
     variable_length(Rest, NewSum, Multiplier * 128);
-    _ -> NewSum
+    true -> NewSum
   end;
 
 variable_length(<<_:0>>, _, _) ->

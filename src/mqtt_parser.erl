@@ -13,29 +13,32 @@
 -export([]).
 
 
-%% [MQTT-2.2.1]
+-record(state, { parse_state } ).
 
--record(state, { readfun = undefined, timeout, buffer = <<>>, packet }).
+-record(parse_state, {
+  readfun,
+  buffer,
+  max_buffer_size
+}).
 
-read( ReadFun, TimeOut)->
-  case ReadFun(TimeOut) of
-    {ok,NewBytes} -> NewBytes;
-    _ -> error
+%% Communication Adaptors
+
+read(#parse_state{ buffer = <<Buffer:Length>>, max_buffer_size = MaxBufferSize}) when Length >= MaxBufferSize ->
+  throw({error, buffer_overflow });
+
+read(S#parse_state{readfun = ReadFun, buffer = Buffer})->
+  case ReadFun() of
+    {ok,NewBytes} -> S#parse_state{buffer = <<Buffer,NewBytes>>}; %%append the newly retrieved bytes
+    {error,Reason} -> throw({error,Reason})
   end.
 
-await_more_bytes(S#state{readfun = ReadFun,timeout = TimeOut, buffer = Buffer })->
-  case read(ReadFun,TimeOut) of
-    {ok, NewBytes} -> S#state {buffer = <<Buffer/bynary, NewBytes/binary>> };
-    _ -> error
-  end
-.
-
-await_more_bytes(ReadFun,TimeOut)->
-  case read(ReadFun,TimeOut) of
-    {ok, NewBytes} -> {ok,NewBytes};
-    _ -> error
-  end
-.
+%[MQTT-1.5.3]
+parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/utf8,Rest/binary>>}) ->
+  {{ok,Str},Rest};
+parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
+  {{empty},Rest};
+parse_string(S)->
+  parse_string(read(S)).
 
 
 parse_variable_length(ReadFun, Bytes) ->
@@ -51,13 +54,7 @@ parse_variable_length(ReadFun, Bytes, Sum, Multiplier) ->
   parse_variable_length(ReadFun, ReadFun(Bytes), Sum, Multiplier).
 
 
-%[MQTT-1.5.3]
-parse_string(_ReadFun,<<StrLen:16,Str:StrLen/utf8,Rest/binary>>) ->
-  {{ok,Str},Rest};
-parse_string(_ReadFun,<<0:16,Rest/binary>>) ->
-  {{empty},Rest};
-parse_string(ReadFun,Bytes)->
-  parse_string(ReadFun, ReadFun(Bytes)).
+
 %% Parsing!!!!
 
 
@@ -70,10 +67,6 @@ parse_header_start(ReadFun, Bytes)->
   parse_header_start(ReadFun, ReadFun(Bytes))
 .
 
-
-
-await_header_start(S#state{readfun = ReadFun,timeout = TimeOut, buffer= Buffer})->
-  await_header_start(ReadFun,TimeOut).
 
 
 
