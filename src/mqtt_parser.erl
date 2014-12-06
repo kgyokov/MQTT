@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([]).
+-export([read/1, parse_string/1]).
 
 
 -record(state, { parse_state } ).
@@ -21,34 +21,45 @@
   max_buffer_size
 }).
 
+%%
+%%
 %% Communication Adaptors
-
-read(#parse_state{ buffer = <<Buffer:Length>>, max_buffer_size = MaxBufferSize}) when Length >= MaxBufferSize ->
+%%
+%%
+read(#parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer}) when byte_size(Buffer) > MaxBufferSize  ->
   throw({error, buffer_overflow });
 
-read(S#parse_state{readfun = ReadFun, buffer = Buffer})->
+read(S = #parse_state{readfun = ReadFun, buffer = Buffer})->
   case ReadFun() of
     {ok,NewBytes} -> S#parse_state{buffer = <<Buffer,NewBytes>>}; %%append the newly retrieved bytes
     {error,Reason} -> throw({error,Reason})
   end.
 
-%[MQTT-1.5.3]
-parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/utf8,Rest/binary>>}) ->
+
+%%[MQTT-1.5.3]
+%%
+%%
+%%
+%%
+parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
   {{ok,Str},Rest};
 parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
   {{empty},Rest};
 parse_string(S)->
   parse_string(read(S)).
 
-
+%%
+%% Parses integer using variable length-encoding
+%%
+%%
 parse_variable_length(ReadFun, Bytes) ->
   parse_variable_length(ReadFun, Bytes, 0, 1).
 
 parse_variable_length(ReadFun, <<HasMore:1,Length:7, Rest/binary>>, Sum, Multiplier) ->
   NewSum = Sum + Length * Multiplier,
   if HasMore =:= 1 ->
-    parse_variable_length(ReadFun, Rest, NewSum, Multiplier * 128);
-    _ -> {NewSum, Rest}
+      parse_variable_length(ReadFun, Rest, NewSum, Multiplier * 128);
+    true -> {NewSum, Rest}
   end;
 parse_variable_length(ReadFun, Bytes, Sum, Multiplier) ->
   parse_variable_length(ReadFun, ReadFun(Bytes), Sum, Multiplier).
@@ -68,13 +79,9 @@ parse_header_start(ReadFun, Bytes)->
 .
 
 
-
-
-
-
 parse_fixed_header(<<HeaderStart:8,Rest/binary>>)->
-  Type = parse_header_start(HeaderStart),
-  RemainingLength = variable_length(Rest),
+  Type = parse_type_and_flags(HeaderStart),
+  RemainingLength = parse_variable_length(Rest,0),
   PacketId = case Type of
     { 'SUBSCRIBE', _ } -> 0;
     { 'UNSUBSCRIBE', _ } -> 0;
@@ -123,18 +130,19 @@ end
 parse_specific_type('CONNECT',
     <<2#0:8,
     2#100:8,
-    "MQTT":32,
+    "MQTT"/utf8,
     ProtocolLevel:8,
     UsernameFlag:1,PasswordFlag:1,WillRetain:1,WillQoS:2,WillFlag:1,CleanSession:1,_:1,
     KeppAlive:16,
-    ClientIdLength:16,
-    ClientId
+    %%ClientIdLength:16,
+    %%ClientId:ClientIdLength
+    Payload/binary
     >>, ReadFun) ->
   { 'CONNECT',ProtocolLevel, {UsernameFlag,PasswordFlag,WillRetain,WillQoS,WillFlag,CleanSession,KeppAlive}}
-.
-parse_specific_type('CONNECT', Buffer = <<_:Length>>, ReadFun) when Length < 32 ->
+;
+parse_specific_type('CONNECT', Buffer, ReadFun) when byte_size(Buffer) < 32 ->
   parse_specific_type('CONNECT', ReadFun(Buffer), ReadFun)
-.
+;
 parse_specific_type('CONNECT', _, _) ->
   error
 .
