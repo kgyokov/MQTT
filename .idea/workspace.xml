@@ -2,8 +2,12 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="298fd64b-89fc-43c6-83e2-8d333bd785cf" name="Default" comment="fixed parsing&#10;">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/src/mqtt_parser_test.erl" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/include/mqtt_const.hrl" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/src/mqtt_sender.erl" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/src/mqtt_server.erl" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/src/test_sup.erl" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_parser.erl" afterPath="$PROJECT_DIR$/src/mqtt_parser.erl" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_parser_test.erl" afterPath="$PROJECT_DIR$/src/mqtt_parser_test.erl" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="Mqtt.iws" />
@@ -71,10 +75,64 @@
   </component>
   <component name="FileEditorManager">
     <leaf>
-      <file leaf-file-name="mqtt_parser.erl" pinned="false" current="true" current-in-tab="true">
+      <file leaf-file-name="mqtt_parser.erl" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="46" column="2" selection-start="1279" selection-end="1279" vertical-scroll-proportion="0.6820513" vertical-offset="383" max-vertical-offset="3043">
+            <state line="108" column="18" selection-start="2837" selection-end="2837" vertical-scroll-proportion="0.0" vertical-offset="2257" max-vertical-offset="3519">
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="mqtt_server.erl" pinned="false" current="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/src/mqtt_server.erl">
+          <provider selected="true" editor-type-id="text-editor">
+            <state line="30" column="2" selection-start="621" selection-end="621" vertical-scroll-proportion="0.0" vertical-offset="317" max-vertical-offset="4539">
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="mqtt_sender.erl" pinned="false" current="true" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/src/mqtt_sender.erl">
+          <provider selected="true" editor-type-id="text-editor">
+            <state line="53" column="16" selection-start="1283" selection-end="1283" vertical-scroll-proportion="0.762069" vertical-offset="459" max-vertical-offset="2805">
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="test_sup.erl" pinned="false" current="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/src/test_sup.erl">
+          <provider selected="true" editor-type-id="text-editor">
+            <state line="31" column="21" selection-start="788" selection-end="788" vertical-scroll-proportion="0.0" vertical-offset="210" max-vertical-offset="1411">
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="gen_server.erl" pinned="false" current="false" current-in-tab="false">
+        <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/gen_server.erl">
+          <provider selected="true" editor-type-id="text-editor">
+            <state line="165" column="0" selection-start="5801" selection-end="5801" vertical-scroll-proportion="0.0" vertical-offset="2337" max-vertical-offset="15351">
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="gen_fsm.erl" pinned="false" current="false" current-in-tab="false">
+        <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/gen_fsm.erl">
+          <provider selected="true" editor-type-id="text-editor">
+            <state line="253" column="25" selection-start="9441" selection-end="9441" vertical-scroll-proportion="0.0" vertical-offset="6431" max-vertical-offset="12002">
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="mqtt_const.hrl" pinned="false" current="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/include/mqtt_const.hrl">
+          <provider selected="true" editor-type-id="text-editor">
+            <state line="32" column="2" selection-start="670" selection-end="670" vertical-scroll-proportion="0.0" vertical-offset="13" max-vertical-offset="663">
               <folding />
             </state>
           </provider>
@@ -83,8 +141,14 @@
       <file leaf-file-name="mqtt_parser_test.erl" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/src/mqtt_parser_test.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="14" column="21" selection-start="416" selection-end="416" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1581">
-              <folding />
+            <state line="11" column="27" selection-start="325" selection-end="325" vertical-scroll-proportion="0.0" vertical-offset="510" max-vertical-offset="1513">
+              <folding>
+                <marker date="1417912070369" expanded="true" signature="424:543" placeholder="all_tests/0 -&gt; ..." />
+                <marker date="1417912070369" expanded="true" signature="764:1003" placeholder="parse_string_test2/0 -&gt; ..." />
+                <marker date="1417912070369" expanded="true" signature="1630:1950" placeholder="initialize_parse_process/1 -&gt; ..." />
+                <marker date="1417912070369" expanded="true" signature="1952:2022" placeholder="push_fragment/2 -&gt; ..." />
+                <marker date="1417912070369" expanded="true" signature="2025:2159" placeholder="receive_result/1 -&gt; ..." />
+              </folding>
             </state>
           </provider>
         </entry>
@@ -93,7 +157,9 @@
         <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
           <provider selected="true" editor-type-id="text-editor">
             <state line="77" column="21" selection-start="1929" selection-end="1929" vertical-scroll-proportion="0.0" vertical-offset="925" max-vertical-offset="1564">
-              <folding />
+              <folding>
+                <marker date="1417845595513" expanded="true" signature="391:665" placeholder="parse_fixed_header/1 -&gt; ..." />
+              </folding>
             </state>
           </provider>
         </entry>
@@ -120,16 +186,20 @@
         <option value="$PROJECT_DIR$/src/mqtt_parser.app" />
         <option value="$PROJECT_DIR$/src/mqtt_parser_backup.erl" />
         <option value="$PROJECT_DIR$/test/mqtt_parser_test.erl" />
-        <option value="$PROJECT_DIR$/src/mqtt_parser.erl" />
         <option value="$PROJECT_DIR$/src/mqtt_parser_test.erl" />
+        <option value="$PROJECT_DIR$/include/mqtt_const.hrl" />
+        <option value="$PROJECT_DIR$/src/mqtt_parser.erl" />
+        <option value="$PROJECT_DIR$/src/test_sup.erl" />
+        <option value="$PROJECT_DIR$/src/mqtt_server.erl" />
+        <option value="$PROJECT_DIR$/src/mqtt_sender.erl" />
       </list>
     </option>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="x" value="-1688" />
+    <option name="x" value="-8" />
     <option name="y" value="-8" />
-    <option name="width" value="1696" />
-    <option name="height" value="1066" />
+    <option name="width" value="1936" />
+    <option name="height" value="1056" />
   </component>
   <component name="ProjectLevelVcsManager" settingsEditedManually="true">
     <OptionsSetting value="true" id="Add" />
@@ -157,6 +227,21 @@
       <sortByType />
     </navigator>
     <panes>
+      <pane id="Scope" />
+      <pane id="PackagesPane">
+        <subPane>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="Mqtt" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PackageViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="Mqtt" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PackageViewModuleNode" />
+            </PATH_ELEMENT>
+          </PATH>
+        </subPane>
+      </pane>
       <pane id="ProjectPane">
         <subPane>
           <PATH>
@@ -174,6 +259,54 @@
             </PATH_ELEMENT>
             <PATH_ELEMENT>
               <option name="myItemId" value="lib" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+          </PATH>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="Mqtt" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="External Libraries" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ExternalLibrariesNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="&lt; Unknown Erlang version at C:/erlang/erl6.1 &gt;" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.NamedLibraryElementNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="lib" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="stdlib-2.1" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+          </PATH>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="Mqtt" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="External Libraries" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ExternalLibrariesNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="&lt; Unknown Erlang version at C:/erlang/erl6.1 &gt;" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.NamedLibraryElementNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="lib" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="stdlib-2.1" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="src" />
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
           </PATH>
@@ -201,19 +334,18 @@
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
           </PATH>
-        </subPane>
-      </pane>
-      <pane id="Scope" />
-      <pane id="PackagesPane">
-        <subPane>
           <PATH>
             <PATH_ELEMENT>
               <option name="myItemId" value="Mqtt" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PackageViewProjectNode" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
             </PATH_ELEMENT>
             <PATH_ELEMENT>
               <option name="myItemId" value="Mqtt" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PackageViewModuleNode" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="include" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
           </PATH>
         </subPane>
@@ -315,19 +447,6 @@
       </option>
       <method />
     </configuration>
-    <configuration default="true" type="Applet" factoryName="Applet">
-      <module name="" />
-      <option name="MAIN_CLASS_NAME" />
-      <option name="HTML_FILE_NAME" />
-      <option name="HTML_USED" value="false" />
-      <option name="WIDTH" value="400" />
-      <option name="HEIGHT" value="300" />
-      <option name="POLICY_FILE" value="$APPLICATION_HOME_DIR$/bin/appletviewer.policy" />
-      <option name="VM_PARAMETERS" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <method />
-    </configuration>
     <configuration default="true" type="TestNG" factoryName="TestNG">
       <module name="" />
       <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
@@ -353,6 +472,19 @@
       <envs />
       <properties />
       <listeners />
+      <method />
+    </configuration>
+    <configuration default="true" type="Applet" factoryName="Applet">
+      <module name="" />
+      <option name="MAIN_CLASS_NAME" />
+      <option name="HTML_FILE_NAME" />
+      <option name="HTML_USED" value="false" />
+      <option name="WIDTH" value="400" />
+      <option name="HEIGHT" value="300" />
+      <option name="POLICY_FILE" value="$APPLICATION_HOME_DIR$/bin/appletviewer.policy" />
+      <option name="VM_PARAMETERS" />
+      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
+      <option name="ALTERNATIVE_JRE_PATH" />
       <method />
     </configuration>
     <configuration default="true" type="Application" factoryName="Application">
@@ -476,7 +608,11 @@
       <created>1417888283755</created>
       <updated>1417888283755</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="fixed parsing&#10;">
+      <created>1417909291711</created>
+      <updated>1417909291711</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TodoView" selected-index="0">
@@ -500,7 +636,7 @@
     </todo-panel>
   </component>
   <component name="ToolWindowManager">
-    <frame x="-1688" y="-8" width="1696" height="1066" extended-state="6" />
+    <frame x="-8" y="-8" width="1936" height="1056" extended-state="6" />
     <editor active="true" />
     <layout>
       <window_info id="Palette&#9;" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
@@ -508,24 +644,24 @@
       <window_info id="Designer" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Palette" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32963374" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
+      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.32890365" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Ant Build" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="true" content_ui="tabs" />
       <window_info id="Favorites" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="true" content_ui="tabs" />
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Messages" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.2579583" sideWeight="0.5" order="8" side_tool="false" content_ui="tabs" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32963374" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.24973376" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Maven Projects" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="SLIDING" type="SLIDING" visible="false" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Application Servers" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.22344323" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
-      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.32930845" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.19488817" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32930845" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
-      <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
+      <window_info id="Messages" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.2608213" sideWeight="0.5" order="8" side_tool="false" content_ui="tabs" />
       <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
+      <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
     </layout>
   </component>
   <component name="Vcs.Log.UiProperties">
@@ -544,7 +680,8 @@
     <MESSAGE value="Inital commit" />
     <MESSAGE value="Second commit" />
     <MESSAGE value="fixed parsing" />
-    <option name="LAST_COMMIT_MESSAGE" value="fixed parsing" />
+    <MESSAGE value="fixed parsing&#10;" />
+    <option name="LAST_COMMIT_MESSAGE" value="fixed parsing&#10;" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager />
@@ -554,11 +691,73 @@
     <option name="FILTER_TARGETS" value="false" />
   </component>
   <component name="editorHistoryManager">
-    <entry file="file://$PROJECT_DIR$/Mqtt.iml">
+    <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408">
+        <state line="108" column="18" selection-start="2837" selection-end="2837" vertical-scroll-proportion="0.0" vertical-offset="2257" max-vertical-offset="3519">
           <folding />
         </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_server.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="196" column="5" selection-start="6458" selection-end="6458" vertical-scroll-proportion="0.0" vertical-offset="3107" max-vertical-offset="4488">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/test_sup.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="31" column="21" selection-start="788" selection-end="788" vertical-scroll-proportion="0.0" vertical-offset="210" max-vertical-offset="1411">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/gen_server.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="165" column="0" selection-start="5801" selection-end="5801" vertical-scroll-proportion="0.0" vertical-offset="2337" max-vertical-offset="15351">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/gen_fsm.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="253" column="25" selection-start="9441" selection-end="9441" vertical-scroll-proportion="0.0" vertical-offset="6431" max-vertical-offset="12002">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/include/mqtt_const.hrl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="32" column="2" selection-start="670" selection-end="670" vertical-scroll-proportion="0.0" vertical-offset="13" max-vertical-offset="663">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_parser_test.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="11" column="27" selection-start="325" selection-end="325" vertical-scroll-proportion="0.0" vertical-offset="510" max-vertical-offset="1513">
+          <folding>
+            <marker date="1417912070369" expanded="true" signature="424:543" placeholder="all_tests/0 -&gt; ..." />
+            <marker date="1417912070369" expanded="true" signature="764:1003" placeholder="parse_string_test2/0 -&gt; ..." />
+            <marker date="1417912070369" expanded="true" signature="1630:1950" placeholder="initialize_parse_process/1 -&gt; ..." />
+            <marker date="1417912070369" expanded="true" signature="1952:2022" placeholder="push_fragment/2 -&gt; ..." />
+            <marker date="1417912070369" expanded="true" signature="2025:2159" placeholder="receive_result/1 -&gt; ..." />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="77" column="21" selection-start="1929" selection-end="1929" vertical-scroll-proportion="0.0" vertical-offset="925" max-vertical-offset="1564">
+          <folding>
+            <marker date="1417845595513" expanded="true" signature="391:665" placeholder="parse_fixed_header/1 -&gt; ..." />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/Mqtt.iml">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
@@ -571,22 +770,20 @@
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="10" column="0" selection-start="299" selection-end="299" vertical-scroll-proportion="0.0" vertical-offset="63" max-vertical-offset="1615">
-          <folding />
+          <folding>
+            <marker date="1417845595513" expanded="true" signature="391:665" placeholder="parse_fixed_header/1 -&gt; ..." />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/io.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="12563">
-          <folding />
-        </state>
+        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="12563" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/Mqtt.iml">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408">
-          <folding />
-        </state>
+        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
@@ -599,22 +796,20 @@
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="29" column="30" selection-start="618" selection-end="618" vertical-scroll-proportion="0.0" vertical-offset="63" max-vertical-offset="1615">
-          <folding />
+          <folding>
+            <marker date="1417845595513" expanded="true" signature="391:665" placeholder="parse_fixed_header/1 -&gt; ..." />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/io.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="10631" max-vertical-offset="12563">
-          <folding />
-        </state>
+        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="10631" max-vertical-offset="12563" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/Mqtt.iml">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="408">
-          <folding />
-        </state>
+        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="408" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
@@ -627,22 +822,20 @@
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="29" column="30" selection-start="618" selection-end="618" vertical-scroll-proportion="0.0" vertical-offset="63" max-vertical-offset="1615">
-          <folding />
+          <folding>
+            <marker date="1417845595513" expanded="true" signature="391:665" placeholder="parse_fixed_header/1 -&gt; ..." />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/io.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="10631" max-vertical-offset="12563">
-          <folding />
-        </state>
+        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="10631" max-vertical-offset="12563" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/Mqtt.iml">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="408">
-          <folding />
-        </state>
+        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="408" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
@@ -655,22 +848,20 @@
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1615">
-          <folding />
+          <folding>
+            <marker date="1417845595513" expanded="true" signature="391:665" placeholder="parse_fixed_header/1 -&gt; ..." />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/io.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="10631" max-vertical-offset="12563">
-          <folding />
-        </state>
+        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="10631" max-vertical-offset="12563" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/Mqtt.iml">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408">
-          <folding />
-        </state>
+        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
@@ -683,55 +874,114 @@
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1615">
-          <folding />
+          <folding>
+            <marker date="1417845595513" expanded="true" signature="391:665" placeholder="parse_fixed_header/1 -&gt; ..." />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/io.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="10631" max-vertical-offset="12563">
-          <folding />
-        </state>
+        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="0.0" vertical-offset="10631" max-vertical-offset="12563" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/Mqtt.iml">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408">
-          <folding />
-        </state>
+        <state line="8" column="0" selection-start="280" selection-end="280" vertical-scroll-proportion="0.0" vertical-offset="34" max-vertical-offset="408" />
       </provider>
     </entry>
     <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/io.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="17.079813" vertical-offset="0" max-vertical-offset="12563">
-          <folding />
-        </state>
+        <state line="642" column="0" selection-start="18691" selection-end="18691" vertical-scroll-proportion="17.079813" vertical-offset="0" max-vertical-offset="12563" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/.idea/workspace.xml">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="2" column="33" selection-start="94" selection-end="94" vertical-scroll-proportion="0.0543131" vertical-offset="0" max-vertical-offset="12002">
-          <folding />
-        </state>
+        <state line="2" column="33" selection-start="94" selection-end="94" vertical-scroll-proportion="0.0543131" vertical-offset="0" max-vertical-offset="12002" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser_backup.erl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="77" column="21" selection-start="1929" selection-end="1929" vertical-scroll-proportion="0.0" vertical-offset="925" max-vertical-offset="1564">
-          <folding />
+          <folding>
+            <marker date="1417845595513" expanded="true" signature="391:665" placeholder="parse_fixed_header/1 -&gt; ..." />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser_test.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="14" column="21" selection-start="416" selection-end="416" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1581">
+        <state line="11" column="27" selection-start="325" selection-end="325" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1513">
+          <folding>
+            <marker date="1417912070369" expanded="true" signature="424:543" placeholder="all_tests/0 -&gt; ..." />
+            <marker date="1417912070369" expanded="true" signature="764:1003" placeholder="parse_string_test2/0 -&gt; ..." />
+            <marker date="1417912070369" expanded="true" signature="1630:1950" placeholder="initialize_parse_process/1 -&gt; ..." />
+            <marker date="1417912070369" expanded="true" signature="1952:2022" placeholder="push_fragment/2 -&gt; ..." />
+            <marker date="1417912070369" expanded="true" signature="2025:2159" placeholder="receive_result/1 -&gt; ..." />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/include/mqtt_const.hrl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="32" column="2" selection-start="670" selection-end="670" vertical-scroll-proportion="0.0" vertical-offset="13" max-vertical-offset="663">
           <folding />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="46" column="2" selection-start="1279" selection-end="1279" vertical-scroll-proportion="0.6820513" vertical-offset="383" max-vertical-offset="3043">
+        <state line="108" column="18" selection-start="2837" selection-end="2837" vertical-scroll-proportion="0.0" vertical-offset="2257" max-vertical-offset="3519">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://C:/erlang/erl6.1/lib/erts-6.1/src/erlang.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="1473" column="0" selection-start="43199" selection-end="43199" vertical-scroll-proportion="0.3323077" vertical-offset="24825" max-vertical-offset="62883" />
+      </provider>
+    </entry>
+    <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/gen_fsm.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="253" column="25" selection-start="9441" selection-end="9441" vertical-scroll-proportion="0.0" vertical-offset="4085" max-vertical-offset="12002">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/timer.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="78" column="0" selection-start="2304" selection-end="2304" vertical-scroll-proportion="0.3323077" vertical-offset="1110" max-vertical-offset="8160" />
+      </provider>
+    </entry>
+    <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/gen_server.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="165" column="0" selection-start="5801" selection-end="5801" vertical-scroll-proportion="0.0" vertical-offset="2337" max-vertical-offset="15351">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://C:/erlang/erl6.1/lib/stdlib-2.1/src/supervisor.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="210" column="44" selection-start="7658" selection-end="7658" vertical-scroll-proportion="0.625" vertical-offset="3170" max-vertical-offset="23664" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/test_sup.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="31" column="21" selection-start="788" selection-end="788" vertical-scroll-proportion="0.0" vertical-offset="210" max-vertical-offset="1411">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_server.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="30" column="2" selection-start="621" selection-end="621" vertical-scroll-proportion="0.0" vertical-offset="317" max-vertical-offset="4539">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_sender.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="53" column="16" selection-start="1283" selection-end="1283" vertical-scroll-proportion="0.762069" vertical-offset="459" max-vertical-offset="2805">
           <folding />
         </state>
       </provider>

@@ -9,23 +9,20 @@
 -module(mqtt_parser).
 -author("Kalin").
 
+-include("mqtt_const.hrl").
+
 %% API
 -export([read/1, parse_string/1, read/3]).
 
 
 -record(state, { parse_state } ).
 
--record(parse_state, {
-  readfun,
-  buffer,
-  max_buffer_size
-}).
-
 %%
 %%
 %% Communication Adaptors
 %%
 %%
+
 read(_ReadFun, MaxBufferSize, Buffer) when byte_size(Buffer) > MaxBufferSize  ->
   throw({error, buffer_overflow });
 read(ReadFun, _MaxBufferSize, Buffer) ->
@@ -34,14 +31,9 @@ read(ReadFun, _MaxBufferSize, Buffer) ->
     {error,Reason} -> throw({error,Reason})
   end.
 
-read(#parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer}) when byte_size(Buffer) > MaxBufferSize  ->
-  throw({error, buffer_overflow });
-
-read(S = #parse_state{readfun = ReadFun, buffer = Buffer})->
-  case ReadFun() of
-    {ok,NewBytes} -> S#parse_state{buffer = <<Buffer/binary,NewBytes/binary>>}; %% append the newly retrieved bytes
-    {error,Reason} -> throw({error,Reason})
-  end.
+read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun = ReadFun}) ->
+  S#parse_state{ buffer =  read(ReadFun, MaxBufferSize, Buffer)}
+.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -53,21 +45,19 @@ read(S = #parse_state{readfun = ReadFun, buffer = Buffer})->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
 %%[MQTT-1.5.3]
 parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
   {{ok,Str},Rest};
 parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
-  {{empty},Rest};
+  {{ok, ""},Rest};
 parse_string(S)->
   parse_string(read(S)).
 
 %%
 %% Parses integer using variable length-encoding
 %%
-%%
-parse_variable_length(ReadFun, Bytes) ->
-  parse_variable_length(ReadFun, Bytes, 0, 1).
+parse_variable_length(ReadFun, Buffer) ->
+  parse_variable_length(ReadFun, Buffer, 0, 1).
 
 parse_variable_length(ReadFun, <<HasMore:1,Length:7, Rest/binary>>, Sum, Multiplier) ->
   NewSum = Sum + Length * Multiplier,
@@ -82,8 +72,7 @@ parse_variable_length(ReadFun, Bytes, Sum, Multiplier) ->
 
 %% Parsing!!!!
 
-
-parse_header_start( _ReadFun, <<HeaderStart:8/binary,Rest/binary>>)->
+parse_header_start(_ReadFun, <<HeaderStart:8/binary,Rest/binary>>) ->
   Result = parse_type_and_flags(HeaderStart)
   %%{ Rest, Sum } = parse_variable_length(fun() -> await_more_bytes(S) end, Rest),
 
@@ -141,26 +130,65 @@ end
 
 -record(connect_flags, {}).
 
+%% MQTT 3.1.2.1 - "The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”, capitalized as shown.
+%% The string, its offset and length will not be changed by future versions of the MQTT specification."
 parse_specific_type('CONNECT',
-    <<2#0:8,
-    2#100:8,
-    "MQTT"/utf8,
-    ProtocolLevel:8,
-    UsernameFlag:1,PasswordFlag:1,WillRetain:1,WillQoS:2,WillFlag:1,CleanSession:1,_:1,
-    KeppAlive:16,
-    %%ClientIdLength:16,
-    %%ClientId:ClientIdLength
-    Payload/binary
-    >>, ReadFun) ->
-  { 'CONNECT',ProtocolLevel, {UsernameFlag,PasswordFlag,WillRetain,WillQoS,WillFlag,CleanSession,KeppAlive}}
+  S= #parse_state{
+    buffer =
+      <<ProtocolNameLength:16, %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
+      ProtocolName/utf8,       %% the option to proceed anyway
+      ProtocolLevel:8,
+      UsernameFlag:1,PasswordFlag:1,WillRetain:1,WillQoS:2,WillFlag:1,CleanSession:1,_:1,
+      KeppAlive:16,
+
+      %% Payload
+      %%ClientIdLength:16,
+      %%ClientId:ClientIdLength/bytes,
+      %%WillTopicField:WillFlag/16,
+
+      Payload/binary>>
+  }) ->
+
+  { 'CONNECT',
+      ProtocolName,
+      ProtocolLevel,
+      {UsernameFlag,PasswordFlag,WillRetain,WillQoS,WillFlag,CleanSession,KeppAlive}
+  },
+
+
+  {{ok,ClientId}, Rest} = parse_string(S#{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
+
+  if WillFlag =:= 1 -> 0;
+
+%%   S1 = add_optional_str_field({#{}, S}, will_topic, WillFlag ),
+%%   %%S2 = add_optional_str_field({#{}, S1}, will_message, WillFlag ),
+%%   S3 = add_optional_str_field({#{}, S2}, will_topic, WillFlag ),
+%%   S4 = add_optional_str_field({#{}, S3}, will_topic, WillFlag ),
+
+  {{ok,WillTopic}, Rest1} =  parse_string(S#{buffer=Rest}),
+  {{ok,WillMessage}, Rest2} =  parse_string(S#{buffer=Rest1}),
+  {{ok,UserName}, Rest3} =  parse_string(S#{buffer=Rest2}),
+  {{ok,Password}, Rest4} =  parse_string(S#{buffer=Rest3})
 ;
-parse_specific_type('CONNECT', Buffer, ReadFun) when byte_size(Buffer) < 32 ->
-  parse_specific_type('CONNECT', ReadFun(Buffer), ReadFun)
-;
-parse_specific_type('CONNECT', _, _) ->
-  error
+
+parse_specific_type('CONNECT', S) ->
+  parse_specific_type('CONNECT', read(S))
 .
 
+%% parse_specific_type('CONNECT', S) when byte_size(S#parse_state.buffer) < 10 ->
+%%   parse_specific_type('CONNECT', read(S))
+%% ;
+%% parse_specific_type('CONNECT', _) ->
+%%   throw(malformed_packet)
+%% .
+
+add_optional_str_field({OptionaFields#{}, S}, Key, Flag ) ->
+  if Flag =:= 1 ->
+    {{ok,Value},Rest} = parse_string(S),
+    { OptionaFields#{ Key => Value}, S#parse_state{buffer = Rest}};
+    Flag =:= 0 -> {OptionaFields, S}
+  end
+.
 
 %% parse_flags('PUBLISH',<<Dup:1,QoS:2,Retain:1>>)-> { Dup, QoS, Retain};
 %% parse_flags('PUBREL',<<2#0010>>)-> {ok};

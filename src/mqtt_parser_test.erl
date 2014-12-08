@@ -9,14 +9,10 @@
 -module(mqtt_parser_test).
 -author("Kalin").
 
+-include("mqtt_const.hrl").
+
 %% API
 -export([parse_string_test/0, parse_string_test2/0, parse_string_test3/0, all_tests/0]).
-
--record(parse_state, {
-  readfun,
-  buffer,
-  max_buffer_size
-}).
 
 all_tests()->
   [
