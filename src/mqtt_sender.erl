@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, send_packet/2, send_packet_async/2]).
+-export([start_link/0, send_packet/2, send_packet_async/2, disconnect/2, disconnect_async/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -39,7 +39,7 @@
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link(?MODULE, [], []).
 
 
 send_packet(Pid,Packet)->

@@ -10,12 +10,14 @@
 -author("Kalin").
 
 -include("mqtt_const.hrl").
+-include("mqtt_packets.hrl").
 
 %% API
 -export([read/1, parse_string/1, read/3]).
 
 
 -record(state, { parse_state } ).
+-record(connect_flags, {}).
 
 %%
 %%
@@ -49,7 +51,7 @@ read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun 
 parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
   {{ok,Str},Rest};
 parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
-  {{ok, ""},Rest};
+  {{ok, <<"">>},Rest};
 parse_string(S)->
   parse_string(read(S)).
 
@@ -69,8 +71,14 @@ parse_variable_length(ReadFun, Bytes, Sum, Multiplier) ->
   parse_variable_length(ReadFun, ReadFun(Bytes), Sum, Multiplier).
 
 
-
-%% Parsing!!!!
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% Parsing
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+parse_packet(Binary)->
+  {ok, packet }
+.
 
 parse_header_start(_ReadFun, <<HeaderStart:8/binary,Rest/binary>>) ->
   Result = parse_type_and_flags(HeaderStart)
@@ -128,51 +136,63 @@ parse_flags(PacketType, Flags)->
 end
 .
 
--record(connect_flags, {}).
-
 %% MQTT 3.1.2.1 - "The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”, capitalized as shown.
 %% The string, its offset and length will not be changed by future versions of the MQTT specification."
 parse_specific_type('CONNECT',
-  S= #parse_state{
+  S = #parse_state{
     buffer =
       <<ProtocolNameLength:16, %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
       ProtocolName/utf8,       %% the option to proceed anyway
       ProtocolLevel:8,
       UsernameFlag:1,PasswordFlag:1,WillRetain:1,WillQoS:2,WillFlag:1,CleanSession:1,_:1,
-      KeppAlive:16,
+      KeepAlive:16,
 
       %% Payload
       %%ClientIdLength:16,
       %%ClientId:ClientIdLength/bytes,
       %%WillTopicField:WillFlag/16,
 
-      Payload/binary>>
-  }) ->
+      Payload/binary>>}) ->
 
   { 'CONNECT',
       ProtocolName,
       ProtocolLevel,
-      {UsernameFlag,PasswordFlag,WillRetain,WillQoS,WillFlag,CleanSession,KeppAlive}
+      {UsernameFlag,PasswordFlag,WillRetain,WillQoS,WillFlag,CleanSession,KeepAlive}
   },
 
 
-  {{ok,ClientId}, Rest} = parse_string(S#{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
+  {{ok,ClientId}, Rest} = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
 
   if WillFlag =:= 1 -> 0;
+    true -> 1
+  end,
 
-%%   S1 = add_optional_str_field({#{}, S}, will_topic, WillFlag ),
-%%   %%S2 = add_optional_str_field({#{}, S1}, will_message, WillFlag ),
-%%   S3 = add_optional_str_field({#{}, S2}, will_topic, WillFlag ),
-%%   S4 = add_optional_str_field({#{}, S3}, will_topic, WillFlag ),
+  S1 = add_optional_str_field({#{}, S}, will_topic, WillFlag ),
+  S2 = add_optional_str_field({#{}, S1}, will_message, WillFlag ),
+  S3 = add_optional_str_field({#{}, S2}, will_topic, WillFlag ),
+  S4 = add_optional_str_field({#{}, S3}, will_topic, WillFlag ),
 
-  {{ok,WillTopic}, Rest1} =  parse_string(S#{buffer=Rest}),
-  {{ok,WillMessage}, Rest2} =  parse_string(S#{buffer=Rest1}),
-  {{ok,UserName}, Rest3} =  parse_string(S#{buffer=Rest2}),
-  {{ok,Password}, Rest4} =  parse_string(S#{buffer=Rest3})
+  {{ok,WillTopic}, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
+  {{ok,WillMessage}, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
+  {{ok, UserName}, Rest3} =  parse_string(S#parse_state{buffer=Rest2}),
+  { ok, Password, Rest4 } =  parse_string(S#parse_state{buffer=Payload})
 ;
 
 parse_specific_type('CONNECT', S) ->
   parse_specific_type('CONNECT', read(S))
+;
+
+%%%%%%%%%%%%%%
+%% PING
+%%%%%%%%%%%%%%
+parse_specific_type('PINGREQ',<<Rest>>) ->
+  #'PINGREQ'{};
+
+%%%%%%%%%%%%%%
+%% SUBSCRIBE
+%%%%%%%%%%%%%%
+parse_specific_type('SUBSCRIBE',<<Rest>>) ->
+  #'SUBSCRIBE'{}
 .
 
 %% parse_specific_type('CONNECT', S) when byte_size(S#parse_state.buffer) < 10 ->
@@ -182,11 +202,11 @@ parse_specific_type('CONNECT', S) ->
 %%   throw(malformed_packet)
 %% .
 
-add_optional_str_field({OptionaFields#{}, S}, Key, Flag ) ->
+add_optional_str_field({OptionalFields = #{}, S}, Key, Flag) ->
   if Flag =:= 1 ->
     {{ok,Value},Rest} = parse_string(S),
-    { OptionaFields#{ Key => Value}, S#parse_state{buffer = Rest}};
-    Flag =:= 0 -> {OptionaFields, S}
+    { maps:put(Key,Value,OptionalFields), S#parse_state{buffer = Rest}};
+    Flag =:= 0 -> {OptionalFields, S}
   end
 .
 

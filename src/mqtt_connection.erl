@@ -6,13 +6,18 @@
 %%% @end
 %%% Created : 06. Dec 2014 6:14 PM
 %%%-------------------------------------------------------------------
--module(mqtt_server).
+-module(mqtt_connection).
 -author("Kalin").
 
+-include("mqtt_packets.hrl").
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/0,
+  process_packet/3,
+  process_client_disconnect/2,
+  process_malformed_packet/2,
+  close_duplicate/1]).
 
 %% gen_server callbacks
 -export([init/2,
@@ -27,13 +32,14 @@
 
 
 -record(state, {
-  connect_state = starting, %% CONNECT state: starting, connected, disconnecting, disconnected
-  sender_pid,                 %% The process communicating with the actual device
+  connect_state = connecting, %% CONNECT state: connecting, connected, disconnecting, disconnected
+  sender_pid,                 %% The process sending to the actual device
+  receiver_pid,               %% The process receiving from the actual device
   options,                  %% options such as connection timeouts, etc.
   connect_details,           %% client details, e.g. client id,
   session = #{},
   keep_alive_ref = undefined, %% so we can ignore old keep-alive timeout messages after restarting the timer
-  keep_alive_timeout = 0
+  keep_alive_timeout = undefined
 }).
 
 -record(connect_details, {
@@ -55,6 +61,18 @@
 %%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
   gen_server:start_link(?MODULE, [], []).
+
+process_packet(Pid,PacketType,Details)->
+  gen_server:call(Pid,{packet, PacketType, Details}).
+
+process_malformed_packet(Pid,_Reason)->
+  gen_server:call(Pid,{malformed_packet}).
+
+process_client_disconnect(Pid,Reason)->
+  gen_server:call(Pid,{client_disconnected, Reason}).
+
+close_duplicate(Pid)->
+  gen_server:cast(Pid, {force_close, duplicate}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -99,7 +117,13 @@ init(SenderPid,Options) ->
 
 
 handle_call({packet, PacketType, Details}, From, S) ->
-  S1 = maybe_reset_keep_alive(S), %% shared functionality between all packets
+  %% shared functionality between all packets
+  S1 = case S#state.keep_alive_timeout of
+      undefined
+        -> S;
+      _
+        -> S#state{keep_alive_ref = reset_keep_alive(S#state.keep_alive_timeout,S#state.keep_alive_ref)}
+     end,
   handle_packet({PacketType, Details}, From, S1);
 
 %% handle_call(keep_alive_timeout, From, S#state{sender_pid = CommPid})->
@@ -108,8 +132,12 @@ handle_call({packet, PacketType, Details}, From, S) ->
 %% ;
 
 handle_call({malformed_packet}, From, S) ->
-  gen_server:reply(From, {disconnect, malformed_packet}),
+  disconnect_client(From, malformed_packet),
   {stop,normal, S#state{connect_state = disconnecting}};
+
+handle_call({client_disconnected, _Reason}, From, S) ->
+  {stop,normal, S#state{connect_state = disconnecting}};
+
 
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
@@ -128,6 +156,9 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
+handle_cast({force_close,Reason}, State) ->
+  {stop,  Reason, State#state{connect_state = disconnecting}};
+
 handle_cast(_Request, State) ->
   {noreply, State}.
 
@@ -146,8 +177,9 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_info({keep_alive_timeout,Ref}, S#state{ keep_alive_ref = Ref, sender_pid = SenderPid})->
-  gen_server:cast(SenderPid, {disconnect, keep_alive_timeout}),
+handle_info({keep_alive_timeout,Ref}, S = #state{ keep_alive_ref = Ref, sender_pid = SenderPid})->
+  disconnect_client(SenderPid,keep_alive_timeout),
+  %gen_server:cast(SenderPid, {disconnect, keep_alive_timeout}),
   {stop, normal, S#state{connect_state = disconnecting}};
 
 handle_info(_Info, State) ->
@@ -187,11 +219,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-handle_packet({'CONNECT', Details = {KeepAlive}}, From, S#state{connect_state = starting}) ->
-  %% TODO: validate
+handle_packet(
+    {'CONNECT',
+    Details = #'CONNECT' {client_id = ClientId}},
+    From,
+    S = #state{connect_state = connecting} %%disallow duplicate CONNECT packets
+) ->
+  %% TODO: validate connect packet
 
-  start_keep_alive(S),
-  gen_server:reply(From,{send, 'CONNACK'}),
+  register_self(ClientId),
+  S1 = start_keep_alive(S),
+
+  send_to_client(ClientId, {'CONNACK',Details}),
 
   {noreply,
     S#state{
@@ -200,10 +239,19 @@ handle_packet({'CONNECT', Details = {KeepAlive}}, From, S#state{connect_state = 
     }
   };
 
-handle_packet({'CONNECT', From}, _, S) ->
-  gen_server:reply(From, {disconnect, duplicate_connect}),
+%% Catch all-case
+handle_packet({PacketType,  _Details }, _From, S = #state{ connect_state = connecting})
+  when PacketType =/= 'CONNECT'
+  ->
+  disconnect_client(S#state.sender_pid, 'CONNECT_expected'),
   {stop,
-    duplicate_connect,
+    'CONNECT_expected',
+    S#state{connect_state = disconnecting}};
+
+handle_packet({'CONNECT',  _ },  _, S = #state{ connect_state = ConnectState}) when ConnectState =/= connecting ->
+  disconnect_client(S#state.sender_pid, duplicate_CONNECT),
+  {stop,
+    duplicate_CONNECT,
     S#state{connect_state = disconnecting}};
 
 handle_packet({'PUBLISH', _}, _, S) ->
@@ -228,34 +276,35 @@ handle_packet({'UNSUBSCRIBE', _}, _, S) ->
   0;
 
 handle_packet({'PINGREQ', _}, From, S) ->
-  gen_server:reply(From, {send, 'PINGRESP'});
+  send_to_client(From, {'PINGRESP'});
 
 handle_packet({'DISCONNECT', _}, From, S) ->
-  gen_server:reply(From, {disconnect, normal}),
+  disconnect_client(From, client_request),
   {stop,
-    duplicate_connect,
+    client_request,
     {disconnect, normal},
     S#state{connect_state = disconnecting}};
 
 handle_packet({'Reserved', _}, _, S) ->
   0.
 
-start_keep_alive(S)->
-  if S#state.keep_alive_timeout > 0 ->
-    S#state{keep_alive_ref = timer:send_after(S#state.keep_alive_timeout, keep_alive_timeout)};
-    true -> S
-  end
+start_keep_alive(Timeout)->
+    timer:send_after(Timeout, keep_alive_timeout)
 .
 
-maybe_reset_keep_alive(S)->
-  if S#state.keep_alive_ref =/= undefned ->
-      timer:cancel(S#state.keep_alive_ref);
+reset_keep_alive(Ref,TimeOut)->
+  if Ref =/= undefned ->
+      timer:cancel(TimeOut);
     true -> ok
   end,
-  start_keep_alive(S)
+  start_keep_alive(TimeOut)
 .
 
-send(To,Message)->
-  gen_server:reply(To, Message)
-.
+send_to_client(ClientPid,Packet)->
+  gen_server:call(ClientPid, {send, Packet}).
 
+disconnect_client(ClientPid,Reason)->
+  gen_server:call(ClientPid,{disconnect,Reason}).
+
+register_self(ClientId)->
+  mqtt_registration_repo:register(self(),ClientId).
