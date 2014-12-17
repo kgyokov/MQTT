@@ -106,20 +106,20 @@ parse_fixed_header(_)->
 parse_type_and_flags(<<PacketType:4,Flags:4>>) ->
   TypeName = case PacketType of
     0 -> 'Reserved';
-    1 -> 'CONNECT';
-    2 -> 'CONNACK';
-    3 -> 'PUBLISH';
-    4 -> 'PUBACK';
-    5 -> 'PUBREC';
-    6 -> 'PUBREL';
-    7 -> 'PUBCOMP';
-    8 -> 'SUBSCRIBE';
-    9 -> 'SUBACK';
-    10 -> 'UNSUBSCRIBE';
-    11 -> 'UNSUBACK';
-    12 -> 'PINGREQ';
-    13 -> 'PINGRESP';
-    14 -> 'DISCONNECT';
+    ?CONNECT -> 'CONNECT';
+    ?CONNACK -> 'CONNACK';
+    ?PUBLISH -> 'PUBLISH';
+    ?PUBACK -> 'PUBACK';
+    ?PUBREC -> 'PUBREC';
+    ?PUBREL -> 'PUBREL';
+    ?PUBCOMP -> 'PUBCOMP';
+    ?UNSUBSCRIBE -> 'SUBSCRIBE';
+    ?SUBACK -> 'SUBACK';
+    ?UNSUBSCRIBE -> 'UNSUBSCRIBE';
+    ?UNSUBACK -> 'UNSUBACK';
+    ?PINGREQ -> 'PINGREQ';
+    ?PINGRESP -> 'PINGRESP';
+    ?DISCONNECT -> 'DISCONNECT';
     15 -> 'Reserved'
   end,
   { TypeName, parse_flags(TypeName, Flags) }.
