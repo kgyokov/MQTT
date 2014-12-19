@@ -32,7 +32,7 @@
 -define(SERVER_UNAVAILABLE, 3).
 -define(BAD_USERNAME_OR_PASSWORD, 4).
 -define(UNAUTHORIZED, 5).
--record('DISCONNECT', {flags = #connack_flags{},return_code}).
+-record('DISCONNECT', {}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%

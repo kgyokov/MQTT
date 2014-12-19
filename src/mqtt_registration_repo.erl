@@ -11,15 +11,20 @@
 
 -define(REG_TABLE, client_registration).
 
--record(client_registration, {client_id = undefined, connection_pid, timestamp}).
+-record(client_registration, {client_id, connection_pid, session_id,  timestamp}).
 
 %% API
--export([register/2, unregister/2, get_registration/1]).
+-export([register/3, unregister/2, get_registration/1, create_tables/0]).
 
-register(Pid, ClientId)->
+create_tables()->
+  mnesia:create_schema("")
+.
+
+register(Pid, ClientId, SessionId)->
   NewReg =  #client_registration{
     client_id = ClientId,
     connection_pid = Pid,
+    session_id = SessionId,
     timestamp = time()
   },
   F = fun()->
