@@ -2,12 +2,9 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="298fd64b-89fc-43c6-83e2-8d333bd785cf" name="Default" comment="">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/src/mqtt_publisher.erl" />
       <change type="MOVED" beforePath="C:\Development\Erlang\Mqtt\src\mqtt_parser_backup.erl" afterPath="$PROJECT_DIR$/out/production/Mqtt/mqtt_parser_backup.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_builder.erl" afterPath="$PROJECT_DIR$/src/mqtt_builder.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/include/mqtt_const.hrl" afterPath="$PROJECT_DIR$/include/mqtt_const.hrl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/include/mqtt_packets.hrl" afterPath="$PROJECT_DIR$/include/mqtt_packets.hrl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_registration_repo.erl" afterPath="$PROJECT_DIR$/src/mqtt_registration_repo.erl" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_connection.erl" afterPath="$PROJECT_DIR$/src/mqtt_connection.erl" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_parser.erl" afterPath="$PROJECT_DIR$/src/mqtt_parser.erl" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="Mqtt.iws" />
@@ -130,10 +127,10 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="mqtt_parser.erl" pinned="false" current="false" current-in-tab="false">
+      <file leaf-file-name="mqtt_parser.erl" pinned="false" current="true" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="140" column="20" selection-start="3874" selection-end="3874" vertical-scroll-proportion="0.0" vertical-offset="2856" max-vertical-offset="3859">
+            <state line="191" column="12" selection-start="5463" selection-end="5463" vertical-scroll-proportion="1.7810107" vertical-offset="2084" max-vertical-offset="3859">
               <folding />
             </state>
           </provider>
@@ -142,7 +139,7 @@
       <file leaf-file-name="mqtt_builder.erl" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/src/mqtt_builder.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="76" column="9" selection-start="2024" selection-end="2024" vertical-scroll-proportion="0.0" vertical-offset="2082" max-vertical-offset="3621">
+            <state line="76" column="9" selection-start="2024" selection-end="2024" vertical-scroll-proportion="0.0" vertical-offset="2847" max-vertical-offset="3621">
               <folding />
             </state>
           </provider>
@@ -166,10 +163,10 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="mqtt_connection.erl" pinned="false" current="true" current-in-tab="true">
+      <file leaf-file-name="mqtt_connection.erl" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/src/mqtt_connection.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="174" column="67" selection-start="5464" selection-end="5464" vertical-scroll-proportion="0.69525266" vertical-offset="2504" max-vertical-offset="5355">
+            <state line="285" column="39" selection-start="8673" selection-end="8673" vertical-scroll-proportion="0.0" vertical-offset="4430" max-vertical-offset="5321">
               <folding />
             </state>
           </provider>
@@ -221,8 +218,6 @@
         <option value="$PROJECT_DIR$/src/mqtt_topic_repo.erl" />
         <option value="$PROJECT_DIR$/src/test_sup.erl" />
         <option value="$PROJECT_DIR$/src/mqtt_parser_test.erl" />
-        <option value="$PROJECT_DIR$/src/mqtt_connection.erl" />
-        <option value="$PROJECT_DIR$/src/mqtt_parser.erl" />
         <option value="$PROJECT_DIR$/Mqtt.iml" />
         <option value="$PROJECT_DIR$/Emakefile" />
         <option value="$PROJECT_DIR$/test/mqtt_builder_test.erl" />
@@ -231,6 +226,8 @@
         <option value="$PROJECT_DIR$/src/mqtt_registration_repo.erl" />
         <option value="$PROJECT_DIR$/include/mqtt_const.hrl" />
         <option value="$PROJECT_DIR$/src/mqtt_publisher.erl" />
+        <option value="$PROJECT_DIR$/src/mqtt_connection.erl" />
+        <option value="$PROJECT_DIR$/src/mqtt_parser.erl" />
       </list>
     </option>
   </component>
@@ -643,7 +640,11 @@
       <created>1418807761213</created>
       <updated>1418807761213</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="Building packets&#10;">
+      <created>1418963397258</created>
+      <updated>1418963397258</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TodoView" selected-index="4">
@@ -969,13 +970,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/src/mqtt_builder.erl">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="76" column="9" selection-start="2024" selection-end="2024" vertical-scroll-proportion="0.0" vertical-offset="2082" max-vertical-offset="3621">
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/include/mqtt_const.hrl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="34" column="29" selection-start="758" selection-end="758" vertical-scroll-proportion="0.86983156" vertical-offset="10" max-vertical-offset="731">
@@ -1011,16 +1005,23 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
+    <entry file="file://$PROJECT_DIR$/src/mqtt_connection.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="140" column="20" selection-start="3874" selection-end="3874" vertical-scroll-proportion="0.0" vertical-offset="2856" max-vertical-offset="3859">
+        <state line="285" column="39" selection-start="8673" selection-end="8673" vertical-scroll-proportion="0.0" vertical-offset="4430" max-vertical-offset="5321">
           <folding />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/src/mqtt_connection.erl">
+    <entry file="file://$PROJECT_DIR$/src/mqtt_builder.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="174" column="67" selection-start="5464" selection-end="5464" vertical-scroll-proportion="0.69525266" vertical-offset="2504" max-vertical-offset="5355">
+        <state line="76" column="9" selection-start="2024" selection-end="2024" vertical-scroll-proportion="0.0" vertical-offset="2082" max-vertical-offset="3621">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="191" column="12" selection-start="5463" selection-end="5463" vertical-scroll-proportion="1.7810107" vertical-offset="2084" max-vertical-offset="3859">
           <folding />
         </state>
       </provider>

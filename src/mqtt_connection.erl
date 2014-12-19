@@ -14,7 +14,7 @@
 
 %% API
 -export([start_link/0,
-  process_packet/3,
+  process_packet/2,
   process_client_disconnect/2,
   process_malformed_packet/2,
   close_duplicate/1]).
@@ -62,8 +62,8 @@
 start_link() ->
   gen_server:start_link(?MODULE, [], []).
 
-process_packet(Pid,PacketType,Details)->
-  gen_server:call(Pid,{packet, PacketType, Details}).
+process_packet(Pid,Packet)->
+  gen_server:call(Pid,{packet, Packet}).
 
 process_malformed_packet(Pid,_Reason)->
   gen_server:call(Pid,{malformed_packet}).
@@ -116,7 +116,7 @@ init(SenderPid,Options) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_call({packet, PacketType, Details}, From, S) ->
+handle_call({packet, Packet}, From, S) ->
   %% shared functionality between all packets
   S1 = case S#state.keep_alive_timeout of
       undefined
@@ -124,7 +124,7 @@ handle_call({packet, PacketType, Details}, From, S) ->
       _
         -> S#state{keep_alive_ref = reset_keep_alive(S#state.keep_alive_timeout,S#state.keep_alive_ref)}
      end,
-  handle_packet({PacketType, Details}, From, S1);
+  handle_packet(Packet, From, S1);
 
 %% handle_call(keep_alive_timeout, From, S#state{sender_pid = CommPid})->
 %%   gen_server:cast(CommPid, {disconnect, keep_alive_timeout}),
@@ -219,9 +219,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-handle_packet(
-    {'CONNECT',
-    Details = #'CONNECT' {client_id = ClientId}},
+handle_packet(Packet = #'CONNECT' {client_id = ClientId},
     From,
     S = #state{connect_state = connecting} %%disallow duplicate CONNECT packets
 ) ->
@@ -230,55 +228,55 @@ handle_packet(
   register_self(ClientId),
   S1 = start_keep_alive(S),
 
-  send_to_client(ClientId, {'CONNACK',Details}),
+  send_to_client(ClientId, #'CONNACK'{flags = undefined, return_code = 0}),
 
   {noreply,
     S#state{
       connect_state = connected,
-      connect_details = Details
+      connect_details = Packet
     }
   };
 
 %% Catch all-case
-handle_packet({PacketType,  _Details }, _From, S = #state{ connect_state = connecting})
-  when PacketType =/= 'CONNECT'
+handle_packet(Packet, _From, S = #state{ connect_state = connecting})
+  when not is_record(Packet, 'CONNECT')
   ->
   disconnect_client(S#state.sender_pid, 'CONNECT_expected'),
   {stop,
     'CONNECT_expected',
     S#state{connect_state = disconnecting}};
 
-handle_packet({'CONNECT',  _ },  _, S = #state{ connect_state = ConnectState}) when ConnectState =/= connecting ->
+handle_packet(#'CONNECT'{},  _, S) when S#state.connect_state =/= connecting ->
   disconnect_client(S#state.sender_pid, duplicate_CONNECT),
   {stop,
     duplicate_CONNECT,
     S#state{connect_state = disconnecting}};
 
-handle_packet({'PUBLISH', _}, _, S) ->
+handle_packet(#'PUBLISH'{}, _, S) ->
   0;
 
-handle_packet({'PUBACK', _}, _, S) ->
+handle_packet(#'PUBACK'{}, _, S) ->
   0;
 
-handle_packet({'PUBREC', _}, _, S) ->
+handle_packet(#'PUBREC'{}, _, S) ->
   0;
 
-handle_packet({'PUBREL', _}, _, S) ->
+handle_packet(#'PUBREL'{}, _, S) ->
   0;
 
-handle_packet({'PUBCOMP', _}, _, S) ->
+handle_packet(#'PUBCOMP'{}, _, S) ->
   0;
 
-handle_packet({'SUBSCRIBE', _}, _, S) ->
+handle_packet(#'SUBSCRIBE'{}, _, S) ->
   0;
 
-handle_packet({'UNSUBSCRIBE', _}, _, S) ->
+handle_packet(#'UNSUBSCRIBE'{}, _, S) ->
   0;
 
-handle_packet({'PINGREQ', _}, From, S) ->
+handle_packet(#'PINGREQ'{}, From, S) ->
   send_to_client(From, {'PINGRESP'});
 
-handle_packet({'DISCONNECT', _}, From, S) ->
+handle_packet(#'DISCONNECT'{}, From, S) ->
   disconnect_client(From, client_request),
   {stop,
     client_request,

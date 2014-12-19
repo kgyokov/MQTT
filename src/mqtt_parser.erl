@@ -185,7 +185,7 @@ parse_specific_type('CONNECT', S) ->
 %%%%%%%%%%%%%%
 %% PING
 %%%%%%%%%%%%%%
-parse_specific_type('PINGREQ',<<Rest>>) ->
+parse_specific_type('PINGREQ',<<>>) ->
   #'PINGREQ'{};
 
 %%%%%%%%%%%%%%
