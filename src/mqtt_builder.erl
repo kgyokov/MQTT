@@ -52,6 +52,7 @@ build_packet_type(Packet)->
      end
 .
 
+
 build_rest(#'CONNECT'{
     client_id = ClientId,
     username = Username,
@@ -65,11 +66,11 @@ build_rest(#'CONNECT'{
     clean_session = CleanSession,
     keep_alive = KeepAlive
 })->
-%%   %% Validation
-%%   case {ProtocolName,ProtocolVersion} of
-%%     {"MQTT",4} -> ok;
-%%     _ -> throw(unknown_protocol_and_version)
-%%   end,
+  %% Validation
+  case {ProtocolName,ProtocolVersion} of
+    {"MQTT",4} -> ok;
+    _ -> throw(unknown_protocol_and_version)
+  end,
 
  <<
  (build_string(ProtocolName))/binary,
@@ -96,7 +97,7 @@ build_rest(#'CONNECT'{
  >>;
 
 %% CONNACK
-build_rest(Packet = #'CONNACK'{ flags = Flags, return_code = ReturnCode})->
+build_rest(#'CONNACK'{ flags = Flags, return_code = ReturnCode})->
    <<
   (Flags#connack_flags.session_present):1,
   ReturnCode:8

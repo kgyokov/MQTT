@@ -15,6 +15,7 @@
 }).
 
 
+% Packets
 -define(Reserved, 0).
 -define(CONNECT, 1) .
 -define(CONNACK, 2).
@@ -30,8 +31,12 @@
 -define(PINGREQ, 12).
 -define(PINGRESP, 13).
 -define(DISCONNECT, 14).
+%%-define(Reserved, 15).
+
+
+%% QOS
 -define(QOS_AT_MOST_ONCE, 0).
 -define(QOS_AT_LEAST_ONCE, 1).
 -define(QOS_EXACTLY_ONCE, 3).
 -define(QOS_RESERVED, 4).
-%%-define(Reserved, 15).
+

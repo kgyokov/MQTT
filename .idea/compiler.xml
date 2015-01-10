@@ -19,5 +19,8 @@
       </profile>
     </annotationProcessing>
   </component>
+  <component name="ErlangCompilerOptions">
+    <useRebarCompiler>true</useRebarCompiler>
+  </component>
 </project>
 
