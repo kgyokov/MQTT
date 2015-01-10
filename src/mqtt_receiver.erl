@@ -1,24 +1,18 @@
 %%%-------------------------------------------------------------------
 %%% @author Kalin
-%%% @copyright (C) 2014, <COMPANY>
+%%% @copyright (C) 2015, <COMPANY>
 %%% @doc
 %%%
 %%% @end
-%%% Created : 08. Dec 2014 1:29 AM
+%%% Created : 09. Jan 2015 9:17 PM
 %%%-------------------------------------------------------------------
--module(mqtt_sender).
+-module(mqtt_receiver).
 -author("Kalin").
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/0,
-  send_packet/2,
-  send_packet_async/2
-%%   disconnect/2,
-%%   disconnect_async/2,
-%%   connect/4
-]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -30,10 +24,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {
-  is_connected = false,
-  socket
-}).
+-record(state, {socket, forward_pid}).
 
 %%%===================================================================
 %%% API
@@ -48,23 +39,7 @@
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link(?MODULE, [], []).
-
-
-send_packet(Pid,Packet)->
-  gen_server:call(Pid, {packet,Packet}).
-
-send_packet_async(Pid,Packet)->
-  gen_server:cast(Pid, {packet,Packet}).
-
-%% connect(Pid,Host,Port,Options)->
-%%   gen_server:call(Pid,{connect,Host,Port,Options}).
-%%
-%% disconnect(Pid,Reason)->
-%%   gen_server:call(Pid,{disconnect,Reason}).
-%%
-%% disconnect_async(Pid,Reason)->
-%%   gen_server:cast(Pid,{disconnect,Reason}).
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -103,32 +78,8 @@ init([]) ->
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-%% handle_call({connect,Host,Port,Options},From,State)->
-%%   AllOptions = [{active,false}, {binary,{packet,0}} | Options],
-%%   {ok,Socket} = gen_tcp:connect(Host,Port,AllOptions),
-%%   NewState = State#state{socket = Socket, is_connected = true},
-%%   {reply,ok,NewState}
-%%   ;
-%%
-%% handle_call({disconnect,_Reason},_From,State = #state{is_connected = false})->
-%%   {reply,ok, State};
-%%
-%% handle_call({disconnect,_Reason},_From,State#state{socket = Socket})->
-%%   ok = gen_tcp:close(Socket),
-%%   {reply,ok,State};
-
-
-
-handle_call({packet,_Packet},_From,State = #state{is_connected = false})->
-  {reply,{error,not_connected},State};
-handle_call({packet,Packet},_From,#state{socket = Socket})->
-  mqtt_builder:build_packet(Packet),
-  gen_tcp:send(Socket,Packet)
-;
-
-
 handle_call(_Request, _From, State) ->
-  {noreply, State}.
+  {reply, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -158,6 +109,11 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_info({tcp,Socket,Data}, State = #state{socket = Socket, forward_pid = ForwardPid})->
+  mqtt_connection:process_packet(ForwardPid,mqtt_parser:read())
+;
+
 handle_info(_Info, State) ->
   {noreply, State}.
 
