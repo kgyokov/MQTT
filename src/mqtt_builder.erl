@@ -12,7 +12,6 @@
 -include("mqtt_packets.hrl").
 -include("mqtt_const.hrl").
 %% API
--compile(export_all).
 -export([build_packet/1, build_string/1, build_var_length/1]).
 
 build_packet(Packet) ->
@@ -59,10 +58,7 @@ build_rest(#'CONNECT'{
     password = Password,
     protocol_name = ProtocolName,
     protocol_version = ProtocolVersion,
-    will_message = WillMessage,
-    will_topic = WillTopic,
-    will_qos = WillQos,
-    will_retain = WillRetain,
+    will = WillDetails,
     clean_session = CleanSession,
     keep_alive = KeepAlive
 })->
@@ -78,20 +74,29 @@ build_rest(#'CONNECT'{
  %% Flags
   (maybe_flag(Username))/binary,
   (maybe_flag(Password))/binary,
-  (maybe_flag(WillRetain))/binary,
-  (case WillMessage of
-      undefined -> 0;
-      _ -> WillQos
-    end):2,
-  (maybe_flag(WillMessage))/binary,
+
+  (case WillDetails of
+      undefined -> <<0:4>>;
+     #will_details{
+       retain = WillRetain,
+       qos = WillQos} ->
+        <<WillRetain:1,WillQos:2,1:1>>
+    end),
+
   (maybe_flag(CleanSession))/binary,
   0:1, %Reserved
   KeepAlive:16,
 
  %% Payload
   (build_string(ClientId))/binary,
-  (maybe_build_string(WillTopic))/binary,
-  (maybe_build_string(WillMessage))/binary,
+ (case WillDetails of
+    undefined ->
+      <<>>;
+    #will_details{
+      topic = WillTopic,
+      message = WillMessage} ->
+      <<build_string(WillTopic),build_string(WillMessage)>>
+ end),
   (maybe_build_string(Username))/binary,
   (maybe_build_string(Password))/binary
  >>;
@@ -103,13 +108,18 @@ build_rest(#'CONNACK'{ flags = Flags, return_code = ReturnCode})->
   ReturnCode:8
   >>;
 
+%%
 %% PUBLISH
+%%
+
+%% PacketId used with Qos = 1 or 2
 build_rest(#'PUBLISH'{
   packet_id = PacketId,
   qos = QoS,
   topic = Topic,
-  content = Content}) when QoS =:= 1;
-                           QoS =:= 2 ->
+  content = Content}) when (QoS =:= 1 orelse
+                           QoS =:= 2)
+                            andalso is_integer(PacketId) ->
   <<
   (build_string(Topic))/binary,
   PacketId:16,
@@ -117,10 +127,9 @@ build_rest(#'PUBLISH'{
   >>;
 
 build_rest(#'PUBLISH'{
-  packet_id = undefined,
   qos = QoS,
   topic = Topic,
-  content = Content}) when QoS =:= 1 ->
+  content = Content}) when QoS =:= 0 ->
   <<
   (build_string(Topic))/binary,
   Content/binary
@@ -138,6 +147,8 @@ build_rest(#'PUBREL'{packet_id = PacketId})->
 
 build_rest(#'PUBCOMP'{packet_id = PacketId})->
   <<PacketId:16>>;
+
+%%% TODO: maybe build binaries more efficiently than lists:map)
 
 build_rest(#'SUBSCRIBE'{packet_id = PacketId, subscriptions = Subscriptions})->
   <<
@@ -160,7 +171,7 @@ build_rest(#'UNSUBSCRIBE'{packet_id = PacketId, topic_filters = TopicFilters})->
   (list_to_binary(lists:map(fun(Filter)-> <<(build_string(Filter))/binary>> end, TopicFilters)))/binary
   >>;
 
-build_rest(#'UNSUBACK'{packet_id = PacketId})->
+build_rest(#'UNSUBACK'{packet_id = PacketId}) ->
   <<PacketId:16>>;
 
 build_rest(#'PINGREQ'{})->

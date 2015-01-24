@@ -12,12 +12,9 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0,
+-export([start_link/1,
   send_packet/2,
   send_packet_async/2
-%%   disconnect/2,
-%%   disconnect_async/2,
-%%   connect/4
 ]).
 
 %% gen_server callbacks
@@ -30,10 +27,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {
-  is_connected = false,
-  socket
-}).
+-record(state, { socket }).
 
 %%%===================================================================
 %%% API
@@ -45,10 +39,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link() ->
+-spec(start_link(Socket) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  gen_server:start_link(?MODULE, [], []).
+start_link(Socket) ->
+  gen_server:start_link(?MODULE, [], [Socket]).
 
 
 send_packet(Pid,Packet)->
@@ -56,15 +50,6 @@ send_packet(Pid,Packet)->
 
 send_packet_async(Pid,Packet)->
   gen_server:cast(Pid, {packet,Packet}).
-
-%% connect(Pid,Host,Port,Options)->
-%%   gen_server:call(Pid,{connect,Host,Port,Options}).
-%%
-%% disconnect(Pid,Reason)->
-%%   gen_server:call(Pid,{disconnect,Reason}).
-%%
-%% disconnect_async(Pid,Reason)->
-%%   gen_server:cast(Pid,{disconnect,Reason}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -84,8 +69,8 @@ send_packet_async(Pid,Packet)->
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([]) ->
-  {ok, #state{}}.
+init(Socket) ->
+  {ok, #state{socket = Socket}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -103,24 +88,6 @@ init([]) ->
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-%% handle_call({connect,Host,Port,Options},From,State)->
-%%   AllOptions = [{active,false}, {binary,{packet,0}} | Options],
-%%   {ok,Socket} = gen_tcp:connect(Host,Port,AllOptions),
-%%   NewState = State#state{socket = Socket, is_connected = true},
-%%   {reply,ok,NewState}
-%%   ;
-%%
-%% handle_call({disconnect,_Reason},_From,State = #state{is_connected = false})->
-%%   {reply,ok, State};
-%%
-%% handle_call({disconnect,_Reason},_From,State#state{socket = Socket})->
-%%   ok = gen_tcp:close(Socket),
-%%   {reply,ok,State};
-
-
-
-handle_call({packet,_Packet},_From,State = #state{is_connected = false})->
-  {reply,{error,not_connected},State};
 handle_call({packet,Packet},_From,#state{socket = Socket})->
   mqtt_builder:build_packet(Packet),
   gen_tcp:send(Socket,Packet)

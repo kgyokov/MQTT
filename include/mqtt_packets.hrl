@@ -11,13 +11,18 @@
 %%%%%%%%%%%%%%%%%%%%%%%
 %% Connections
 %%%%%%%%%%%%%%%%%%%%%%%
+
+-record(will_details,{
+  topic,
+  message,
+  qos,
+  retain
+}).
+
 -record('CONNECT', {protocol_name,
   protocol_version,
   client_id,
-  will_topic,
-  will_message,
-  will_qos,
-  will_retain,
+  will,
   username,
   password,
   clean_session,
@@ -26,6 +31,7 @@
 
 -record(connack_flags, {session_present}).
 -record('CONNACK', {flags = #connack_flags{},return_code}).
+%% Return codes
 -define(CONECTION_ACCEPTED, 0).
 -define(UNACCEPTABLE_PROTOCOL, 1).
 -define(IDENTIFIER_REJECTED, 2).
@@ -56,6 +62,7 @@
 -record(subscription, {topic_filter,qos}).
 
 -record('SUBACK', {packet_id,return_codes=[]}).
+-define(SUBSCRIPTION_FAILURE,16#80).
 
 -record('UNSUBSCRIBE', {packet_id,topic_filters}).
 -record('UNSUBACK', {packet_id}).

@@ -15,11 +15,11 @@
 
 
 
-publish_at_most_once(Topic,PacketId,Message)->
+publish_at_most_once(Topic,Content,Retain)->
   0.
 
 
-publish_at_least_once(Topic,PacketId,Message)->
+publish_at_least_once(Topic,PacketId,Content,Retain)->
   0.
 
 
@@ -28,7 +28,7 @@ publish_at_least_once(Topic,PacketId,Message)->
 %%  Persists the message, getting ready to send it
 %%
 %%
-publish_exactly_once_phase1(Topic,PacketId,Message)->
+publish_exactly_once_phase1(Topic,PacketId,Content,Retain)->
   0.
 
 %%
@@ -36,5 +36,5 @@ publish_exactly_once_phase1(Topic,PacketId,Message)->
 %%  Completes message send
 %%
 %%
-publish_exactly_once_phase2(Topic,PacketId,Message)->
+publish_exactly_once_phase2(PacketId)->
   0.

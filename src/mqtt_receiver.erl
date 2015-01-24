@@ -111,7 +111,8 @@ handle_cast(_Request, State) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_info({tcp,Socket,Data}, State = #state{socket = Socket, forward_pid = ForwardPid})->
-  mqtt_connection:process_packet(ForwardPid,mqtt_parser:read())
+  mqtt_connection:process_packet(ForwardPid,mqtt_parser:read()),
+
 ;
 
 handle_info(_Info, State) ->

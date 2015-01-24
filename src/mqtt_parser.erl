@@ -13,7 +13,7 @@
 -include("mqtt_packets.hrl").
 
 %% API
--export([read/1, parse_string/1, read/3]).
+-export([read/1, read/3, parse_string/1]).
 
 
 -record(state, { parse_state } ).
@@ -49,9 +49,9 @@ read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun 
 
 %%[MQTT-1.5.3]
 parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
-  {{ok,Str},Rest};
+  {ok,Str,Rest};
 parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
-  {{ok, <<"">>},Rest};
+  {ok, <<"">>,Rest};
 parse_string(S)->
   parse_string(read(S)).
 
@@ -141,41 +141,56 @@ end
 parse_specific_type('CONNECT',
   S = #parse_state{
     buffer =
-      <<ProtocolNameLength:16, %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
-      ProtocolName/utf8,       %% the option to proceed anyway
+      <<ProtocolNameLength:16,     %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
+      ProtocolName:32/binary,      %% the option to proceed anyway
       ProtocolLevel:8,
       UsernameFlag:1,PasswordFlag:1,WillRetain:1,WillQoS:2,WillFlag:1,CleanSession:1,_:1,
       KeepAlive:16,
 
-      %% Payload
-      %%ClientIdLength:16,
-      %%ClientId:ClientIdLength/bytes,
-      %%WillTopicField:WillFlag/16,
-
       Payload/binary>>}) ->
 
-  { 'CONNECT',
-      ProtocolName,
-      ProtocolLevel,
-      {UsernameFlag,PasswordFlag,WillRetain,WillQoS,WillFlag,CleanSession,KeepAlive}
-  },
+  {ok,ClientId, Rest} = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
 
-
-  {{ok,ClientId}, Rest} = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
-
-  if WillFlag =:= 1 -> 0;
-    true -> 1
+  {WillDetails,Rest3} = case WillFlag of
+                  0 ->
+                    {undefined,Rest};
+                  1 ->
+                    {ok,WillTopic, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
+                    {ok,WillMessage, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
+                    {
+                      #will_details{
+                        retain = WillRetain,
+                        qos = WillQoS,
+                        message = WillMessage,
+                        topic = WillTopic
+                      },
+                      Rest2
+                    }
+                end,
+  {Username,Rest4} = case UsernameFlag of
+              0 ->
+                {undefined,Rest3};
+              1 ->
+                {ok, U, Rest4} =  parse_string(S#parse_state{buffer=Rest3}),
+                {U,Rest4}
   end,
-
-  S1 = add_optional_str_field({#{}, S}, will_topic, WillFlag ),
-  S2 = add_optional_str_field({#{}, S1}, will_message, WillFlag ),
-  S3 = add_optional_str_field({#{}, S2}, will_topic, WillFlag ),
-  S4 = add_optional_str_field({#{}, S3}, will_topic, WillFlag ),
-
-  {{ok,WillTopic}, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
-  {{ok,WillMessage}, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
-  {{ok, UserName}, Rest3} =  parse_string(S#parse_state{buffer=Rest2}),
-  { ok, Password, Rest4 } =  parse_string(S#parse_state{buffer=Payload})
+  {Password,_Rest5} = case PasswordFlag of
+               0 ->
+                 {undefined,Rest4};
+               1 ->
+                 {{ok, P}, Rest5} =  parse_string(S#parse_state{buffer=Rest4}),
+                 {P,Rest5}
+             end
+  #'CONNECT'{
+    protocol_name = ProtocolName,
+    protocol_version = ProtocolLevel,
+    keep_alive = KeepAlive,
+    clean_session = CleanSession,
+    client_id = ClientId,
+    will = WillDetails,
+    username = Username,
+    password = Password
+  }
 ;
 
 parse_specific_type('CONNECT', S) ->
