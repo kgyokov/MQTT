@@ -412,7 +412,7 @@ set_timer(Timeout)->
 .
 
 
-reset_keep_alive(S#state{
+reset_keep_alive(S = #state{
   keep_alive_ref = KeepAliveRef,
   keep_alive_timeout = KeepAliveTimeout}) ->
   %% shared functionality between all packets
@@ -455,7 +455,7 @@ abort_connection(S = #state{sender_pid = SenderPid, will = Will},Reason)->
     undefined ->
       ok;
     #will_details{message = Message, topic = Topic, qos = QoS, retain = WillRetain} ->
-      publish(Message,Topic,QoS,WillRetain)
+      publish(SenderPid,Topic,Message, undefined, QoS, WillRetain)
   end,
   disconnect_client(SenderPid,Reason),
   {stop,

@@ -35,7 +35,7 @@ parse_string_test()->
   String = <<9:16,"123456789">>,
   ReadFun = fun() -> {ok, String } end,
   State = #parse_state { buffer = <<>>, readfun = ReadFun, max_buffer_size = 1000000 },
-  ?assertEqual({{ok, <<"123456789">>}, <<>>}, mqtt_parser:parse_string(State)).
+  ?assertEqual({ok, <<"123456789">>, <<>>}, mqtt_parser:parse_string(State)).
 
 parse_string_chunked_test()->
   ParseProcess = initialize_parse_process(<<>>),
@@ -44,7 +44,7 @@ parse_string_chunked_test()->
   push_fragment(ParseProcess,<<9:16, "12345">>),
   push_fragment(ParseProcess,<<"6789">>),
 
-  ?assertEqual({{ok, <<"123456789">>}, <<>>},receive_result(ParseProcess))
+  ?assertEqual({ok, <<"123456789">>, <<>>},receive_result(ParseProcess))
 .
 
 parse_string_chunked2_test()->
@@ -56,7 +56,7 @@ parse_string_chunked2_test()->
   push_fragment(ParseProcess,<<"12345">>),
   push_fragment(ParseProcess,<<"6789">>),
 
-  ?assertEqual({{ok, <<"123456789">>}, <<>>} , receive_result(ParseProcess))
+  ?assertEqual({ok, <<"123456789">>, <<>>} , receive_result(ParseProcess))
 .
 
 parse_string_chunked3_test()->
@@ -69,7 +69,7 @@ parse_string_chunked3_test()->
   push_fragment(ParseProcess,<<"6789abc">>),
 
   ?assertEqual(1, receive_result(ParseProcess)),
-  ?assertEqual({{ok, <<"123456789">>}, <<"abc">>}, receive_result(ParseProcess))
+  ?assertEqual({ok, <<"123456789">>, <<"abc">>}, receive_result(ParseProcess))
 .
 
 initialize_parse_process(StartBuffer)->

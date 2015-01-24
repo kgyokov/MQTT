@@ -1,2 +1,2 @@
-{"src/*", [debug_info, {i,"include/"}, {outdir, "ebin/"}]}.
-{"test/*", [debug_info, {i,"include/"}, {outdir, "ebin/"}]}.
+{"src/*", [debug_info, {i,"include/"}, {outdir, "out/"}]}.
+{"test/*", [debug_info, {i,"include/"}, {outdir, "out/"}]}.

@@ -39,7 +39,7 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(Socket) ->
+-spec(start_link(Socket::pid()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(Socket) ->
   gen_server:start_link(?MODULE, [], [Socket]).

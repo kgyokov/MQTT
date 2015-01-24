@@ -171,16 +171,16 @@ parse_specific_type('CONNECT',
               0 ->
                 {undefined,Rest3};
               1 ->
-                {ok, U, Rest4} =  parse_string(S#parse_state{buffer=Rest3}),
-                {U,Rest4}
+                {ok, U, RestA} =  parse_string(S#parse_state{buffer=Rest3}),
+                {U,RestA}
   end,
-  {Password,_Rest5} = case PasswordFlag of
+  {Password,_} = case PasswordFlag of
                0 ->
                  {undefined,Rest4};
                1 ->
-                 {ok, P, Rest5} =  parse_string(S#parse_state{buffer=Rest4}),
-                 {P,Rest5}
-             end
+                 {ok, P, RestB} =  parse_string(S#parse_state{buffer=Rest4}),
+                 {P,RestB}
+  end,
   #'CONNECT'{
     protocol_name = ProtocolName,
     protocol_version = ProtocolLevel,

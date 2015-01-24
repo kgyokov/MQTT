@@ -95,7 +95,7 @@ build_rest(#'CONNECT'{
     #will_details{
       topic = WillTopic,
       message = WillMessage} ->
-      <<build_string(WillTopic),build_string(WillMessage)>>
+      <<(build_string(WillTopic))/binary,(build_string(WillMessage))/binary>>
  end),
   (maybe_build_string(Username))/binary,
   (maybe_build_string(Password))/binary
