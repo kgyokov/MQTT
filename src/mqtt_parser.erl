@@ -138,7 +138,7 @@ end
 
 %% MQTT 3.1.2.1 - "The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”, capitalized as shown.
 %% The string, its offset and length will not be changed by future versions of the MQTT specification."
-parse_specific_type('CONNECT',
+parse_specific_type(?CONNECT,
   S = #parse_state{
     buffer =
       <<ProtocolNameLength:16,     %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
@@ -152,21 +152,21 @@ parse_specific_type('CONNECT',
   {ok,ClientId, Rest} = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
 
   {WillDetails,Rest3} = case WillFlag of
-                  0 ->
-                    {undefined,Rest};
-                  1 ->
-                    {ok,WillTopic, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
-                    {ok,WillMessage, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
-                    {
-                      #will_details{
-                        retain = WillRetain,
-                        qos = WillQoS,
-                        message = WillMessage,
-                        topic = WillTopic
-                      },
-                      Rest2
-                    }
-                end,
+                0 ->
+                  {undefined,Rest};
+                1 ->
+                  {ok,WillTopic, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
+                  {ok,WillMessage, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
+                  {
+                    #will_details{
+                      retain = WillRetain,
+                      qos = WillQoS,
+                      message = WillMessage,
+                      topic = WillTopic
+                    },
+                    Rest2
+                  }
+    end,
   {Username,Rest4} = case UsernameFlag of
               0 ->
                 {undefined,Rest3};
@@ -216,6 +216,23 @@ parse_specific_type('SUBSCRIBE',<<Rest>>) ->
 %% parse_specific_type('CONNECT', _) ->
 %%   throw(malformed_packet)
 %% .
+
+parse_maybe_will_details(_WillFlag = 0,_,_,#parse_state{buffer=Rest})->
+      {undefined,Rest};
+
+parse_maybe_will_details(_WillFlag = 1,WillRetain,WillQoS,S#parse_state{buffer=Rest})->
+      {ok,WillTopic, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
+      {ok,WillMessage, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
+      {
+        #will_details{
+          retain = WillRetain,
+          qos = WillQoS,
+          message = WillMessage,
+          topic = WillTopic
+        },
+        Rest2
+      }
+.
 
 add_optional_str_field({OptionalFields = #{}, S}, Key, Flag) ->
   if Flag =:= 1 ->
