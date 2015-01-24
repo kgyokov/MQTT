@@ -2,15 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="298fd64b-89fc-43c6-83e2-8d333bd785cf" name="Default" comment="">
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/Emakefile" afterPath="$PROJECT_DIR$/Emakefile" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/compiler.xml" afterPath="$PROJECT_DIR$/.idea/compiler.xml" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_builder.erl" afterPath="$PROJECT_DIR$/src/mqtt_builder.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_connection.erl" afterPath="$PROJECT_DIR$/src/mqtt_connection.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_parser.erl" afterPath="$PROJECT_DIR$/src/mqtt_parser.erl" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/test/mqtt_parser_test.erl" afterPath="$PROJECT_DIR$/test/mqtt_parser_test.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_receiver.erl" afterPath="$PROJECT_DIR$/src/mqtt_receiver.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_sender.erl" afterPath="$PROJECT_DIR$/src/mqtt_sender.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_session.erl" afterPath="$PROJECT_DIR$/src/mqtt_session.erl" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="Mqtt.iws" />
@@ -81,7 +73,7 @@
       <file leaf-file-name="mqtt_parser_test.erl" pinned="false" current="true" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/test/mqtt_parser_test.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="71" column="35" selection-start="2035" selection-end="2035" vertical-scroll-proportion="0.83480823" vertical-offset="641" max-vertical-offset="1666">
+            <state line="61" column="30" selection-start="1693" selection-end="1693" vertical-scroll-proportion="0.40265486" vertical-offset="764" max-vertical-offset="1649">
               <folding />
             </state>
           </provider>
@@ -162,15 +154,15 @@
       <file leaf-file-name="workspace.xml" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/.idea/workspace.xml">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="99" column="19" selection-start="5612" selection-end="5612" vertical-scroll-proportion="0.0" vertical-offset="7701" max-vertical-offset="20128">
+            <state line="91" column="19" selection-start="4577" selection-end="4577" vertical-scroll-proportion="0.0" vertical-offset="7565" max-vertical-offset="20077">
               <folding>
-                <marker date="1422089389078" expanded="true" signature="59:61560" placeholder="..." />
-                <marker date="1422089389078" expanded="true" signature="98:370" placeholder="..." />
-                <marker date="1422089389078" expanded="true" signature="192:370" placeholder="..." />
-                <marker date="1422089389078" expanded="true" signature="59299:59385" placeholder="..." />
-                <marker date="1422089389078" expanded="true" signature="59299:59370" placeholder="..." />
-                <marker date="1422089389078" expanded="true" signature="59299:59357" placeholder="..." />
-                <marker date="1422089389078" expanded="true" signature="59300:59339" placeholder="..." />
+                <marker date="1422089437238" expanded="true" signature="59:60699" placeholder="..." />
+                <marker date="1422089437238" expanded="true" signature="98:254" placeholder="..." />
+                <marker date="1422089437238" expanded="true" signature="192:254" placeholder="..." />
+                <marker date="1422089437238" expanded="true" signature="58438:58524" placeholder="..." />
+                <marker date="1422089437238" expanded="true" signature="58438:58509" placeholder="..." />
+                <marker date="1422089437238" expanded="true" signature="58438:58496" placeholder="..." />
+                <marker date="1422089437238" expanded="true" signature="58439:58478" placeholder="..." />
               </folding>
             </state>
           </provider>
@@ -704,7 +696,11 @@
       <created>1422084198533</created>
       <updated>1422084198533</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="Misc Fixes">
+      <created>1422089399857</created>
+      <updated>1422089399857</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="TodoView" selected-index="0">
@@ -748,7 +744,7 @@
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="SLIDING" type="SLIDING" visible="false" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Application Servers" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.15079366" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
-      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.22722283" sideWeight="0.63003665" order="2" side_tool="false" content_ui="tabs" />
+      <window_info id="Run" active="true" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.22722283" sideWeight="0.63003665" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32821077" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
@@ -782,7 +778,8 @@
     <MESSAGE value="Sender implementation&#10;" />
     <MESSAGE value="Parsing fixes&#10;" />
     <MESSAGE value="Test&#10;" />
-    <option name="LAST_COMMIT_MESSAGE" value="Test&#10;" />
+    <MESSAGE value="Misc Fixes" />
+    <option name="LAST_COMMIT_MESSAGE" value="Misc Fixes" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -1016,15 +1013,15 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/.idea/workspace.xml">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="99" column="19" selection-start="5612" selection-end="5612" vertical-scroll-proportion="0.0" vertical-offset="7701" max-vertical-offset="20128">
+        <state line="91" column="19" selection-start="4577" selection-end="4577" vertical-scroll-proportion="0.0" vertical-offset="7565" max-vertical-offset="20077">
           <folding>
-            <marker date="1422089389078" expanded="true" signature="59:61560" placeholder="..." />
-            <marker date="1422089389078" expanded="true" signature="98:370" placeholder="..." />
-            <marker date="1422089389078" expanded="true" signature="192:370" placeholder="..." />
-            <marker date="1422089389078" expanded="true" signature="59299:59385" placeholder="..." />
-            <marker date="1422089389078" expanded="true" signature="59299:59370" placeholder="..." />
-            <marker date="1422089389078" expanded="true" signature="59299:59357" placeholder="..." />
-            <marker date="1422089389078" expanded="true" signature="59300:59339" placeholder="..." />
+            <marker date="1422089437238" expanded="true" signature="59:60699" placeholder="..." />
+            <marker date="1422089437238" expanded="true" signature="98:254" placeholder="..." />
+            <marker date="1422089437238" expanded="true" signature="192:254" placeholder="..." />
+            <marker date="1422089437238" expanded="true" signature="58438:58524" placeholder="..." />
+            <marker date="1422089437238" expanded="true" signature="58438:58509" placeholder="..." />
+            <marker date="1422089437238" expanded="true" signature="58438:58496" placeholder="..." />
+            <marker date="1422089437238" expanded="true" signature="58439:58478" placeholder="..." />
           </folding>
         </state>
       </provider>
@@ -1094,7 +1091,7 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/test/mqtt_parser_test.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="71" column="35" selection-start="2035" selection-end="2035" vertical-scroll-proportion="0.83480823" vertical-offset="641" max-vertical-offset="1666">
+        <state line="61" column="30" selection-start="1693" selection-end="1693" vertical-scroll-proportion="0.40265486" vertical-offset="764" max-vertical-offset="1649">
           <folding />
         </state>
       </provider>

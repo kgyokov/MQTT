@@ -68,7 +68,6 @@ parse_string_chunked3_test()->
   push_fragment(ParseProcess,<<"12345">>),
   push_fragment(ParseProcess,<<"6789abc">>),
 
-  ?assertEqual(1, receive_result(ParseProcess)),
   ?assertEqual({ok, <<"123456789">>, <<"abc">>}, receive_result(ParseProcess))
 .
 
