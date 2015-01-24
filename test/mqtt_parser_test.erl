@@ -13,7 +13,11 @@
 -include("mqtt_const.hrl").
 
 %% API
--export([parse_string_test/0, parse_string_chunked_test/0, parse_string_chunked_test/0, all_tests/0, parse_string_chunked2_test/0, parse_string_chunked3_test/0]).
+-export([parse_string_test/0, parse_string_chunked_test/0, parse_string_chunked_test/0,
+          parse_string_chunked2_test/0, parse_string_chunked3_test/0,
+  parse_string_test3/0,
+  all_tests/0
+]).
 
 all_tests()->
   [
@@ -23,6 +27,9 @@ all_tests()->
   parse_string_chunked3_test()
   ]
  .
+
+parse_string_test3()->
+  0.
 
 parse_string_test()->
   String = <<9:16,"123456789">>,
@@ -61,6 +68,7 @@ parse_string_chunked3_test()->
   push_fragment(ParseProcess,<<"12345">>),
   push_fragment(ParseProcess,<<"6789abc">>),
 
+  ?assertEqual(1, receive_result(ParseProcess)),
   ?assertEqual({{ok, <<"123456789">>}, <<"abc">>}, receive_result(ParseProcess))
 .
 

@@ -178,7 +178,7 @@ parse_specific_type('CONNECT',
                0 ->
                  {undefined,Rest4};
                1 ->
-                 {{ok, P}, Rest5} =  parse_string(S#parse_state{buffer=Rest4}),
+                 {ok, P, Rest5} =  parse_string(S#parse_state{buffer=Rest4}),
                  {P,Rest5}
              end
   #'CONNECT'{
@@ -219,7 +219,7 @@ parse_specific_type('SUBSCRIBE',<<Rest>>) ->
 
 add_optional_str_field({OptionalFields = #{}, S}, Key, Flag) ->
   if Flag =:= 1 ->
-    {{ok,Value},Rest} = parse_string(S),
+    {ok,Value,Rest} = parse_string(S),
     { maps:put(Key,Value,OptionalFields), S#parse_state{buffer = Rest}};
     Flag =:= 0 -> {OptionalFields, S}
   end
