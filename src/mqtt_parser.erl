@@ -238,22 +238,59 @@ parse_specific_type(?CONNECT,
   }
 ;
 
-parse_specific_type('CONNECT', S) ->
-  parse_specific_type('CONNECT', read(S))
-;
+
+parse_specific_type(?CONNACK,<<>>) ->
+  #'CONNACK'{};
+
+parse_specific_type(?DISCONNECT,<<>>) ->
+  #'DISCONNECT'{};
 
 %%%%%%%%%%%%%%
 %% PING
 %%%%%%%%%%%%%%
-parse_specific_type('PINGREQ',<<>>) ->
+parse_specific_type(?PINGREQ,<<>>) ->
   #'PINGREQ'{};
+
+parse_specific_type(?PINGRESP,<<>>) ->
+  #'PINGRESP'{};
+
+%%%%%%%%%%%%%%
+%% PUBLISH
+%%%%%%%%%%%%%%
+
+parse_specific_type(?PUBLISH,<<>>) ->
+  #'PUBLISH'{};
+
+parse_specific_type(?PUBACK,<<>>) ->
+  #'PUBACK'{};
+
+parse_specific_type(?PUBREC,<<>>) ->
+  #'PUBREC'{};
+
+parse_specific_type(?PUBREL,<<>>) ->
+  #'PUBREL'{};
+
+parse_specific_type(?PUBCOMP,<<>>) ->
+  #'PUBCOMP'{};
 
 %%%%%%%%%%%%%%
 %% SUBSCRIBE
 %%%%%%%%%%%%%%
-parse_specific_type('SUBSCRIBE',<<Rest>>) ->
-  #'SUBSCRIBE'{}
-.
+
+parse_specific_type(?SUBSCRIBE,<<Rest>>) ->
+  #'SUBSCRIBE'{};
+
+parse_specific_type(?SUBACK,<<Rest>>) ->
+  #'SUBACK'{}
+;
+
+parse_specific_type(?UNSUBSCRIBE,<<Rest>>) ->
+  #'UNSUBSCRIBE'{}
+;
+
+parse_specific_type(?UNSUBACK,<<Rest>>) ->
+  #'UNSUBACK'{}
+;
 
 %% parse_specific_type('CONNECT', S) when byte_size(S#parse_state.buffer) < 10 ->
 %%   parse_specific_type('CONNECT', read(S))
