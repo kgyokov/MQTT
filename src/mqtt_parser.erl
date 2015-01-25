@@ -13,10 +13,9 @@
 -include("mqtt_packets.hrl").
 
 %% API
--export([read/1, read/3, parse_string/1]).
+-export([read/1, read_limit/2, read/3, parse_string/1, parse_variable_length/1]).
 
 
--record(state, { parse_state } ).
 -record(connect_flags, {}).
 
 %%
@@ -25,12 +24,33 @@
 %%
 %%
 
+read_limit(#parse_state { max_buffer_size =  MaxBufferSize },  ExpectedBufferSize)
+  when ExpectedBufferSize >  MaxBufferSize ->
+  throw({error, buffer_overflow })
+;
+
+read_limit( #parse_state {buffer =  Buffer}, ExpectedBufferSize) when ExpectedBufferSize >=  byte_size(Buffer) ->
+  <<Buffer/binary>>
+;
+
+
+read_limit( S = #parse_state { readfun =  ReadFun,buffer =  Buffer}, ExpectedBufferSize)
+  when ExpectedBufferSize < byte_size(Buffer)->
+  case ReadFun() of
+    {ok,NewFragment} ->
+      read_limit( S#parse_state{ buffer = <<Buffer/binary,NewFragment/binary>>}, ExpectedBufferSize); %% append the newly retrieved bytes
+    {error,Reason} ->
+      throw({error,Reason})
+  end.
+
 read(_ReadFun, MaxBufferSize, Buffer) when byte_size(Buffer) > MaxBufferSize  ->
   throw({error, buffer_overflow });
 read(ReadFun, _MaxBufferSize, Buffer) ->
   case ReadFun() of
-    {ok,NewFragment} -> <<Buffer/binary,NewFragment/binary>>; %% append the newly retrieved bytes
-    {error,Reason} -> throw({error,Reason})
+    {ok,NewFragment} ->
+      <<Buffer/binary,NewFragment/binary>>; %% append the newly retrieved bytes
+    {error,Reason} ->
+      throw({error,Reason})
   end.
 
 read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun = ReadFun}) ->
@@ -48,27 +68,48 @@ read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%[MQTT-1.5.3]
-parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
-  {ok,Str,Rest};
 parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
-  {ok, <<"">>,Rest};
-parse_string(S)->
-  parse_string(read(S)).
+  {ok, <<"">>,Rest} %% empty string
+;
+parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
+  {ok,Str,Rest}
+;
+parse_string(S)-> %
+  parse_string(read(S)) %% fallthrough case: not enough data in the buffer
+.
 
 %%
 %% Parses integer using variable length-encoding
 %%
-parse_variable_length(ReadFun, Buffer) ->
-  parse_variable_length(ReadFun, Buffer, 0, 1).
 
-parse_variable_length(ReadFun, <<HasMore:1,Length:7, Rest/binary>>, Sum, Multiplier) ->
+parse_variable_length(S) ->
+  parse_variable_length(S, 0, 1).
+
+parse_variable_length(S = #parse_state{buffer = <<HasMore:1,Length:7, Rest/binary>>},
+    Sum,
+    Multiplier)->
+
   NewSum = Sum + Length * Multiplier,
   if HasMore =:= 1 ->
-      parse_variable_length(ReadFun, Rest, NewSum, Multiplier * 128);
-    true -> {NewSum, Rest}
-  end;
-parse_variable_length(ReadFun, Bytes, Sum, Multiplier) ->
-  parse_variable_length(ReadFun, ReadFun(Bytes), Sum, Multiplier).
+    parse_variable_length(S#parse_state{buffer = Rest}, NewSum, Multiplier * 128);
+    true -> {ok, NewSum, Rest}
+  end
+;
+
+parse_variable_length(S, Sum, Multiplier) ->
+  parse_variable_length(read(S), Sum, Multiplier) %% not enough data in the buffer
+.
+
+
+%% parse_variable_length(ReadFun, <<HasMore:1,Length:7, Rest/binary>>, Sum, Multiplier) ->
+%%   NewSum = Sum + Length * Multiplier,
+%%   if HasMore =:= 1 ->
+%%       parse_variable_length(ReadFun, Rest, NewSum, Multiplier * 128);
+%%     true -> {NewSum, Rest}
+%%   end;
+%%
+%% parse_variable_length(ReadFun, Bytes, Sum, Multiplier) ->
+%%   parse_variable_length(ReadFun, ReadFun(Bytes), Sum, Multiplier).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -90,14 +131,18 @@ parse_header_start(ReadFun, Bytes)->
 .
 
 
-parse_fixed_header(<<HeaderStart:8,Rest/binary>>)->
-  Type = parse_type_and_flags(HeaderStart),
-  RemainingLength = parse_variable_length(Rest,0),
+parse_fixed_header(S = #parse_state{buffer = <<HeaderStart:8,Rest/binary>>, readfun = ReadFun})->
+  {Type, Flags } = parse_type_and_flags(HeaderStart),
+  {ok, RemainingLength, Rest1} = parse_variable_length(S),
   PacketId = case Type of
-    { 'SUBSCRIBE', _ } -> 0;
-    { 'UNSUBSCRIBE', _ } -> 0;
-    { 'PUBLISH ', { _, QoS, _} } when QoS > 0 -> 0
-  end
+    { ?SUBSCRIBE, _ } -> 0;
+    { ?UNSUBSCRIBE, _ } -> 0;
+    { ?PUBLISH, { _, QoS, _} } when QoS > 0 -> 0
+  end,
+  <<Complete:RemainingLength/binary,Rest2/binary>> = read_limit(S#parse_state{buffer = Rest1},RemainingLength),
+  ParsedFrame = parse_specific_type(Type,Complete),
+  %% TODO: Send the parsed frame
+  S#parse_state{buffer = Rest2}
 ;
 parse_fixed_header(_)->
   incomplete
@@ -220,7 +265,7 @@ parse_specific_type('SUBSCRIBE',<<Rest>>) ->
 parse_maybe_will_details(_WillFlag = 0,_,_,#parse_state{buffer=Rest})->
       {undefined,Rest};
 
-parse_maybe_will_details(_WillFlag = 1,WillRetain,WillQoS,S#parse_state{buffer=Rest})->
+parse_maybe_will_details(_WillFlag = 1,WillRetain,WillQoS,S = #parse_state{buffer=Rest})->
       {ok,WillTopic, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
       {ok,WillMessage, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
       {
