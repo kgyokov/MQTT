@@ -189,16 +189,16 @@ parse_specific_type(?CONNACK,_Flags,<<0:7,SessionPresent:1,Code:8>>) ->
     return_code = Code
   };
 
-parse_specific_type(?DISCONNECT,_Flags,<<>>) ->
+parse_specific_type(?DISCONNECT,_Flags,_S) ->
   #'DISCONNECT'{};
 
 %%%%%%%%%%%%%%
 %% PING -- COMPLETE!!!
 %%%%%%%%%%%%%%
-parse_specific_type(?PINGREQ,_Flags,<<>>) ->
+parse_specific_type(?PINGREQ,_Flags,_S) ->
   #'PINGREQ'{};
 
-parse_specific_type(?PINGRESP,_Flags,<<>>) ->
+parse_specific_type(?PINGRESP,_Flags,_S) ->
   #'PINGRESP'{};
 
 %%%%%%%%%%%%%%
