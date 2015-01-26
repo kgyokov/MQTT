@@ -102,10 +102,11 @@ build_rest(#'CONNECT'{
  >>;
 
 %% CONNACK
-build_rest(#'CONNACK'{ flags = Flags, return_code = ReturnCode})->
+build_rest(#'CONNACK'{ session_present = SessionPresent, return_code = ReturnCode})->
    <<
-  (Flags#connack_flags.session_present):1,
-  ReturnCode:8
+   0:7,
+   SessionPresent:1,
+   ReturnCode:8
   >>;
 
 %%

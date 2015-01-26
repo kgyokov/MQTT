@@ -13,7 +13,7 @@
 -include("mqtt_packets.hrl").
 
 %% API
--export([read/1, read_limit/2, read/3, parse_string/1, parse_variable_length/1]).
+-export([read/1, read_limit/2, read/3, parse_string/1, parse_variable_length/1, parse_packet/1]).
 
 
 -record(connect_flags, {}).
@@ -117,8 +117,15 @@ parse_variable_length(S, Sum, Multiplier) ->
 %% Parsing
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-parse_packet(Binary)->
-  {ok, packet }
+parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4,Rest/binary>>})->
+  %% get the remaining length of the packet
+  {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
+  %% READ the remaining length of the packet
+  <<RemaningPacket:Length/bytes,NextPacket>> = read_limit(S#parse_state{buffer = Rest1},Length),
+  %% parse the entire packet based on type, flags, and all other remaining data
+  ParsedPacket = parse_specific_type(Type,Flags,RemaningPacket),
+  %% return
+  {ParsedPacket, S#parse_state{buffer = NextPacket}}
 .
 
 parse_header_start(_ReadFun, <<HeaderStart:8/binary,Rest/binary>>) ->
@@ -131,22 +138,22 @@ parse_header_start(ReadFun, Bytes)->
 .
 
 
-parse_fixed_header(S = #parse_state{buffer = <<HeaderStart:8,Rest/binary>>, readfun = ReadFun})->
-  {Type, Flags } = parse_type_and_flags(HeaderStart),
-  {ok, RemainingLength, Rest1} = parse_variable_length(S),
-  PacketId = case Type of
-    { ?SUBSCRIBE, _ } -> 0;
-    { ?UNSUBSCRIBE, _ } -> 0;
-    { ?PUBLISH, { _, QoS, _} } when QoS > 0 -> 0
-  end,
-  <<Complete:RemainingLength/binary,Rest2/binary>> = read_limit(S#parse_state{buffer = Rest1},RemainingLength),
-  ParsedFrame = parse_specific_type(Type,Complete),
-  %% TODO: Send the parsed frame
-  S#parse_state{buffer = Rest2}
-;
-parse_fixed_header(_)->
-  incomplete
-.
+%% parse_fixed_header(S = #parse_state{buffer = <<Type:4,Flags:4,Rest/binary>>, readfun = ReadFun})->
+%%   %%{Type, Flags } = parse_type_and_flags(HeaderStart),
+%%   {ok, RemainingLength, Rest1} = parse_variable_length(S),
+%%   PacketId = case Type of
+%%     { ?SUBSCRIBE, _ } -> 0;
+%%     { ?UNSUBSCRIBE, _ } -> 0;
+%%     { ?PUBLISH, { _, QoS, _} } when QoS > 0 -> 0
+%%   end,
+%%   <<Complete:RemainingLength/binary,Rest2/binary>> = read_limit(S#parse_state{buffer = Rest1},RemainingLength),
+%%   ParsedFrame = parse_specific_type(Type,Complete),
+%%   %% TODO: Send the parsed frame
+%%   S#parse_state{buffer = Rest2}
+%% ;
+%% parse_fixed_header(_)->
+%%   incomplete
+%% .
 
 parse_type_and_flags(<<PacketType:4,Flags:4>>) ->
   TypeName = case PacketType of
@@ -184,15 +191,14 @@ end
 %% MQTT 3.1.2.1 - "The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”, capitalized as shown.
 %% The string, its offset and length will not be changed by future versions of the MQTT specification."
 parse_specific_type(?CONNECT,
-  S = #parse_state{
-    buffer =
-      <<ProtocolNameLength:16,     %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
-      ProtocolName:32/binary,      %% the option to proceed anyway
-      ProtocolLevel:8,
-      UsernameFlag:1,PasswordFlag:1,WillRetain:1,WillQoS:2,WillFlag:1,CleanSession:1,_:1,
-      KeepAlive:16,
-
-      Payload/binary>>}) ->
+  _Flags,
+  S = #parse_state{buffer=
+  <<ProtocolNameLength:16,     %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
+   ProtocolName:32/binary,     %% the option to proceed anyway
+   ProtocolLevel:8,
+   UsernameFlag:1,PasswordFlag:1,WillRetain:1,WillQoS:2,WillFlag:1,CleanSession:1,_:1,
+   KeepAlive:16,
+   Payload/binary>>}) ->
 
   {ok,ClientId, Rest} = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
 
@@ -239,58 +245,85 @@ parse_specific_type(?CONNECT,
 ;
 
 
-parse_specific_type(?CONNACK,<<>>) ->
-  #'CONNACK'{};
+parse_specific_type(?CONNACK,_Flags,<<0:7,SessionPresent:1,Code:8>>) ->
+  #'CONNACK'{session_present = SessionPresent, return_code = Code};
 
-parse_specific_type(?DISCONNECT,<<>>) ->
+parse_specific_type(?DISCONNECT,_Flags,<<>>) ->
   #'DISCONNECT'{};
 
 %%%%%%%%%%%%%%
 %% PING
 %%%%%%%%%%%%%%
-parse_specific_type(?PINGREQ,<<>>) ->
+parse_specific_type(?PINGREQ,_Flags,<<>>) ->
   #'PINGREQ'{};
 
-parse_specific_type(?PINGRESP,<<>>) ->
+parse_specific_type(?PINGRESP,_Flags,<<>>) ->
   #'PINGRESP'{};
 
 %%%%%%%%%%%%%%
 %% PUBLISH
 %%%%%%%%%%%%%%
 
-parse_specific_type(?PUBLISH,<<>>) ->
-  #'PUBLISH'{};
+parse_specific_type(?PUBLISH,Flags, S) ->
+  <<Dup:1,QoS:2,Retain:1>> = Flags,
 
-parse_specific_type(?PUBACK,<<>>) ->
+  %% validate flags - should we do that here? or in the connection process???
+  case {Dup,QoS,Retain} of
+    {1,0,_}->
+      throw({error,invalid_flags});
+    _ ->
+      ok
+  end,
+
+  %#parse_state{buffer = Rest } = S,
+  {ok,Topic,Rest1} = parse_variable_length(S),
+  {PacketId,Content} =
+    if QoS =:= 1; QoS =:= 2 ->
+      <<PacketId1:16,Content1/binary>> = Rest1,
+      {PacketId1,Content1};
+    true ->
+      {undefined,Rest1}
+    end,
+
+  #'PUBLISH'{
+    qos = QoS,
+    dup = Dup,
+    retain = Retain,
+    topic = Topic,
+    content = Content,
+    packet_id = PacketId
+  };
+
+parse_specific_type(?PUBACK,_Flags,S) ->
   #'PUBACK'{};
 
-parse_specific_type(?PUBREC,<<>>) ->
+parse_specific_type(?PUBREC,_Flags,S) ->
   #'PUBREC'{};
 
-parse_specific_type(?PUBREL,<<>>) ->
+parse_specific_type(?PUBREL,_Flags,S) ->
   #'PUBREL'{};
 
-parse_specific_type(?PUBCOMP,<<>>) ->
+parse_specific_type(?PUBCOMP,_Flags,S) ->
   #'PUBCOMP'{};
 
 %%%%%%%%%%%%%%
 %% SUBSCRIBE
 %%%%%%%%%%%%%%
 
-parse_specific_type(?SUBSCRIBE,<<Rest>>) ->
+parse_specific_type(?SUBSCRIBE,_Flags,S) ->
   #'SUBSCRIBE'{};
 
-parse_specific_type(?SUBACK,<<Rest>>) ->
+parse_specific_type(?SUBACK,_Flags,S) ->
   #'SUBACK'{}
 ;
 
-parse_specific_type(?UNSUBSCRIBE,<<Rest>>) ->
+parse_specific_type(?UNSUBSCRIBE,_Flags,S) ->
   #'UNSUBSCRIBE'{}
 ;
 
-parse_specific_type(?UNSUBACK,<<Rest>>) ->
+parse_specific_type(?UNSUBACK,_Flags,S) ->
   #'UNSUBACK'{}
-;
+.
 
 %% parse_specific_type('CONNECT', S) when byte_size(S#parse_state.buffer) < 10 ->
 %%   parse_specific_type('CONNECT', read(S))

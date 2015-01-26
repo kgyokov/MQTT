@@ -283,7 +283,8 @@ handle_packet(Packet = #'CONNECT'
 
   S1 = start_keep_alive(S, KeepAliveTimeout),
 
-  send_to_client(ClientId, #'CONNACK'{flags = undefined, return_code = 0}),
+  %% TODO: Determine session present
+  send_to_client(ClientId, #'CONNACK'{return_code = 0, session_present = 0}),
   S2 = S1#state{
     client_id = ClientId,
     connect_state = connected,

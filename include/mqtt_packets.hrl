@@ -29,8 +29,8 @@
   keep_alive
 }).
 
--record(connack_flags, {session_present}).
--record('CONNACK', {flags = #connack_flags{},return_code}).
+%%-record(connack_flags, {session_present}).
+-record('CONNACK', {return_code, session_present}).
 %% Return codes
 -define(CONECTION_ACCEPTED, 0).
 -define(UNACCEPTABLE_PROTOCOL, 1).
