@@ -16,8 +16,6 @@
 -export([read/1, read_limit/2, read/3, parse_string/1, parse_variable_length/1, parse_packet/1]).
 
 
--record(connect_flags, {}).
-
 %%
 %%
 %% Communication Adaptors
@@ -121,71 +119,11 @@ parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4,Rest/binary>>})->
   %% get the remaining length of the packet
   {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
   %% READ the remaining length of the packet
-  <<RemaningPacket:Length/bytes,NextPacket>> = read_limit(S#parse_state{buffer = Rest1},Length),
+  <<RemaningPacket:Length/bytes,NextPacket/binary>> = read_limit(S#parse_state{buffer = Rest1},Length),
   %% parse the entire packet based on type, flags, and all other remaining data
   ParsedPacket = parse_specific_type(Type,Flags,RemaningPacket),
   %% return
   {ParsedPacket, S#parse_state{buffer = NextPacket}}
-.
-
-parse_header_start(_ReadFun, <<HeaderStart:8/binary,Rest/binary>>) ->
-  Result = parse_type_and_flags(HeaderStart)
-  %%{ Rest, Sum } = parse_variable_length(fun() -> await_more_bytes(S) end, Rest),
-
-;
-parse_header_start(ReadFun, Bytes)->
-  parse_header_start(ReadFun, ReadFun(Bytes))
-.
-
-
-%% parse_fixed_header(S = #parse_state{buffer = <<Type:4,Flags:4,Rest/binary>>, readfun = ReadFun})->
-%%   %%{Type, Flags } = parse_type_and_flags(HeaderStart),
-%%   {ok, RemainingLength, Rest1} = parse_variable_length(S),
-%%   PacketId = case Type of
-%%     { ?SUBSCRIBE, _ } -> 0;
-%%     { ?UNSUBSCRIBE, _ } -> 0;
-%%     { ?PUBLISH, { _, QoS, _} } when QoS > 0 -> 0
-%%   end,
-%%   <<Complete:RemainingLength/binary,Rest2/binary>> = read_limit(S#parse_state{buffer = Rest1},RemainingLength),
-%%   ParsedFrame = parse_specific_type(Type,Complete),
-%%   %% TODO: Send the parsed frame
-%%   S#parse_state{buffer = Rest2}
-%% ;
-%% parse_fixed_header(_)->
-%%   incomplete
-%% .
-
-parse_type_and_flags(<<PacketType:4,Flags:4>>) ->
-  TypeName = case PacketType of
-    0 -> 'Reserved';
-    ?CONNECT -> 'CONNECT';
-    ?CONNACK -> 'CONNACK';
-    ?PUBLISH -> 'PUBLISH';
-    ?PUBACK -> 'PUBACK';
-    ?PUBREC -> 'PUBREC';
-    ?PUBREL -> 'PUBREL';
-    ?PUBCOMP -> 'PUBCOMP';
-    ?UNSUBSCRIBE -> 'SUBSCRIBE';
-    ?SUBACK -> 'SUBACK';
-    ?UNSUBSCRIBE -> 'UNSUBSCRIBE';
-    ?UNSUBACK -> 'UNSUBACK';
-    ?PINGREQ -> 'PINGREQ';
-    ?PINGRESP -> 'PINGRESP';
-    ?DISCONNECT -> 'DISCONNECT';
-    15 -> 'Reserved'
-  end,
-  { TypeName, parse_flags(TypeName, Flags) }.
-
-
-%% [MQTT-2.2.2]
-parse_flags(PacketType, Flags)->
-  case {PacketType, Flags } of
-    {'PUBLISH',     <<Dup:1,QoS:2,Retain:1>>}-> { Dup, QoS, Retain};
-    {'PUBREL',      <<2#0010>>}-> {ok};
-    {'SUBSCRIBE',   <<2#0010>>} -> {ok};
-    {'UNSUBSCRIBE', <<2#0010>>}-> {ok};
-    {_, _}-> throw(invalid_flags) %% [MQTT-2.2.2-2]
-end
 .
 
 %% MQTT 3.1.2.1 - "The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”, capitalized as shown.
@@ -193,8 +131,8 @@ end
 parse_specific_type(?CONNECT,
   _Flags,
   S = #parse_state{buffer=
-  <<ProtocolNameLength:16,     %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
-   ProtocolName:32/binary,     %% the option to proceed anyway
+  <<ProtocolNameLen:16,                      %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
+   ProtocolName:ProtocolNameLen/bytes,     %% the option to proceed anyway
    ProtocolLevel:8,
    UsernameFlag:1,PasswordFlag:1,WillRetain:1,WillQoS:2,WillFlag:1,CleanSession:1,_:1,
    KeepAlive:16,
@@ -246,13 +184,16 @@ parse_specific_type(?CONNECT,
 
 
 parse_specific_type(?CONNACK,_Flags,<<0:7,SessionPresent:1,Code:8>>) ->
-  #'CONNACK'{session_present = SessionPresent, return_code = Code};
+  #'CONNACK'{
+    session_present = SessionPresent,
+    return_code = Code
+  };
 
 parse_specific_type(?DISCONNECT,_Flags,<<>>) ->
   #'DISCONNECT'{};
 
 %%%%%%%%%%%%%%
-%% PING
+%% PING -- COMPLETE!!!
 %%%%%%%%%%%%%%
 parse_specific_type(?PINGREQ,_Flags,<<>>) ->
   #'PINGREQ'{};
@@ -261,7 +202,7 @@ parse_specific_type(?PINGRESP,_Flags,<<>>) ->
   #'PINGRESP'{};
 
 %%%%%%%%%%%%%%
-%% PUBLISH
+%% PUBLISH -- COMPLETE!!!
 %%%%%%%%%%%%%%
 
 parse_specific_type(?PUBLISH,Flags, S) ->
@@ -294,35 +235,47 @@ parse_specific_type(?PUBLISH,Flags, S) ->
     packet_id = PacketId
   };
 
-parse_specific_type(?PUBACK,_Flags,S) ->
-  #'PUBACK'{};
+parse_specific_type(?PUBACK,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+  #'PUBACK'{packet_id = PacketId};
 
-parse_specific_type(?PUBREC,_Flags,S) ->
-  #'PUBREC'{};
+parse_specific_type(?PUBREC,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+  #'PUBREC'{packet_id = PacketId};
 
-parse_specific_type(?PUBREL,_Flags,S) ->
-  #'PUBREL'{};
+parse_specific_type(?PUBREL,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+  #'PUBREL'{packet_id = PacketId};
 
-parse_specific_type(?PUBCOMP,_Flags,S) ->
-  #'PUBCOMP'{};
+parse_specific_type(?PUBCOMP,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+  #'PUBCOMP'{packet_id = PacketId};
 
 %%%%%%%%%%%%%%
-%% SUBSCRIBE
+%% SUBSCRIBE - COMPLETE!!!
 %%%%%%%%%%%%%%
 
-parse_specific_type(?SUBSCRIBE,_Flags,S) ->
-  #'SUBSCRIBE'{};
+parse_specific_type(?SUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
+  Subscriptions = parse_topic_subscriptions(Rest),
+  #'SUBSCRIBE'{
+    packet_id = PacketId,
+    subscriptions = Subscriptions
+  };
 
-parse_specific_type(?SUBACK,_Flags,S) ->
-  #'SUBACK'{}
+parse_specific_type(?SUBACK,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
+  ReturnCodes = [ Code || <<0:6,Code:2>> <- binary_to_list(Rest)],
+  #'SUBACK'{
+    packet_id = PacketId,
+    return_codes = ReturnCodes
+  }
 ;
 
-parse_specific_type(?UNSUBSCRIBE,_Flags,S) ->
-  #'UNSUBSCRIBE'{}
+parse_specific_type(?UNSUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
+  Topics = parse_topics(Rest),
+  #'UNSUBSCRIBE'{
+    packet_id = PacketId,
+    topic_filters = Topics
+  }
 ;
 
-parse_specific_type(?UNSUBACK,_Flags,S) ->
-  #'UNSUBACK'{}
+parse_specific_type(?UNSUBACK,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+  #'UNSUBACK'{packet_id = PacketId}
 .
 
 %% parse_specific_type('CONNECT', S) when byte_size(S#parse_state.buffer) < 10 ->
@@ -331,6 +284,31 @@ parse_specific_type(?UNSUBACK,_Flags,S) ->
 %% parse_specific_type('CONNECT', _) ->
 %%   throw(malformed_packet)
 %% .
+
+
+parse_topics(Buffer)->
+  parse_topics(Buffer,[])
+.
+
+parse_topics(_Buffer = <<>>,Topics)->
+  Topics
+;
+parse_topics(<<TopicLen:16,Topic:TopicLen/bytes,Rest/binary>>,Topics)->
+  parse_topics(Rest,[Topic|Topics])
+.
+
+parse_topic_subscriptions(Buffer)->
+  parse_topic_subscriptions(Buffer,[])
+.
+
+parse_topic_subscriptions(_Buffer = <<>>,Subscriptions)->
+  Subscriptions
+;
+
+parse_topic_subscriptions(<<TopicLen:16,Topic:TopicLen/bytes,0:6,QoS:2,Rest/binary>>,
+    Subscriptions)->
+  parse_topic_subscriptions(Rest,[{Topic,QoS}|Subscriptions])
+.
 
 parse_maybe_will_details(_WillFlag = 0,_,_,#parse_state{buffer=Rest})->
       {undefined,Rest};
@@ -357,11 +335,6 @@ add_optional_str_field({OptionalFields = #{}, S}, Key, Flag) ->
   end
 .
 
-%% parse_flags('PUBLISH',<<Dup:1,QoS:2,Retain:1>>)-> { Dup, QoS, Retain};
-%% parse_flags('PUBREL',<<2#0010>>)-> {ok};
-%% parse_flags('SUBSCRIBE',<<2#0010>>)-> {ok};
-%% parse_flags('UNSUBSCRIBE',<<2#0010>>)-> {ok};
-%% parse_flags(_, _)-> throw(invalid_flags). %% [MQTT-2.2.2-2]
 
 
 

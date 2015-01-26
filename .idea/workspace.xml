@@ -2,9 +2,6 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="298fd64b-89fc-43c6-83e2-8d333bd785cf" name="Default" comment="">
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_builder.erl" afterPath="$PROJECT_DIR$/src/mqtt_builder.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_connection.erl" afterPath="$PROJECT_DIR$/src/mqtt_connection.erl" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/include/mqtt_packets.hrl" afterPath="$PROJECT_DIR$/include/mqtt_packets.hrl" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt_parser.erl" afterPath="$PROJECT_DIR$/src/mqtt_parser.erl" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
@@ -103,7 +100,7 @@
       <file leaf-file-name="mqtt_parser.erl" pinned="false" current="true" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="256" column="44" selection-start="8025" selection-end="8025" vertical-scroll-proportion="2.8547401" vertical-offset="2485" max-vertical-offset="6358">
+            <state line="16" column="0" selection-start="457" selection-end="457" vertical-scroll-proportion="0.43312103" vertical-offset="0" max-vertical-offset="5899">
               <folding />
             </state>
           </provider>
@@ -148,7 +145,7 @@
       <file leaf-file-name="mqtt_connection.erl" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/src/mqtt_connection.erl">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="261" column="24" selection-start="8452" selection-end="8452" vertical-scroll-proportion="0.0" vertical-offset="3647" max-vertical-offset="8330">
+            <state line="303" column="0" selection-start="9291" selection-end="9291" vertical-scroll-proportion="0.0" vertical-offset="4848" max-vertical-offset="8330">
               <folding />
             </state>
           </provider>
@@ -722,7 +719,11 @@
       <created>1422173419659</created>
       <updated>1422173419659</updated>
     </task>
-    <option name="localTasksCounter" value="20" />
+    <task id="LOCAL-00020" summary="Parsing Publish packets&#10;">
+      <created>1422238861989</created>
+      <updated>1422238861989</updated>
+    </task>
+    <option name="localTasksCounter" value="21" />
     <servers />
   </component>
   <component name="TodoView" selected-index="0">
@@ -754,12 +755,13 @@
       <window_info id="Designer" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Palette" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32930845" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32821077" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Ant Build" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.39956093" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.22722283" sideWeight="0.36996338" order="7" side_tool="true" content_ui="tabs" />
       <window_info id="Favorites" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="true" content_ui="tabs" />
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32930845" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Messages" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.25356752" sideWeight="0.5" order="8" side_tool="false" content_ui="tabs" />
+      <window_info id="Messages" active="true" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.25356752" sideWeight="0.5" order="8" side_tool="false" content_ui="tabs" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32930845" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.24973376" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Maven Projects" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
@@ -769,7 +771,6 @@
       <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.22722283" sideWeight="0.63003665" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
-      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32821077" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
       <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
     </layout>
@@ -804,7 +805,8 @@
     <MESSAGE value="Fixing tests&#10;" />
     <MESSAGE value="Var Length tests and implementation &#10;" />
     <MESSAGE value="Listing all possible packets&#10;" />
-    <option name="LAST_COMMIT_MESSAGE" value="Listing all possible packets&#10;" />
+    <MESSAGE value="Parsing Publish packets&#10;" />
+    <option name="LAST_COMMIT_MESSAGE" value="Parsing Publish packets&#10;" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -1046,13 +1048,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://C:/erlang/erl6.1/lib/erts-6.1/src/erlang.erl">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="1352" column="0" selection-start="40009" selection-end="40009" vertical-scroll-proportion="0.33258173" vertical-offset="22689" max-vertical-offset="62883">
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser_primitives.erl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="12" column="12" selection-start="323" selection-end="323" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="323">
@@ -1081,13 +1076,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/src/mqtt_connection.erl">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="261" column="24" selection-start="8452" selection-end="8452" vertical-scroll-proportion="0.0" vertical-offset="3647" max-vertical-offset="8330">
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/test/mqtt_parser_test.erl">
       <provider selected="true" editor-type-id="text-editor">
         <state line="51" column="66" selection-start="1652" selection-end="1652" vertical-scroll-proportion="0.0" vertical-offset="411" max-vertical-offset="2193">
@@ -1102,9 +1090,23 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/src/mqtt_connection.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="303" column="0" selection-start="9291" selection-end="9291" vertical-scroll-proportion="0.0" vertical-offset="4848" max-vertical-offset="8330">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://C:/erlang/erl6.1/lib/erts-6.1/src/erlang.erl">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="344" column="22" selection-start="12310" selection-end="12310" vertical-scroll-proportion="0.18771331" vertical-offset="5738" max-vertical-offset="62883">
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/src/mqtt_parser.erl">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="256" column="44" selection-start="8025" selection-end="8025" vertical-scroll-proportion="2.8547401" vertical-offset="2485" max-vertical-offset="6358">
+        <state line="16" column="0" selection-start="457" selection-end="457" vertical-scroll-proportion="0.43312103" vertical-offset="0" max-vertical-offset="5899">
           <folding />
         </state>
       </provider>
