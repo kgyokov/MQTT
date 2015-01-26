@@ -16,8 +16,8 @@
 
 build_packet(Packet) ->
   Rest = build_rest(Packet),
-  <<(build_packet_type(Packet)):4,(build_flags(Packet))/binary,
-  (build_var_length(Rest))/binary,
+  <<(build_packet_type(Packet)):4,(build_flags(Packet))/bits,
+  (build_var_length(byte_size(Rest)))/binary,
   Rest/binary>>
 .
 
@@ -28,7 +28,8 @@ build_flags(Packet)->
     #'PUBLISH' { qos = QoS } when QoS =:= 2#11 ->
       throw(invalid_qos);
     #'PUBLISH' { qos = QoS, dup = Dup, retain = Retain } ->
-      <<Dup:1,QoS:2,Retain:1>>
+      <<Dup:1,QoS:2,Retain:1>>;
+    _ -> <<0:4>>
   end
 .
 

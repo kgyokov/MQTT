@@ -138,9 +138,9 @@ parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4,Rest/binary>>})->
   %% get the remaining length of the packet
   {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
   %% READ the remaining length of the packet
-  <<RemaningPacket:Length/bytes,NextPacket/binary>> = read_at_least(S#parse_state{buffer = Rest1},Length),
+  <<RemainingPacket:Length/bytes,NextPacket/binary>> = read_at_least(S#parse_state{buffer = Rest1},Length),
   %% parse the entire packet based on type, flags, and all other remaining data
-  ParsedPacket = parse_specific_type(Type,Flags,RemaningPacket),
+  ParsedPacket = parse_specific_type(Type,Flags,S#parse_state{buffer = RemainingPacket}),
   %% return
   {ParsedPacket, S#parse_state{buffer = NextPacket}}
 .
@@ -244,7 +244,7 @@ parse_specific_type(?PUBCOMP,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
 %%%%%%%%%%%%%%
 
 parse_specific_type(?SUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
-  Subscriptions = parse_topic_subscriptions(Rest),
+  Subscriptions = lists:reverse(parse_topic_subscriptions(Rest)),
   #'SUBSCRIBE'{
     packet_id = PacketId,
     subscriptions = Subscriptions

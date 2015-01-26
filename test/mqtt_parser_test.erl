@@ -11,6 +11,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("mqtt_const.hrl").
+-include("mqtt_packets.hrl").
 
 
 -compile([exportall]).
@@ -96,6 +97,29 @@ parse_variable_length_chunked_test()->
   push_fragment(ParseProcess,<<255:8,127:8>>),
 
   ?assertEqual({ok, 268435455, <<>>}, receive_result(ParseProcess)).
+
+
+%%
+%%
+%% Packets
+%%
+%%
+
+parse_SUBSCRIBE_test()->
+  OriginalPacket = #'SUBSCRIBE'{
+    packet_id = 1234,
+   subscriptions = [
+     {<<"SUB1">>, 0},
+     {<<"SUB2">>, 2},
+     {<<"SUB3">>, 1}
+   ]
+  },
+  Binary = mqtt_builder:build_packet(OriginalPacket),
+  S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
+  {ParsedPacket,_NewState} = mqtt_parser:parse_packet(S),
+  ?assertEqual(OriginalPacket,ParsedPacket)
+.
+
 
 %%
 %%
