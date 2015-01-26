@@ -13,7 +13,7 @@
 -include("mqtt_packets.hrl").
 
 %% API
--export([read/1, read_limit/2, read/3, parse_string/1, parse_variable_length/1, parse_packet/1]).
+-export([read/1, read_at_least/2, read/3, parse_string/1, parse_variable_length/1, parse_packet/1]).
 
 
 %%
@@ -22,21 +22,23 @@
 %%
 %%
 
-read_limit(#parse_state { max_buffer_size =  MaxBufferSize },  ExpectedBufferSize)
-  when ExpectedBufferSize >  MaxBufferSize ->
+read_at_least(#parse_state { max_buffer_size =  MaxBufferSize },  ExpectedBytes)
+  when ExpectedBytes >  byte_size(MaxBufferSize) ->
   throw({error, buffer_overflow })
 ;
 
-read_limit( #parse_state {buffer =  Buffer}, ExpectedBufferSize) when ExpectedBufferSize >=  byte_size(Buffer) ->
+read_at_least( #parse_state {buffer =  Buffer}, ExpectedBytes)
+  when ExpectedBytes =<  byte_size(Buffer) ->
   <<Buffer/binary>>
 ;
 
 
-read_limit( S = #parse_state { readfun =  ReadFun,buffer =  Buffer}, ExpectedBufferSize)
-  when ExpectedBufferSize < byte_size(Buffer)->
+read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, ExpectedBytes)
+  when ExpectedBytes > byte_size(Buffer)->
   case ReadFun() of
     {ok,NewFragment} ->
-      read_limit( S#parse_state{ buffer = <<Buffer/binary,NewFragment/binary>>}, ExpectedBufferSize); %% append the newly retrieved bytes
+      NewBuffer = <<Buffer/binary,NewFragment/binary>>,
+      read_at_least( S#parse_state{ buffer = NewBuffer}, ExpectedBytes); %% append the newly retrieved bytes
     {error,Reason} ->
       throw({error,Reason})
   end.
@@ -72,8 +74,25 @@ parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
 parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
   {ok,Str,Rest}
 ;
-parse_string(S)-> %
+parse_string(S = #parse_state{})-> %
   parse_string(read(S)) %% fallthrough case: not enough data in the buffer
+;
+
+parse_string(<<0:16,Rest/binary>>) ->
+  {ok, <<"">>,Rest} %% empty string
+;
+parse_string(<<StrLen:16,Str:StrLen/bytes,Rest/binary>>) ->
+  {ok,Str,Rest}
+.
+
+parse_string_maybe(Flag, <<Buffer>>)->
+  case Flag of
+    0 ->
+      {undefined,Buffer};
+    1 ->
+      {ok, Str, Rest} =  parse_string(Buffer),
+      {Str,Rest}
+  end
 .
 
 %%
@@ -119,7 +138,7 @@ parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4,Rest/binary>>})->
   %% get the remaining length of the packet
   {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
   %% READ the remaining length of the packet
-  <<RemaningPacket:Length/bytes,NextPacket/binary>> = read_limit(S#parse_state{buffer = Rest1},Length),
+  <<RemaningPacket:Length/bytes,NextPacket/binary>> = read_at_least(S#parse_state{buffer = Rest1},Length),
   %% parse the entire packet based on type, flags, and all other remaining data
   ParsedPacket = parse_specific_type(Type,Flags,RemaningPacket),
   %% return
@@ -140,36 +159,9 @@ parse_specific_type(?CONNECT,
 
   {ok,ClientId, Rest} = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
 
-  {WillDetails,Rest3} = case WillFlag of
-                0 ->
-                  {undefined,Rest};
-                1 ->
-                  {ok,WillTopic, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
-                  {ok,WillMessage, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
-                  {
-                    #will_details{
-                      retain = WillRetain,
-                      qos = WillQoS,
-                      message = WillMessage,
-                      topic = WillTopic
-                    },
-                    Rest2
-                  }
-    end,
-  {Username,Rest4} = case UsernameFlag of
-              0 ->
-                {undefined,Rest3};
-              1 ->
-                {ok, U, RestA} =  parse_string(S#parse_state{buffer=Rest3}),
-                {U,RestA}
-  end,
-  {Password,_} = case PasswordFlag of
-               0 ->
-                 {undefined,Rest4};
-               1 ->
-                 {ok, P, RestB} =  parse_string(S#parse_state{buffer=Rest4}),
-                 {P,RestB}
-  end,
+  {ok, WillDetails,Rest3} = parse_will_details_maybe(WillFlag,WillRetain,WillQoS,Rest),
+  {Username,Rest4} = parse_string_maybe(UsernameFlag,Rest3),
+  {Password,_} =  parse_string_maybe(PasswordFlag,Rest4),
   #'CONNECT'{
     protocol_name = ProtocolName,
     protocol_version = ProtocolLevel,
@@ -310,13 +302,15 @@ parse_topic_subscriptions(<<TopicLen:16,Topic:TopicLen/bytes,0:6,QoS:2,Rest/bina
   parse_topic_subscriptions(Rest,[{Topic,QoS}|Subscriptions])
 .
 
-parse_maybe_will_details(_WillFlag = 0,_,_,#parse_state{buffer=Rest})->
-      {undefined,Rest};
+parse_will_details_maybe(_WillFlag = 0,_,_,<<Buffer>>)->
+      {undefined,Buffer}
+;
 
-parse_maybe_will_details(_WillFlag = 1,WillRetain,WillQoS,S = #parse_state{buffer=Rest})->
-      {ok,WillTopic, Rest1} =  parse_string(S#parse_state{buffer=Rest}),
-      {ok,WillMessage, Rest2} =  parse_string(S#parse_state{buffer=Rest1}),
+parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,<<Buffer>>)->
+      {ok,WillTopic, Rest1} =  parse_string(Buffer),
+      {ok,WillMessage, Rest2} =  parse_string(Rest1),
       {
+        ok,
         #will_details{
           retain = WillRetain,
           qos = WillQoS,
