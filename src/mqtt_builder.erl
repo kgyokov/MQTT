@@ -65,7 +65,7 @@ build_rest(#'CONNECT'{
 })->
   %% Validation
   case {ProtocolName,ProtocolVersion} of
-    {"MQTT",4} -> ok;
+    {<<"MQTT">>,4} -> ok;
     _ -> throw(unknown_protocol_and_version)
   end,
 
@@ -73,19 +73,20 @@ build_rest(#'CONNECT'{
  (build_string(ProtocolName))/binary,
    ProtocolVersion:8,
  %% Flags
-  (maybe_flag(Username))/binary,
-  (maybe_flag(Password))/binary,
+  (maybe_flag(Username))/bits,
+  (maybe_flag(Password))/bits,
 
   (case WillDetails of
       undefined -> <<0:4>>;
      #will_details{
        retain = WillRetain,
        qos = WillQos} ->
-        <<WillRetain:1,WillQos:2,1:1>>
-    end),
+        <<(case WillRetain of true -> 1; false -> 0 end):1,WillQos:2,1:1>>
+    end)/bits,
 
-  (maybe_flag(CleanSession))/binary,
+  (maybe_flag(CleanSession))/bits,
   0:1, %Reserved
+
   KeepAlive:16,
 
  %% Payload
@@ -97,7 +98,7 @@ build_rest(#'CONNECT'{
       topic = WillTopic,
       message = WillMessage} ->
       <<(build_string(WillTopic))/binary,(build_string(WillMessage))/binary>>
- end),
+ end)/binary,
   (maybe_build_string(Username))/binary,
   (maybe_build_string(Password))/binary
  >>;
@@ -106,7 +107,7 @@ build_rest(#'CONNECT'{
 build_rest(#'CONNACK'{ session_present = SessionPresent, return_code = ReturnCode})->
    <<
    0:7,
-   SessionPresent:1,
+   (case SessionPresent of true -> 1; false -> 0 end):1,
    ReturnCode:8
   >>;
 
@@ -155,7 +156,7 @@ build_rest(#'PUBCOMP'{packet_id = PacketId})->
 build_rest(#'SUBSCRIBE'{packet_id = PacketId, subscriptions = Subscriptions})->
   <<
   PacketId:16,
-  (list_to_binary(lists:map(fun({Topic,QoS})-> <<(build_string(Topic))/binary,QoS:8>> end, Subscriptions)))/binary
+  (list_to_binary(lists:map(fun({Topic,QoS})-> <<(build_string(Topic))/binary,0:6,QoS:2>> end, Subscriptions)))/binary
   >>
 ;
 

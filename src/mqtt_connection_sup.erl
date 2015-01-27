@@ -12,7 +12,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -31,20 +31,36 @@
 %%--------------------------------------------------------------------
 %% -spec(start_link() ->
 %%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  SupPid = supervisor:start_link(?MODULE, []),
-  {ok, ReceiverPid } = supervisor:start_child(SupPid,[]),
-  {ok, SenderPid } = supervisor:start_child(SupPid,[]),
+start_link(Socket,Transport,Ref) ->
+  SupPid = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
+  {ok, SenderPid } = supervisor:start_child(SupPid,
+    {
+      sender,
+      {mqtt_sender, start_link, [Socket,Transport,Ref]},
+      permanent,          % must never stop
+      2000,               % should be more than sufficient
+      worker,             % as opposed to supervisor
+      [mqtt_sender]
+    }),
 
-  ConnArgs = [ReceiverPid,SenderPid,[]],
-  {ok, _ConnectionPid } = supervisor:start_child(SupPid,{
+  ConnArgs = [SenderPid,[]],
+  {ok, ConnectionPid } = supervisor:start_child(SupPid,{
     connection,
     {mqtt_connection, start_link, ConnArgs},
     permanent,          % must never stop
     2000,               % should be more than sufficient
     worker,             % as opposed to supervisor
     [mqtt_connection]
-  })
+  }),
+  {ok, ReceiverPid } = supervisor:start_child(SupPid,
+    {
+      receiver,
+      {mqtt_receiver, start_link, [Socket,Transport,Ref, ConnectionPid]},
+      permanent,          % must never stop
+      2000,               % should be more than sufficient
+      worker,             % as opposed to supervisor
+      [mqtt_receiver]
+    })
 .
 
 %%%===================================================================
@@ -69,11 +85,11 @@ start_link() ->
   ignore |
   {error, Reason :: term()}).
 init([]) ->
-  RestartStrategy = one_for_all,
-  MaxRestarts = 0,
-  MaxSecondsBetweenRestarts = 1,
-
-  SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
+%%   RestartStrategy = one_for_all,
+%%   MaxRestarts = 0,
+%%   MaxSecondsBetweenRestarts = 1,
+%%
+%%   SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
 %%   Restart = permanent,
 %%   Shutdown = 2000,

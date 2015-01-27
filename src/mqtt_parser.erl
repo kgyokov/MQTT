@@ -13,7 +13,7 @@
 -include("mqtt_packets.hrl").
 
 %% API
--export([read/1, read_at_least/2, read/3, parse_string/1, parse_variable_length/1, parse_packet/1]).
+-export([read/1, read/3, read_at_least/2, parse_string/1, parse_variable_length/1, parse_packet/1]).
 
 
 %%
@@ -24,13 +24,11 @@
 
 read_at_least(#parse_state { max_buffer_size =  MaxBufferSize },  ExpectedBytes)
   when ExpectedBytes >  byte_size(MaxBufferSize) ->
-  throw({error, buffer_overflow })
-;
+  throw({error, buffer_overflow });
 
 read_at_least( #parse_state {buffer =  Buffer}, ExpectedBytes)
   when ExpectedBytes =<  byte_size(Buffer) ->
-  <<Buffer/binary>>
-;
+  <<Buffer/binary>>;
 
 
 read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, ExpectedBytes)
@@ -54,8 +52,7 @@ read(ReadFun, _MaxBufferSize, Buffer) ->
   end.
 
 read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun = ReadFun}) ->
-  S#parse_state{ buffer =  read(ReadFun, MaxBufferSize, Buffer)}
-.
+  S#parse_state{ buffer =  read(ReadFun, MaxBufferSize, Buffer)}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -82,10 +79,13 @@ parse_string(<<0:16,Rest/binary>>) ->
   {ok, <<"">>,Rest} %% empty string
 ;
 parse_string(<<StrLen:16,Str:StrLen/bytes,Rest/binary>>) ->
-  {ok,Str,Rest}
+  {ok,Str,Rest};
+
+parse_string(_PartialString) ->
+  {error,incomplete}
 .
 
-parse_string_maybe(Flag, <<Buffer>>)->
+parse_string_maybe(Flag, Buffer)->
   case Flag of
     0 ->
       {undefined,Buffer};
@@ -134,16 +134,24 @@ parse_variable_length(S, Sum, Multiplier) ->
 %% Parsing
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4,Rest/binary>>})->
+parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
   %% get the remaining length of the packet
   {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
   %% READ the remaining length of the packet
-  <<RemainingPacket:Length/bytes,NextPacket/binary>> = read_at_least(S#parse_state{buffer = Rest1},Length),
+  <<PacketRemainder:Length/bytes,StartOfNextPacket/binary>> = read_at_least(S#parse_state{buffer = Rest1},Length),
   %% parse the entire packet based on type, flags, and all other remaining data
-  ParsedPacket = parse_specific_type(Type,Flags,S#parse_state{buffer = RemainingPacket}),
+  ParsedPacket = parse_specific_type(Type,Flags,S#parse_state{buffer = PacketRemainder}),
   %% return
-  {ParsedPacket, S#parse_state{buffer = NextPacket}}
+  {ParsedPacket, S#parse_state{buffer = StartOfNextPacket}}
+;
+
+parse_packet(S)->
+  parse_packet(read(S))
 .
+
+%%%%%%%%%%%%%%
+%% CONNECT -- COMPLETE!!!
+%%%%%%%%%%%%%%
 
 %% MQTT 3.1.2.1 - "The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”, capitalized as shown.
 %% The string, its offset and length will not be changed by future versions of the MQTT specification."
@@ -158,15 +166,14 @@ parse_specific_type(?CONNECT,
    Payload/binary>>}) ->
 
   {ok,ClientId, Rest} = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
-
   {ok, WillDetails,Rest3} = parse_will_details_maybe(WillFlag,WillRetain,WillQoS,Rest),
   {Username,Rest4} = parse_string_maybe(UsernameFlag,Rest3),
-  {Password,_} =  parse_string_maybe(PasswordFlag,Rest4),
+  {Password,<<>>} =  parse_string_maybe(PasswordFlag,Rest4),
   #'CONNECT'{
     protocol_name = ProtocolName,
     protocol_version = ProtocolLevel,
     keep_alive = KeepAlive,
-    clean_session = CleanSession,
+    clean_session = CleanSession =:= 1,
     client_id = ClientId,
     will = WillDetails,
     username = Username,
@@ -175,9 +182,9 @@ parse_specific_type(?CONNECT,
 ;
 
 
-parse_specific_type(?CONNACK,_Flags,<<0:7,SessionPresent:1,Code:8>>) ->
+parse_specific_type(?CONNACK,_Flags, #parse_state{buffer = <<0:7,SessionPresent:1,Code:8>>}) ->
   #'CONNACK'{
-    session_present = SessionPresent,
+    session_present = SessionPresent =:= 1,
     return_code = Code
   };
 
@@ -197,7 +204,7 @@ parse_specific_type(?PINGRESP,_Flags,_S) ->
 %% PUBLISH -- COMPLETE!!!
 %%%%%%%%%%%%%%
 
-parse_specific_type(?PUBLISH,Flags, S) ->
+parse_specific_type(?PUBLISH,Flags,S) ->
   <<Dup:1,QoS:2,Retain:1>> = Flags,
 
   %% validate flags - should we do that here? or in the connection process???
@@ -209,7 +216,7 @@ parse_specific_type(?PUBLISH,Flags, S) ->
   end,
 
   %#parse_state{buffer = Rest } = S,
-  {ok,Topic,Rest1} = parse_variable_length(S),
+  {ok,Topic,Rest1} = parse_string(S),
   {PacketId,Content} =
     if QoS =:= 1; QoS =:= 2 ->
       <<PacketId1:16,Content1/binary>> = Rest1,
@@ -240,7 +247,7 @@ parse_specific_type(?PUBCOMP,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
   #'PUBCOMP'{packet_id = PacketId};
 
 %%%%%%%%%%%%%%
-%% SUBSCRIBE - COMPLETE!!!
+%% SUBSCRIPTIONS - COMPLETE!!!
 %%%%%%%%%%%%%%
 
 parse_specific_type(?SUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
@@ -251,7 +258,7 @@ parse_specific_type(?SUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest
   };
 
 parse_specific_type(?SUBACK,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
-  ReturnCodes = [ Code || <<0:6,Code:2>> <- binary_to_list(Rest)],
+  ReturnCodes = lists:reverse(parse_codes(Rest)),
   #'SUBACK'{
     packet_id = PacketId,
     return_codes = ReturnCodes
@@ -259,7 +266,7 @@ parse_specific_type(?SUBACK,_Flags, #parse_state{buffer = <<PacketId:16, Rest/bi
 ;
 
 parse_specific_type(?UNSUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
-  Topics = parse_topics(Rest),
+  Topics = lists:reverse(parse_topics(Rest)),
   #'UNSUBSCRIBE'{
     packet_id = PacketId,
     topic_filters = Topics
@@ -268,7 +275,7 @@ parse_specific_type(?UNSUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Re
 
 parse_specific_type(?UNSUBACK,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
   #'UNSUBACK'{packet_id = PacketId}
-.
+;
 
 %% parse_specific_type('CONNECT', S) when byte_size(S#parse_state.buffer) < 10 ->
 %%   parse_specific_type('CONNECT', read(S))
@@ -277,42 +284,48 @@ parse_specific_type(?UNSUBACK,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
 %%   throw(malformed_packet)
 %% .
 
+parse_specific_type(_Type,,_Flags,_State) ->
+  throw({error,malformed_packet})
+.
+
+parse_codes(Buffer)->
+  parse_codes(Buffer,[]).
+
+parse_codes(<<>>, Codes)->
+  Codes;
+
+parse_codes(<<Code:8,Rest/binary>>,Codes)->
+  parse_codes(Rest,[Code|Codes]).
 
 parse_topics(Buffer)->
-  parse_topics(Buffer,[])
-.
+  parse_topics(Buffer,[]).
 
 parse_topics(_Buffer = <<>>,Topics)->
-  Topics
-;
+  Topics;
+
 parse_topics(<<TopicLen:16,Topic:TopicLen/bytes,Rest/binary>>,Topics)->
-  parse_topics(Rest,[Topic|Topics])
-.
+  parse_topics(Rest,[Topic|Topics]).
 
 parse_topic_subscriptions(Buffer)->
-  parse_topic_subscriptions(Buffer,[])
-.
+  parse_topic_subscriptions(Buffer,[]).
 
 parse_topic_subscriptions(_Buffer = <<>>,Subscriptions)->
-  Subscriptions
-;
+  Subscriptions;
 
 parse_topic_subscriptions(<<TopicLen:16,Topic:TopicLen/bytes,0:6,QoS:2,Rest/binary>>,
     Subscriptions)->
-  parse_topic_subscriptions(Rest,[{Topic,QoS}|Subscriptions])
-.
+  parse_topic_subscriptions(Rest,[{Topic,QoS}|Subscriptions]).
 
-parse_will_details_maybe(_WillFlag = 0,_,_,<<Buffer>>)->
-      {undefined,Buffer}
-;
+parse_will_details_maybe(_WillFlag = 0,_,_,Buffer)->
+      {undefined,Buffer};
 
-parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,<<Buffer>>)->
+parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer)->
       {ok,WillTopic, Rest1} =  parse_string(Buffer),
       {ok,WillMessage, Rest2} =  parse_string(Rest1),
       {
         ok,
         #will_details{
-          retain = WillRetain,
+          retain = WillRetain =:= 1,
           qos = WillQoS,
           message = WillMessage,
           topic = WillTopic

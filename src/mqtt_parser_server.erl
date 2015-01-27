@@ -1,21 +1,20 @@
 %%%-------------------------------------------------------------------
 %%% @author Kalin
-%%% @copyright (C) 2014, <COMPANY>
+%%% @copyright (C) 2015, <COMPANY>
 %%% @doc
 %%%
 %%% @end
-%%% Created : 08. Dec 2014 1:29 AM
+%%% Created : 26. Jan 2015 10:13 PM
 %%%-------------------------------------------------------------------
--module(mqtt_sender).
+-module(mqtt_parser_server).
 -author("Kalin").
+
+-include("mqtt_const.hrl").
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/2,
-  send_packet/2,
-  send_packet_async/2
-]).
+-export([start_link/0, disconnect/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -25,9 +24,15 @@
   terminate/2,
   code_change/3]).
 
--define(SERVER, ?MODULE).
 
--record(state, { socket, transport }).
+-record(state, {
+  socket,
+  transport,
+  ref,
+  opts,
+  connection,
+  parser
+}).
 
 %%%===================================================================
 %%% API
@@ -39,17 +44,14 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(Socket::pid(), Transport::term()) ->
+-spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(Socket,Transport) ->
-  gen_server:start_link(?MODULE, [Socket,Transport], []).
+start_link() ->
+  gen_server:start_link(?MODULE, [], []).
 
 
-send_packet(Pid,Packet)->
-  gen_server:call(Pid, {packet,Packet}).
-
-send_packet_async(Pid,Packet)->
-  gen_server:cast(Pid, {packet,Packet}).
+disconnect(Pid)->
+  gen_server:cast(Pid,disconnect).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -69,8 +71,11 @@ send_packet_async(Pid,Packet)->
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([Socket,Transport]) ->
-  {ok, #state{socket = Socket, transport = Transport}}.
+init([ConnectionPid,Ref,Socket,Transport]) ->
+  %% process_flag(trap_exit,true),
+  ParserPid = spawn_link(fun() -> loop_over_socket(ConnectionPid,Ref,Socket,Transport) end),
+  S = #state{parser = ParserPid},
+  {ok, S}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -87,15 +92,8 @@ init([Socket,Transport]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
-
-handle_call({packet,Packet},_From,#state{socket = Socket, transport = Transport})->
-  Binary = mqtt_builder:build_packet(Packet),
-  Transport:send(Socket,Binary)
-;
-
-
 handle_call(_Request, _From, State) ->
-  {noreply, State}.
+  {reply, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -108,6 +106,10 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_cast(disconnect, State#state{parser = ParserPid}) ->
+  {stop, disconnect, State};
+
 handle_cast(_Request, State) ->
   {noreply, State}.
 
@@ -125,6 +127,11 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_info({'EXIT',Reason, ParserPid}, State = #state{parser = ParserPid, connection = ConnectionPid}) ->
+  %% mqtt_connection:process_client_disconnect(ConnectionPid, Reason)
+  {noreply, State};
+
 handle_info(_Info, State) ->
   {noreply, State}.
 
@@ -161,3 +168,55 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+loop_over_socket(ConnectionPid,Ref,Socket,Transport)->
+  %% ranch:accept_ack(Ref),
+
+  %% calback for the parser process to get new data
+  ReadFun =
+    fun(ExpectedData) ->
+      receive_data(Transport,Socket,ExpectedData,5000)
+    end,
+
+  ParseState = #parse_state{
+    buffer = <<>>,
+    max_buffer_size = 100000,
+    readfun =  ReadFun
+  },
+  loop_over_socket(ConnectionPid,ParseState)
+.
+
+loop_over_socket(ConnectionPid, ParseState)->
+  try mqtt_parser:parse_packet(ParseState) of
+    {NewPacket,NewParseState} ->
+      mqtt_connection:process_packet(ConnectionPid,NewPacket),
+      loop_over_socket(ConnectionPid,NewParseState);
+    _
+      -> mqtt_connection:process_malformed_packet(ConnectionPid,unknown)
+  catch
+    throw:{error,Reason} ->
+      handle_error(ConnectionPid,Reason)
+
+  end
+.
+
+handle_error(ConnectionPid, Reason)->
+  case Reason of
+    invalid_flags ->
+      mqtt_connection:process_malformed_packet(ConnectionPid,invalid_flags);
+    malformed_pdacket ->
+      mqtt_connection:process_malformed_packet(ConnectionPid,unknown);
+    unexpected_disconnect ->
+      mqtt_connection:process_unexpected_disconnect(ConnectionPid,unexpected_disconnect)
+   %% TODO: More errors
+  end
+ .
+
+%% callback for parser process
+receive_data(Transport,Socket,ExpectedData,TimeOut)->
+  %% we can just return the {ok,Data} or {error,_} values directly to the parser process
+  Transport:recv(Socket, ExpectedData, TimeOut)
+.
+
+

@@ -15,7 +15,7 @@
 %% API
 -export([start_link/3,
   process_packet/2,
-  process_client_disconnect/2,
+  process_unexpected_disconnect/2,
   process_malformed_packet/2,
   close_duplicate/1,
   publish_packet/2]).
@@ -68,7 +68,7 @@ process_packet(Pid,Packet)->
 process_malformed_packet(Pid,Reason)->
   gen_server:call(Pid,{malformed_packet,Reason}).
 
-process_client_disconnect(Pid,Reason)->
+process_unexpected_disconnect(Pid,Reason)->
   gen_server:call(Pid,{client_disconnected, Reason}).
 
 close_duplicate(Pid)->

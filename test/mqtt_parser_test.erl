@@ -105,6 +105,140 @@ parse_variable_length_chunked_test()->
 %%
 %%
 
+parse_CONNECT_1_test()->
+  OriginalPacket = #'CONNECT'{
+  clean_session = true,
+  client_id = <<"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ">>,
+  keep_alive = 600,
+  password = list_to_binary([ <<"P">> || _  <- lists:seq(1,65535)]),
+  username = list_to_binary([ <<"U">> || _  <- lists:seq(1,65535)]),
+  protocol_name = <<"MQTT">>,
+  protocol_version = 4,
+  will = #will_details {message = <<"WILL_MESSAGE">>, qos = 2, topic = <<"TOPIC">>, retain = true}
+  },
+
+  test_packet(OriginalPacket)
+.
+
+parse_CONNACK_1_test()->
+  OriginalPacket = #'CONNACK'{return_code = 0, session_present = true},
+  test_packet(OriginalPacket)
+.
+
+parse_CONNACK_2_test()->
+  OriginalPacket = #'CONNACK'{return_code = 0, session_present = false},
+  test_packet(OriginalPacket)
+.
+
+
+parse_DISCONNECT_test()->
+  OriginalPacket = #'DISCONNECT'{},
+  test_packet(OriginalPacket)
+.
+
+parse_PINGREG_test()->
+  OriginalPacket = #'PINGREQ'{},
+  test_packet(OriginalPacket)
+.
+
+parse_PINGRESP_test()->
+  OriginalPacket = #'PINGRESP'{},
+  test_packet(OriginalPacket)
+.
+
+
+parse_PUBLISH_QoS_0_test()->
+  OriginalPacket = #'PUBLISH'{
+    packet_id = undefined,
+    qos = 0,
+    dup = 0,
+    retain = 1,
+    topic = <<"TOPIC1">>,
+    content = <<"CONTENT">>
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_PUBLISH_QoS_0_invalid_test()->
+  OriginalPacket = #'PUBLISH'{
+    packet_id = undefined,
+    qos = 0,
+    dup = 1,
+    retain = 1,
+    topic = <<"TOPIC1">>,
+    content = <<"CONTENT">>
+  },
+  ?assertException(throw,{error,_},test_packet(OriginalPacket))
+.
+
+parse_PUBLISH_QoS_1_test()->
+  OriginalPacket = #'PUBLISH'{
+    packet_id = 1234,
+    qos = 1,
+    dup = 1,
+    retain = 1,
+    topic = <<"TOPIC1">>,
+    content = <<"CONTENT">>
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_PUBLISH_QoS_1_1_test()->
+  OriginalPacket = #'PUBLISH'{
+    packet_id = 1234,
+    qos = 1,
+    dup = 0,
+    retain = 1,
+    topic = <<"TOPIC1">>,
+    content = <<"CONTENT">>
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_PUBLISH_QoS_2_test()->
+  OriginalPacket = #'PUBLISH'{
+    packet_id = 1234,
+    qos = 1,
+    dup = 1,
+    retain = 1,
+    topic = <<"TOPIC1">>,
+    content = <<"CONTENT">>
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_PUBLISH_QoS_2_1_test()->
+  OriginalPacket = #'PUBLISH'{
+    packet_id = 1234,
+    qos = 1,
+    dup = 0,
+    retain = 1,
+    topic = <<"TOPIC1">>,
+    content = <<"CONTENT">>
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_PUBLISH_QoS_1_invalid_packet_id_test()->
+  OriginalPacket = #'PUBLISH'{
+    packet_id = undefined,
+    qos = 1,
+    dup = 0,
+    retain = 1,
+    topic = <<"TOPIC1">>,
+    content = <<"CONTENT">>
+  },
+  ?assertException(_,_,test_packet(OriginalPacket))
+.
+
+parse_PUBLISH_empty__test()->
+  OriginalPacket = #'SUBSCRIBE'{
+    packet_id = 1234,
+    subscriptions = []
+  },
+  test_packet(OriginalPacket)
+.
+
 parse_SUBSCRIBE_test()->
   OriginalPacket = #'SUBSCRIBE'{
     packet_id = 1234,
@@ -114,11 +248,56 @@ parse_SUBSCRIBE_test()->
      {<<"SUB3">>, 1}
    ]
   },
-  Binary = mqtt_builder:build_packet(OriginalPacket),
-  S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
-  {ParsedPacket,_NewState} = mqtt_parser:parse_packet(S),
-  ?assertEqual(OriginalPacket,ParsedPacket)
+  test_packet(OriginalPacket)
 .
+
+parse_SUBSCRIBE_empty__test()->
+  OriginalPacket = #'SUBSCRIBE'{
+    packet_id = 1234,
+    subscriptions = []
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_SUBACK_test()->
+  OriginalPacket = #'SUBACK'{
+    packet_id = 1234,
+    return_codes = [ 1,3,2]
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_SUBACK_empty__test()->
+  OriginalPacket = #'SUBACK'{
+    packet_id = 1234,
+    return_codes = []
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_UNSUBSCRIBE_test()->
+  OriginalPacket = #'UNSUBSCRIBE'{
+    packet_id = 1234,
+    topic_filters = [ <<"SUB1">>, <<"SUB2">>, <<"SUB3">> ]
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_UNSUBSCRIBE_empty__test()->
+  OriginalPacket = #'UNSUBSCRIBE'{
+    packet_id = 1234,
+    topic_filters = []
+  },
+  test_packet(OriginalPacket)
+.
+
+parse_UNSUBACK_test()->
+  OriginalPacket = #'UNSUBACK'{packet_id = 1234},
+  test_packet(OriginalPacket)
+.
+
+
+
 
 
 %%
@@ -126,6 +305,13 @@ parse_SUBSCRIBE_test()->
 %% Test Utilities
 %%
 %%
+
+test_packet(OriginalPacket)->
+  Binary = mqtt_builder:build_packet(OriginalPacket),
+  S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
+  {ParsedPacket,_NewState} = mqtt_parser:parse_packet(S),
+  ?assertEqual(OriginalPacket,ParsedPacket)
+.
 
 initialize_parse_process(StartBuffer, Fun)->
   ReadFun = fun() -> receive Fragment -> {ok, Fragment } after 1000 -> {error, timeout} end end,
