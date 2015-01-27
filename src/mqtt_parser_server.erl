@@ -107,7 +107,7 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_cast(disconnect, State#state{parser = ParserPid}) ->
+handle_cast(disconnect, State = #state{parser = ParserPid}) ->
   {stop, disconnect, State};
 
 handle_cast(_Request, State) ->
@@ -193,7 +193,7 @@ loop_over_socket(ConnectionPid, ParseState)->
       mqtt_connection:process_packet(ConnectionPid,NewPacket),
       loop_over_socket(ConnectionPid,NewParseState);
     _
-      -> mqtt_connection:process_malformed_packet(ConnectionPid,unknown)
+      -> mqtt_connection:process_bad_packet(ConnectionPid,unknown)
   catch
     throw:{error,Reason} ->
       handle_error(ConnectionPid,Reason)
@@ -204,9 +204,9 @@ loop_over_socket(ConnectionPid, ParseState)->
 handle_error(ConnectionPid, Reason)->
   case Reason of
     invalid_flags ->
-      mqtt_connection:process_malformed_packet(ConnectionPid,invalid_flags);
+      mqtt_connection:process_bad_packet(ConnectionPid,invalid_flags);
     malformed_pdacket ->
-      mqtt_connection:process_malformed_packet(ConnectionPid,unknown);
+      mqtt_connection:process_bad_packet(ConnectionPid,unknown);
     unexpected_disconnect ->
       mqtt_connection:process_unexpected_disconnect(ConnectionPid,unexpected_disconnect)
    %% TODO: More errors

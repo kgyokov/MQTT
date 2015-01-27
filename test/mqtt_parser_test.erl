@@ -296,7 +296,47 @@ parse_UNSUBACK_test()->
   test_packet(OriginalPacket)
 .
 
+parse_2_consecutive_packets_test()->
+  OriginalPacket1 = #'UNSUBSCRIBE'{
+    packet_id = 1234,
+    topic_filters = [ <<"SUB1">>, <<"SUB2">>, <<"SUB3">> ]
+  },
+  OriginalPacket2 = #'PUBLISH'{
+    packet_id = undefined,
+    qos = 0,
+    dup = 0,
+    retain = 1,
+    topic = <<"TOPIC1">>,
+    content = <<"CONTENT">>
+  },
 
+  Binary = <<(mqtt_builder:build_packet(OriginalPacket1))/binary,
+  (mqtt_builder:build_packet(OriginalPacket2))/binary>>,
+  S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
+  {ParsedPacket1,S1} = mqtt_parser:parse_packet(S),
+  {ParsedPacket2,_S2} = mqtt_parser:parse_packet(S1),
+
+  ?assertEqual(OriginalPacket1,ParsedPacket1),
+  ?assertEqual(OriginalPacket2,ParsedPacket2)
+.
+
+parse_chunked_packet_test()->
+  OriginalPacket = #'UNSUBSCRIBE'{
+    packet_id = 1234,
+    topic_filters = [ <<"SUB1">>, <<"SUB2">>, <<"SUB3">> ]
+  },
+
+  Binary = mqtt_builder:build_packet(OriginalPacket),
+  HalfLen = byte_size(Binary) div 2,
+  <<Part1:HalfLen/binary,Part2/binary>> = Binary,
+
+  ParseProcess = initialize_parse_process(<<>>,fun mqtt_parser:parse_packet/1),
+  push_fragment(ParseProcess,Part1),
+  push_fragment(ParseProcess,Part2),
+
+  {ParsedPacket,_S} = receive_result(ParseProcess),
+  ?assertEqual(OriginalPacket,ParsedPacket)
+.
 
 
 
@@ -309,7 +349,7 @@ parse_UNSUBACK_test()->
 test_packet(OriginalPacket)->
   Binary = mqtt_builder:build_packet(OriginalPacket),
   S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
-  {ParsedPacket,_NewState} = mqtt_parser:parse_packet(S),
+  {ParsedPacket,_S1} = mqtt_parser:parse_packet(S),
   ?assertEqual(OriginalPacket,ParsedPacket)
 .
 

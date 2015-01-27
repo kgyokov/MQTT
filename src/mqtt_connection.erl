@@ -16,7 +16,7 @@
 -export([start_link/3,
   process_packet/2,
   process_unexpected_disconnect/2,
-  process_malformed_packet/2,
+  process_bad_packet/2,
   close_duplicate/1,
   publish_packet/2]).
 
@@ -65,7 +65,7 @@ publish_packet(Pid,Packet)->
 process_packet(Pid,Packet)->
   gen_server:call(Pid,{packet, Packet}).
 
-process_malformed_packet(Pid,Reason)->
+process_bad_packet(Pid,Reason)->
   gen_server:call(Pid,{malformed_packet,Reason}).
 
 process_unexpected_disconnect(Pid,Reason)->

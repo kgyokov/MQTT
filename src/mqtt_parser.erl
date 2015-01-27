@@ -134,6 +134,15 @@ parse_variable_length(S, Sum, Multiplier) ->
 %% Parsing
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+try_parse_packet(S)->
+  try parse_packet(S) of
+    {ok,ParsedPacket, NewState} -> {ok,ParsedPacket, NewState}
+    catch
+      throw:{error,Reason}->
+        {error,Reason}
+  end.
+
 parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
   %% get the remaining length of the packet
   {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
@@ -145,6 +154,7 @@ parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
   {ParsedPacket, S#parse_state{buffer = StartOfNextPacket}}
 ;
 
+%% Insufficient data in Buffer
 parse_packet(S)->
   parse_packet(read(S))
 .
@@ -284,7 +294,7 @@ parse_specific_type(?UNSUBACK,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
 %%   throw(malformed_packet)
 %% .
 
-parse_specific_type(_Type,,_Flags,_State) ->
+parse_specific_type(_Type,_Flags,_State) ->
   throw({error,malformed_packet})
 .
 
