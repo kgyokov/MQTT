@@ -168,7 +168,7 @@ parse_PUBLISH_QoS_0_invalid_test()->
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
-  ?assertException(throw,{error,_},test_packet(OriginalPacket))
+  test_packetfor_error(OriginalPacket,invalid_flags)
 .
 
 parse_PUBLISH_QoS_1_test()->
@@ -313,8 +313,8 @@ parse_2_consecutive_packets_test()->
   Binary = <<(mqtt_builder:build_packet(OriginalPacket1))/binary,
   (mqtt_builder:build_packet(OriginalPacket2))/binary>>,
   S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
-  {ParsedPacket1,S1} = mqtt_parser:parse_packet(S),
-  {ParsedPacket2,_S2} = mqtt_parser:parse_packet(S1),
+  {ok,ParsedPacket1,S1} = mqtt_parser:parse_packet(S),
+  {ok,ParsedPacket2,_S2} = mqtt_parser:parse_packet(S1),
 
   ?assertEqual(OriginalPacket1,ParsedPacket1),
   ?assertEqual(OriginalPacket2,ParsedPacket2)
@@ -334,7 +334,7 @@ parse_chunked_packet_test()->
   push_fragment(ParseProcess,Part1),
   push_fragment(ParseProcess,Part2),
 
-  {ParsedPacket,_S} = receive_result(ParseProcess),
+  {ok, ParsedPacket,_S} = receive_result(ParseProcess),
   ?assertEqual(OriginalPacket,ParsedPacket)
 .
 
@@ -349,8 +349,14 @@ parse_chunked_packet_test()->
 test_packet(OriginalPacket)->
   Binary = mqtt_builder:build_packet(OriginalPacket),
   S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
-  {ParsedPacket,_S1} = mqtt_parser:parse_packet(S),
+  {ok, ParsedPacket,_S1} = mqtt_parser:parse_packet(S),
   ?assertEqual(OriginalPacket,ParsedPacket)
+.
+
+test_packetfor_error(OriginalPacket,Reason)->
+  Binary = mqtt_builder:build_packet(OriginalPacket),
+  S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
+  {error, Reason} = (mqtt_parser:parse_packet(S))
 .
 
 initialize_parse_process(StartBuffer, Fun)->

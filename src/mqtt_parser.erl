@@ -135,15 +135,17 @@ parse_variable_length(S, Sum, Multiplier) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-try_parse_packet(S)->
-  try parse_packet(S) of
-    {ok,ParsedPacket, NewState} -> {ok,ParsedPacket, NewState}
+parse_packet(S)->
+  try parse_packet_unsafe(S) of
+    {ParsedPacket, NewState} -> {ok,ParsedPacket, NewState}
     catch
       throw:{error,Reason}->
+        {error,Reason};
+      error:Reason->
         {error,Reason}
   end.
 
-parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
+parse_packet_unsafe(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
   %% get the remaining length of the packet
   {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
   %% READ the remaining length of the packet
@@ -155,8 +157,8 @@ parse_packet(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
 ;
 
 %% Insufficient data in Buffer
-parse_packet(S)->
-  parse_packet(read(S))
+parse_packet_unsafe(S)->
+  parse_packet_unsafe(read(S))
 .
 
 %%%%%%%%%%%%%%
@@ -343,16 +345,3 @@ parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer)->
         Rest2
       }
 .
-
-add_optional_str_field({OptionalFields = #{}, S}, Key, Flag) ->
-  if Flag =:= 1 ->
-    {ok,Value,Rest} = parse_string(S),
-    { maps:put(Key,Value,OptionalFields), S#parse_state{buffer = Rest}};
-    Flag =:= 0 -> {OptionalFields, S}
-  end
-.
-
-
-
-
-
