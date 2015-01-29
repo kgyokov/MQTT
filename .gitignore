@@ -5,7 +5,7 @@ deps
 *.plt
 erl_crash.dump
 ebin
-rel/example_project
+rel/mqtt_node
 .concrete/DEV_MODE
 .rebar
 out/

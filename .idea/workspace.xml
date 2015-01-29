@@ -5,7 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="298fd64b-89fc-43c6-83e2-8d333bd785cf" name="Default" comment="">
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/mqtt.app.src" afterPath="$PROJECT_DIR$/src/mqtt.app.src" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.gitignore" afterPath="$PROJECT_DIR$/.gitignore" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="Mqtt.iws" />
@@ -82,10 +82,19 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="reltool.config" pinned="false" current="true" current-in-tab="true">
+      <file leaf-file-name="reltool.config" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/rel/reltool.config">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="29" column="26" selection-start="862" selection-end="862" vertical-scroll-proportion="0.7228739" vertical-offset="0" max-vertical-offset="850">
+            <state line="29" column="26" selection-start="862" selection-end="862" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="850">
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name=".gitignore" pinned="false" current="true" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/.gitignore">
+          <provider selected="true" editor-type-id="text-editor">
+            <state line="6" column="4" selection-start="48" selection-end="48" vertical-scroll-proportion="0.15525115" vertical-offset="0" max-vertical-offset="657">
               <folding />
             </state>
           </provider>
@@ -131,15 +140,6 @@
         <entry file="file://$PROJECT_DIR$/src/mqtt.app.src">
           <provider selected="true" editor-type-id="text-editor">
             <state line="12" column="4" selection-start="236" selection-end="236" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="323">
-              <folding />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="mqtt.app" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/ebin/mqtt.app">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="12" column="53" selection-start="605" selection-end="605" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="323">
               <folding />
             </state>
           </provider>
@@ -213,6 +213,7 @@
         <option value="$PROJECT_DIR$/src/mqtt.app.src" />
         <option value="$PROJECT_DIR$/ebin/mqtt.app" />
         <option value="$PROJECT_DIR$/rel/reltool.config" />
+        <option value="$PROJECT_DIR$/.gitignore" />
       </list>
     </option>
   </component>
@@ -797,7 +798,7 @@
   </component>
   <component name="ToolWindowManager">
     <frame x="-8" y="-8" width="1936" height="1056" extended-state="6" />
-    <editor active="false" />
+    <editor active="true" />
     <layout>
       <window_info id="Palette&#9;" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.32852387" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
@@ -815,7 +816,7 @@
       <window_info id="Maven Projects" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="SLIDING" type="SLIDING" visible="false" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Application Servers" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Project" active="true" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.17518637" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.17518637" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.21420644" sideWeight="0.63003665" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
@@ -1119,13 +1120,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/.gitignore">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="9" column="6" selection-start="94" selection-end="94" vertical-scroll-proportion="0.23287672" vertical-offset="0" max-vertical-offset="657">
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/Emakefile">
       <provider selected="true" editor-type-id="text-editor">
         <state line="1" column="54" selection-start="113" selection-end="113" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="119">
@@ -1198,7 +1192,14 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/rel/reltool.config">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="29" column="26" selection-start="862" selection-end="862" vertical-scroll-proportion="0.7228739" vertical-offset="0" max-vertical-offset="850">
+        <state line="29" column="26" selection-start="862" selection-end="862" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="850">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/.gitignore">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="6" column="4" selection-start="48" selection-end="48" vertical-scroll-proportion="0.15525115" vertical-offset="0" max-vertical-offset="657">
           <folding />
         </state>
       </provider>
