@@ -45,11 +45,11 @@ start_link(Socket,Transport,Ref) ->
 
   ConnArgs = [SenderPid,[]],
   {ok, ConnectionPid } = supervisor:start_child(SupPid,{
-    connection,
+    connection,                               %% Id
     {mqtt_connection, start_link, ConnArgs},
-    permanent,          % must never stop
-    2000,               % should be more than sufficient
-    worker,             % as opposed to supervisor
+    permanent,                                %% must never stop
+    2000,                                     %% should be more than sufficient for the process to unregister
+    worker,                                   %% as opposed to supervisor
     [mqtt_connection]
   }),
   {ok, ReceiverPid } = supervisor:start_child(SupPid,

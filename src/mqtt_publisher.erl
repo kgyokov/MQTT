@@ -9,18 +9,27 @@
 -module(mqtt_publisher).
 -author("Kalin").
 
+-include("mqtt_pubsub.hrl").
+
 -compile(export_all).
 %% API
 -export([]).
 
 
 
-publish_at_most_once(Topic,Content,Retain)->
-  0.
+at_most_once(Msg,S)->
+  #mqtt_message{topic = Topic} = Msg,
+  #mqtt_session{incoming_qos0 = List} = S,
+  %% replace by Topic
+  S#mqtt_session{incoming_qos0 = [Msg|List]}
+ .
 
 
-publish_at_least_once(Topic,PacketId,Content,Retain)->
-  0.
+
+at_least_once(Topic,PacketId,Content,Retain)->
+%%   #mqtt_session{incoming_qos1 = List} = S,
+%%   S#mqtt_session{incoming_qos2 = [Msg|List]}
+0.
 
 
 %%
@@ -28,7 +37,7 @@ publish_at_least_once(Topic,PacketId,Content,Retain)->
 %%  Persists the message, getting ready to send it
 %%
 %%
-publish_exactly_once_phase1(Topic,PacketId,Content,Retain)->
+exactly_once_phase1(Topic,PacketId,Content,Retain)->
   0.
 
 %%
@@ -36,5 +45,5 @@ publish_exactly_once_phase1(Topic,PacketId,Content,Retain)->
 %%  Completes message send
 %%
 %%
-publish_exactly_once_phase2(PacketId)->
+exactly_once_phase2(PacketId)->
   0.

@@ -11,7 +11,7 @@
 
 -define(REG_TABLE, client_registration).
 
--record(client_registration, {client_id, connection_pid, session_id,  timestamp}).
+-record(client_reg, {client_id, connection_pid, session_id,  timestamp}).
 
 %% API
 -export([register/3, unregister/2, get_registration/1, create_tables/0]).
@@ -21,22 +21,18 @@ create_tables()->
 .
 
 register(Pid, ClientId, SessionId)->
-  NewReg =  #client_registration{
-    client_id = ClientId,
-    connection_pid = Pid,
-    session_id = SessionId,
-    timestamp = time()
-  },
+  NewReg = #client_reg{client_id = ClientId,connection_pid = Pid,
+                       session_id = SessionId,timestamp = time()},
   F = fun()->
       %% take write lock
       case mnesia:read(?REG_TABLE, ClientId, write) of
         [] ->
-          mnesia:write(?REG_TABLE,NewReg),
+          mnesia:write({?REG_TABLE,NewReg}),
           ok;
-        [E] when E#client_registration.connection_pid =:= Pid ->
+        [E] when E#client_reg.connection_pid =:= Pid ->
           ok;
-        [E] when E#client_registration.connection_pid =/= Pid ->
-          mnesia:write(?REG_TABLE,NewReg),
+        [E] when E#client_reg.connection_pid =/= Pid ->
+          mnesia:write({?REG_TABLE,NewReg}),
           {duplicate_detected, E}
       end
     end,
@@ -55,10 +51,10 @@ unregister(Pid,ClientId)->
     case mnesia:read(?REG_TABLE, ClientId, write) of
       [] ->
         ok;
-      [E] when E#client_registration.connection_pid =:= Pid ->
-        mnesia:write(?REG_TABLE,E#client_registration{connection_pid = undefined}),
+      [E] when E#client_reg.connection_pid =:= Pid ->
+        mnesia:write({?REG_TABLE,E#client_reg{connection_pid = undefined}}),
         ok;
-      [E] when E#client_registration.connection_pid =/= Pid ->
+      [E] when E#client_reg.connection_pid =/= Pid ->
         ok
     end
   end,

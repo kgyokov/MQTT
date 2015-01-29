@@ -187,28 +187,28 @@ loop_over_socket(ConnectionPid,Ref,Socket,Transport)->
   loop_over_socket(ConnectionPid,ParseState)
 .
 
-loop_over_socket(ConnectionPid, ParseState)->
+loop_over_socket(ConnPid, ParseState)->
   try mqtt_parser:parse_packet(ParseState) of
     {NewPacket,NewParseState} ->
-      mqtt_connection:process_packet(ConnectionPid,NewPacket),
-      loop_over_socket(ConnectionPid,NewParseState);
+      mqtt_connection:process_packet(ConnPid,NewPacket),
+      loop_over_socket(ConnPid,NewParseState);
     _
-      -> mqtt_connection:process_bad_packet(ConnectionPid,unknown)
+      -> mqtt_connection:process_bad_packet(ConnPid,unknown)
   catch
     throw:{error,Reason} ->
-      handle_error(ConnectionPid,Reason)
+      handle_error(ConnPid,Reason)
 
   end
 .
 
-handle_error(ConnectionPid, Reason)->
+handle_error(ConnPid, Reason)->
   case Reason of
     invalid_flags ->
-      mqtt_connection:process_bad_packet(ConnectionPid,invalid_flags);
+      mqtt_connection:process_bad_packet(ConnPid,invalid_flags);
     malformed_pdacket ->
-      mqtt_connection:process_bad_packet(ConnectionPid,unknown);
-    unexpected_disconnect ->
-      mqtt_connection:process_unexpected_disconnect(ConnectionPid,unexpected_disconnect)
+      mqtt_connection:process_bad_packet(ConnPid,unknown);
+    {unexpected_disconnect,Details} ->
+      mqtt_connection:process_unexpected_disconnect(ConnPid,Details)
    %% TODO: More errors
   end
  .

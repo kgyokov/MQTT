@@ -29,11 +29,11 @@ append_message(ClientId, {Message,Topic,QoS})->
       [] ->
         mnesia:write(#mqtt_session{
           client_id = ClientId,
-          outgoing_messages = [{new, Message,Topic,QoS}],
-          subscriptions = []});
-      [Session = #mqtt_session{outgoing_messages = CurrentMessages}]->
-        NewMessages = [{Message,Topic,QoS,new} | CurrentMessages],
-        mnesia:write(Session#mqtt_session{outgoing_messages = NewMessages})
+          %outgoing_messages = [{new, Message,Topic,QoS}],
+          subscriptions = []})
+%%       [Session = #mqtt_session{outgoing_messages = CurrentMessages}]->
+%%         NewMessages = [{Message,Topic,QoS,new} | CurrentMessages],
+%%         mnesia:write(Session#mqtt_session{outgoing_messages = NewMessages})
     end
   end
 .
@@ -44,7 +44,7 @@ append_subscription(ClientId, NewSub = {_TopicFilter,_QoS})->
       [] ->
         mnesia:write(#mqtt_session{
           client_id = ClientId,
-          outgoing_messages = [],
+          %outgoing_messages = [],
           subscriptions = [NewSub]});
       [Session = #mqtt_session{subscriptions = CurrentSubs}]->
         NewSubs = [NewSub | CurrentSubs],
@@ -70,3 +70,5 @@ clear(ClientId)->
    mnesia:delete({?SESSION_TABLE,ClientId})
   end
 .
+
+

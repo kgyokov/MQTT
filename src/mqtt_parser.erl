@@ -195,10 +195,7 @@ parse_specific_type(?CONNECT,
 
 
 parse_specific_type(?CONNACK,_Flags, #parse_state{buffer = <<0:7,SessionPresent:1,Code:8>>}) ->
-  #'CONNACK'{
-    session_present = SessionPresent =:= 1,
-    return_code = Code
-  };
+  #'CONNACK'{session_present = SessionPresent =:= 1,return_code = Code};
 
 parse_specific_type(?DISCONNECT,_Flags,_S) ->
   #'DISCONNECT'{};
