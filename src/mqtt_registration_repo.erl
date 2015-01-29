@@ -16,9 +16,26 @@
 %% API
 -export([register/3, unregister/2, get_registration/1, create_tables/0]).
 
+%%
+%% @doc
+%%
+%% Creates the mnesia tables
+%%
+%% @end
+
 create_tables()->
   mnesia:create_schema("")
 .
+
+
+
+%%
+%% @doc
+%%
+%% Registers a Process as responsible for the connection to a given ClientId. Only one Process can be registered
+%% per client
+%%
+%% @end
 
 register(Pid, ClientId, SessionId)->
   NewReg = #client_reg{client_id = ClientId,connection_pid = Pid,
@@ -45,6 +62,14 @@ register(Pid, ClientId, SessionId)->
     end
 .
 
+
+
+%%
+%% @doc
+%%
+%% Unregisters a Process responsible for the connection to a given <b>ClientId</b>. Sets the <b>Pid</b> to <i>undefined</i>
+%%
+%% @end
 unregister(Pid,ClientId)->
   F = fun()->
     %% take write lock

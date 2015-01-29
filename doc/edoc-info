@@ -1,0 +1,7 @@
+%% encoding: UTF-8
+{application,mqtt}.
+{packages,[]}.
+{modules,[mqtt_app,mqtt_builder,mqtt_connection,mqtt_connection_sup,
+          mqtt_parser,mqtt_parser_primitives,mqtt_parser_server,
+          mqtt_publisher,mqtt_receiver,mqtt_registration_repo,mqtt_sender,
+          mqtt_session,mqtt_sup,mqtt_topic,mqtt_topic_repo,test_sup]}.
