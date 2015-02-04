@@ -11,3 +11,10 @@
 
 %% API
 -export([]).
+
+-record(mqtt_sub, {topic, fan_in, clients =[]}).
+
+
+
+
+
