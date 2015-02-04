@@ -237,34 +237,34 @@ handle_packet(#'CONNECT'{},  _, S = #state{connect_state = ConnectState})
 %% Only accept MQTT
 handle_packet(#'CONNECT'{protocol_name = ProtocolName},
     _From,
-    S = #state{connect_state = connecting} %%disallow duplicate CONNECT packets
-) when ProtocolName =/= <<"MQTT">>->
+    S = #state{connect_state = connecting}
+) when ProtocolName =/= <<"MQTT">> ->
   abort_connection(S, unknown_protocol);
 
 %% Only accept version 4
 handle_packet(#'CONNECT'{protocol_version = ProtocolVersion},
     _From,
-    S = #state{connect_state = connecting} %%disallow duplicate CONNECT packets
+    S = #state{connect_state = connecting}
 ) when ProtocolVersion =/= 4 ->
   send_to_client(S,#'CONNACK'{return_code = ?UNACCEPTABLE_PROTOCOL}),
   abort_connection(S, unknown_protocol_version);
 
 handle_packet(#'CONNECT'{client_id = <<>>,clean_session = 0},
-    _From,
-    S
-) ->
+    _From,S) ->
   send_to_client(S, #'CONNACK'{return_code = ?IDENTIFIER_REJECTED}),
-  disconnect_client(S,invalid_client_id)
-;
+  disconnect_client(S,invalid_client_id);
+
 
 %% Valid packet w/o Client Id
 handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = 1},
     From,S) ->
   ClientId = auto_generate_client_id(),
-  handle_packet(Packet#'CONNECT'{client_id = ClientId},From,S)
-;
+  handle_packet(Packet#'CONNECT'{client_id = ClientId},From,S);
 
-%% Valid packet
+
+%%
+%% Valid complete packet!
+%%
 handle_packet(Packet = #'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
                                   clean_session = CleanSession,will = Will,
                                   password = Password,username = Username},
@@ -279,7 +279,7 @@ handle_packet(Packet = #'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTim
   %%
   %%
 
-  case Security:authenticate(Username,Password) of
+  case Security:authenticate(ClientId,Username,Password) of
     {error,Reason} ->
       Code = case Reason of
                bad_credentials ->
@@ -287,30 +287,31 @@ handle_packet(Packet = #'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTim
                _ ->
                  ?UNAUTHORIZED
              end,
-      send_to_client(S,#'CONNACK'{session_present = 0,return_code =Code }),
+      send_to_client(S,#'CONNACK'{session_present = 0,return_code = Code}),
       disconnect_client(S,bad_auth);
     {ok, AuthS} ->
       S1 = S#state{auth = AuthS},
       register_self(ClientId),
 
-      if(CleanSession =:= 1) ->
-        mqtt_session:clear(ClientId);
-        true ->
-          ok
-      end,
+      SessionPresent = if(CleanSession) ->
+                         mqtt_session:clear(ClientId);
+                         false,
+                       true ->
+                           true  %% @todo: determine session state
+                       end,
+
 
       S2 = start_keep_alive(S1, KeepAliveTimeout),
 
-      %% TODO: Determine session present
-      send_to_client(S, #'CONNACK'{return_code = 0, session_present = 0}),
+      %% @todo:  Determine session present
+      send_to_client(S, #'CONNACK'{return_code = ?CONECTION_ACCEPTED, session_present = SessionPresent}),
       S3 = S2#state{client_id = ClientId,connect_state = connected,will = Will},
       {ok, S3}
   end;
 
-%% Catch all-cases
+%% Catch- all case
 handle_packet(Packet, _From, S = #state{ connect_state = connecting})
-  when not is_record(Packet, 'CONNECT')
-  ->
+  when not is_record(Packet, 'CONNECT') ->
   abort_connection(S, 'CONNECT_expected');
 
 
@@ -335,6 +336,10 @@ handle_packet(#'PUBREL'{packet_id = PacketId}, _, S) ->
 
 handle_packet(#'PUBCOMP'{}, _, S) ->
   0;
+
+
+handle_packet(#'SUBSCRIBE'{subscriptions = []},_From,S) ->
+  abort_connection(S,protocol_violation);
 
 handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
               _From,
@@ -363,19 +368,20 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
     end
     || Sub  <- Subs],
   Ack = #'SUBACK'{packet_id = PacketId,return_codes = Results},
-  send_to_client(S,Ack)
-;
+  send_to_client(S,Ack);
+
 
 handle_packet(#'UNSUBSCRIBE'{packet_id = PacketId,topic_filters = Filters},
                 _From,
                S = #state{client_id = ClientId}) ->
   [ ok = mqtt_session:remove_subscription(ClientId,Filter) || Filter <- Filters],
   Ack = #'UNSUBACK'{packet_id = PacketId},
-  send_to_client(S,Ack)
-;
+  send_to_client(S,Ack);
+
 
 handle_packet(#'PINGREQ'{}, From, _S) ->
   send_to_client(From, #'PINGRESP'{});
+
 
 handle_packet(#'DISCONNECT'{}, _From, S) ->
   %% Graceful disonnect. We must NOT publish a Will message

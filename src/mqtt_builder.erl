@@ -10,7 +10,7 @@
 -author("Kalin").
 
 -include("mqtt_packets.hrl").
--include("mqtt_const.hrl").
+-include("mqtt_parsing.hrl").
 %% API
 -export([build_packet/1, build_string/1, build_var_length/1]).
 

@@ -13,6 +13,8 @@
 -export([]).
 
 
-%% parse_filter(Filter)->
-%%   {[],[multilevel,}
-%%   lists:splitwith()
+expand_filter(<<"/":>>)->
+0
+.
+
+expand_filter()

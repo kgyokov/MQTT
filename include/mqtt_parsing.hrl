@@ -17,7 +17,7 @@
 
 % Packets
 -define(Reserved, 0).
--define(CONNECT, 1) .
+-define(CONNECT, 1).
 -define(CONNACK, 2).
 -define(PUBLISH, 3).
 -define(PUBACK, 4).

@@ -10,7 +10,7 @@
 -author("Kalin").
 
 -include_lib("eunit/include/eunit.hrl").
--include("mqtt_const.hrl").
+-include("mqtt_parsing.hrl").
 -include("mqtt_packets.hrl").
 
 

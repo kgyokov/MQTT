@@ -9,7 +9,7 @@
 -module(mqtt_parser).
 -author("Kalin").
 
--include("mqtt_const.hrl").
+-include("mqtt_parsing.hrl").
 -include("mqtt_packets.hrl").
 
 %% API
@@ -22,21 +22,21 @@
 %%
 %%
 
-read_at_least(#parse_state { max_buffer_size =  MaxBufferSize },  ExpectedBytes)
-  when ExpectedBytes >  byte_size(MaxBufferSize) ->
+read_at_least(#parse_state {max_buffer_size =  MaxBufferSize},  TotalExpected)
+  when TotalExpected >  byte_size(MaxBufferSize) ->
   throw({error, buffer_overflow });
 
-read_at_least( #parse_state {buffer =  Buffer}, ExpectedBytes)
-  when ExpectedBytes =<  byte_size(Buffer) ->
+read_at_least( #parse_state {buffer =  Buffer}, TotalExpected)
+  when TotalExpected =<  byte_size(Buffer) ->
   <<Buffer/binary>>;
 
 
-read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, ExpectedBytes)
-  when ExpectedBytes > byte_size(Buffer)->
-  case ReadFun() of
+read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, TotalExpected)
+  when TotalExpected > byte_size(Buffer)->
+  case ReadFun(TotalExpected- byte_size(Buffer)) of
     {ok,NewFragment} ->
       NewBuffer = <<Buffer/binary,NewFragment/binary>>,
-      read_at_least( S#parse_state{ buffer = NewBuffer}, ExpectedBytes); %% append the newly retrieved bytes
+      read_at_least( S#parse_state{ buffer = NewBuffer}, TotalExpected); %% append the newly retrieved bytes
     {error,Reason} ->
       throw({error,Reason})
   end.
@@ -44,7 +44,7 @@ read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, ExpectedBy
 read(_ReadFun, MaxBufferSize, Buffer) when byte_size(Buffer) > MaxBufferSize  ->
   throw({error, buffer_overflow });
 read(ReadFun, _MaxBufferSize, Buffer) ->
-  case ReadFun() of
+  case ReadFun(0) of
     {ok,NewFragment} ->
       <<Buffer/binary,NewFragment/binary>>; %% append the newly retrieved bytes
     {error,Reason} ->
@@ -342,3 +342,7 @@ parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer)->
         Rest2
       }
 .
+
+parse_topic_pattern(Topic)->
+
+ 0.
