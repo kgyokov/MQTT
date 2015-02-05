@@ -1,20 +1,15 @@
 %%%-------------------------------------------------------------------
 %%% @author Kalin
-%%% @copyright (C) 2014, <COMPANY>
+%%% @copyright (C) 2015, <COMPANY>
 %%% @doc
 %%%
 %%% @end
-%%% Created : 09. Dec 2014 2:13 AM
+%%% Created : 04. Feb 2015 10:36 PM
 %%%-------------------------------------------------------------------
--module(mqtt_topic_repo).
+-module(mqtt_topic_tests).
 -author("Kalin").
 
-%% API
--export([]).
+-include_lib("eunit/include/eunit.hrl").
 
--record(mqtt_sub, {topic, fan_in, clients=[]}).
-
-
-
-
-
+simple_test() ->
+  ?assert(true).

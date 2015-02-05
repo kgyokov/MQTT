@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([explode_split_topic/1]).
+-export([explode_topic/1]).
 
 %%
 %% Expands a topic to any possible wildcard match
@@ -43,17 +43,19 @@ explode_topic(TopicLevels)->
   explode_topic([],TopicLevels).
 
 explode_topic(ParentLevels,["/"|T])->
-  {
-    explode_topic(["/"|ParentLevels],T),
-    ["#","/"|ParentLevels]
-  }
+  [
+    ["#","/"|ParentLevels] |
+    explode_topic(["/"|ParentLevels],T)
+  ]
 ;
 
 explode_topic(ParentLevels,[Level|T])->
-  {
-    explode_topic([Level|ParentLevels],T),
+  lists:concat(
+    [
+    explode_topic([Level|ParentLevels],T)|
     explode_topic(["+"|ParentLevels],T)
-  }
+    ]
+  )
 ;
 
 explode_topic(ParentLevels,[])->
