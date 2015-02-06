@@ -15,10 +15,29 @@
 %% }).
 
 %% API
--export([authenticate/3, authorize/3]).
+-export([authenticate/4, authorize/3]).
 
-authenticate(ClientId, Username, Password) ->
-  erlang:error(not_implemented).
+authenticate(Configuration, ClientId, Username, Password) ->
+  try
+  [
+    case ClaimsGenerator:get_claims(Options,ClientId,Username,Password) of
+      {ok,Claims}->
+        Claims;
+      not_applicable ->
+        [];
+      {error,Reason} ->
+        throw({error,Reason})
+    end
+  || {ClaimsGenerator,Options} <- Configuration
+  ] of ClaimsList -> AllClaims = lists:concat(ClaimsList),
+                     lists:foldr(
+                          fun({ClaimType,ClaimVal},Dict)-> dict:append_list(ClaimType,ClaimVal,Dict) end,
+                          dict:new(), AllClaims)
+  catch
+  throw:{error,Reason} ->
+    {error,Reason}
+end
+.
 
 authorize(AuthS, Action, Resource) ->
 %%   ClaimType = case Action of

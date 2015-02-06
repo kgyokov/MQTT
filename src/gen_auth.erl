@@ -10,9 +10,10 @@
 -author("Kalin").
 
 -callback authenticate(
-    ClientId::string(),
-    Username::string(),
-    Password::string()
+    Options::any(),
+    ClientId::binary(),
+    Username::binary(),
+    Password::binary()
 )->
   {ok, AuthS::any()} |        %% AuthS can contain things like claims, etc.
   {error,Reason::any()}.     %% error, e.g. invalid password

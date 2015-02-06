@@ -4,14 +4,10 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 04. Feb 2015 10:36 PM
+%%% Created : 06. Feb 2015 1:12 AM
 %%%-------------------------------------------------------------------
--module(mqtt_topic_tests).
+-module(gen_claims).
 -author("Kalin").
 
--include_lib("eunit/include/eunit.hrl").
-
--export([simple_test/0]).
-
-simple_test() ->
-  ?_assert(true).
+%% API
+-export([]).
