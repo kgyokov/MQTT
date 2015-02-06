@@ -343,6 +343,3 @@ parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer)->
       }
 .
 
-parse_topic_pattern(Topic)->
-
- 0.

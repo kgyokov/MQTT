@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([explode_topic/1, is_covered_by/2]).
+-export([explode_topic/1, is_covered_by/2, split_topic/1]).
 
 %%
 %% Expands a topic to any possible wildcard match
@@ -30,8 +30,8 @@
 %%
 %% @end
 is_covered_by(Pattern,Cover)->
-  PL = lists:reverse(split_topic(Pattern)),
-  CL = lists:reverse(split_topic(Cover)),
+  PL = split_topic(Pattern),
+  CL = split_topic(Cover),
   seg_is_covered_by(PL,CL)
 .
 
@@ -50,6 +50,9 @@ seg_is_covered_by([PH|PT],[CH|CT])->
       false
   end;
 
+
+seg_is_covered_by([],["/","#"])->
+  true;
 seg_is_covered_by([],["#"])->
   true;
 seg_is_covered_by([],[_|_])->
@@ -77,22 +80,36 @@ seg_is_covered_by([_|_],[])->
 %% This ensures quick matching to high fan-in subscriptions, e.g. /user/#
 %% @end
 %%
-explode_topic(TopicLevels)->
-  [lists:reverse(RL) || RL <- explode_topic([],TopicLevels)].
 
-explode_topic(ParentLevels,["/"|T])->
+explode_topic(<<TopicLevels/binary>>)->
+  explode_topic(split_topic(TopicLevels));
+
+explode_topic(TopicLevels) when is_list(TopicLevels)->
+%%   lists:map(
+%%     fun(Topic)->
+%%       list_to_binary(lists:map(
+%%         fun(Level)->
+%%
+%%         end,
+%%         Topic))
+%%     end).
+  %lists:reverse(explode_topic([],TopicLevels)).
+  %explode_topic([],TopicLevels).
+  [ list_to_binary(lists:reverse(RL)) || RL <- explode_topic([],TopicLevels)].
+
+explode_topic(ParentLevels,["/"|T]) ->
   [
     ["#","/"|ParentLevels] |
     explode_topic(["/"|ParentLevels],T)
   ]
 ;
 
-explode_topic(ParentLevels,[Level|T])->
+explode_topic(ParentLevels,[Level|T]) ->
     explode_topic([Level|ParentLevels],T) ++ explode_topic(["+"|ParentLevels],T)
 ;
 
 explode_topic(ParentLevels,[])->
-  ParentLevels
+  [ParentLevels]
 .
 
 %% @doc
@@ -101,34 +118,48 @@ explode_topic(ParentLevels,[])->
 %%
 %% @end
 split_topic(Topic) ->
-  split_topic([],Topic)
+  lists:reverse(split_topic([],Topic))
 .
 
-split_topic(Split,<<>>)->
-  Split
-;
+split_topic(Split,<<>>) ->
+  Split;
 
-split_topic(Split,<<"/"/utf8,Rest>>)->
-  split_topic(["/"|Split],Rest)
-;
+split_topic(["#"|_],_Rest) ->
+  throw({error,invalid_wildcard});
 
-split_topic(Split,<<Rest>>)->
+split_topic(Split,<<"/"/utf8,Rest/binary>>) ->
+  split_topic(["/"|Split],Rest);
+
+split_topic(Split,<<Rest/binary>>) ->
   {NextLevel,Rest1} = consume_level(Rest),
-  split_topic([NextLevel|Split],Rest1)
-.
+  split_topic([NextLevel|Split],Rest1).
+
+
 
 consume_level(Binary)->
-  consume_level([],Binary).
+  consume_level(<<>>,Binary).
 
-consume_level([],<<"/"/utf8,_>>) ->
+consume_level(<<>>,<<"/"/utf8,_/binary>>) ->
   throw({error,empty_level});
 
-consume_level(Level,Rest = <<"/"/utf8,_>>) ->
+consume_level(<<>>,<<"#"/utf8>>) ->
+  {"#",<<>>};
+
+consume_level(_Level,<<"#"/utf8,_/binary>>) ->
+  throw({error,unexpected_wildcard});
+
+consume_level(<<>>,<<"+"/utf8,Rest/binary>>) ->
+  {"+",Rest};
+
+consume_level(Level,Rest = <<"/"/utf8,_/binary>>) ->
   {Level,Rest};
 
-consume_level(Level,Rest = <<>>) ->
-  {Level,Rest};
+consume_level(Level,<<>>) ->
+  {Level,<<>>};
 
-consume_level(Level,Rest = <<NextChar/utf8,Rest>>) ->
-  {[NextChar|Level],Rest}.
+consume_level(Level,<<NextChar/utf8,Rest/binary>>) ->
+  consume_level(<<Level/binary,NextChar/utf8>>,Rest).
+
+
+
 

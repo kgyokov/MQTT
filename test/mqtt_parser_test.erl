@@ -228,7 +228,7 @@ parse_PUBLISH_QoS_1_invalid_packet_id_test()->
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
-  ?assertException(_,_,test_packet(OriginalPacket))
+  ?assertException(error,_,test_packet(OriginalPacket))
 .
 
 parse_PUBLISH_empty__test()->

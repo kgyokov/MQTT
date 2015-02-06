@@ -46,18 +46,24 @@ register(Pid, ClientId, SessionId)->
         [] ->
           mnesia:write({?REG_TABLE,NewReg}),
           ok;
-        [E] when E#client_reg.connection_pid =:= Pid ->
-          ok;
-        [E] when E#client_reg.connection_pid =/= Pid ->
-          mnesia:write({?REG_TABLE,NewReg}),
-          {duplicate_detected, E}
+        [E = #client_reg{connection_pid = EPid}] ->
+          case EPid of
+            Pid ->
+              ok;
+            undefined ->
+              mnesia:write({?REG_TABLE,NewReg}),
+              ok;
+            _ ->
+              mnesia:write({?REG_TABLE,NewReg}),
+              {duplicate_detected, E}
+          end
       end
     end,
     case mnesia:activity(transaction,F,[],mnesia_frag) of
       ok ->
         ok;
-      {duplicate_detected, _E} ->
-        handle_duplicate(Pid),
+      {duplicate_detected, #client_reg{connection_pid = ExistingPid}} ->
+        handle_duplicate(ExistingPid),
         ok
     end
 .
@@ -76,10 +82,10 @@ unregister(Pid,ClientId)->
     case mnesia:read(?REG_TABLE, ClientId, write) of
       [] ->
         ok;
-      [E] when E#client_reg.connection_pid =:= Pid ->
+      [E = #client_reg{connection_pid = EPid}] when EPid =:= Pid ->
         mnesia:write({?REG_TABLE,E#client_reg{connection_pid = undefined}}),
         ok;
-      [E] when E#client_reg.connection_pid =/= Pid ->
+      [#client_reg{connection_pid = EPid}] when EPid =/= Pid ->
         ok
     end
   end,
