@@ -11,5 +11,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-export([simple_test/0]).
+
 simple_test() ->
-  ?assert(true).
+  ?_assert(true).
