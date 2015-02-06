@@ -13,9 +13,12 @@
     ClientId::string(),
     Username::string(),
     Password::string()
-)-> {ok, AuthS::any()} | {error,Reason::any()}.
+)->
+  {ok, AuthS::any()} |        %% AuthS can contain things like claims, etc.
+  {error,Reason::any()}.     %% error, e.g. invalid password
 
 -callback authorize(
     AuthS::term(),
-    {Action::atom(),Resource::any()}
+    Action::atom(),
+    Resource::any()
 )-> ok | {error,Details::any()}.

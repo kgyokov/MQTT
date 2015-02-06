@@ -316,7 +316,7 @@ handle_packet(Packet, _From, S = #state{ connect_state = connecting})
 
 
 handle_packet(Packet = #'PUBLISH'{topic = Topic}, _From, S = #state{security = Security,auth = AuthS}) ->
-  case Security:authorize(AuthS,{publish,Topic}) of
+  case Security:authorize(AuthS,publish,Topic) of
     ok ->
       handle_publish(Packet,S);
     {error,_Details}->
@@ -355,7 +355,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
 
 
   Results = [
-    case Security:authorize(AuthS,{subscribe,Sub}) of
+    case Security:authorize(AuthS,subscribe,Sub) of
       ok ->
         case mqtt_session:append_subscription(ClientId,Sub) of
           {error,_}->
