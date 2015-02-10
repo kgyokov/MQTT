@@ -35,6 +35,11 @@ is_covered_by(Pattern,Cover)->
   seg_is_covered_by(PL,CL)
 .
 
+seg_is_covered_by(_,["/","#"])  -> true;  %%  '/#' definiteyl covers '_' (everyrhing)
+seg_is_covered_by(_,["#"])      -> true;  %%  '#' definiteyl covers '_' (everyrhing)
+seg_is_covered_by([],[_|_])     -> false; %% else if the pattern is longer than the potential match, there is no match
+seg_is_covered_by([_|_],[])     -> false; %% else if the patter is shorter than the potential match
+seg_is_covered_by([],[])        -> true;  %% if the pattern is as long as the potential match, there is a match
 
 seg_is_covered_by([PH|PT],[CH|CT])->
   case {PH,CH} of
@@ -48,19 +53,11 @@ seg_is_covered_by([PH|PT],[CH|CT])->
       seg_is_covered_by(PT,CT);
     _ ->
       false
-  end;
+  end.
 
 
-seg_is_covered_by([],["/","#"])->
-  true;
-seg_is_covered_by([],["#"])->
-  true;
-seg_is_covered_by([],[_|_])->
-  false;
-seg_is_covered_by([],[])->
-  true;
-seg_is_covered_by([_|_],[])->
-  false.
+
+
 
 %% @doc
 %% Explodes a topic into the various possible patterns that can match it
