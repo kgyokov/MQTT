@@ -126,14 +126,14 @@ handle_call({packet, Packet}, From, S) ->
   S1 = reset_keep_alive(S),
   handle_packet(Packet, From, S1);
 
-handle_call({publish, {Message,Topic,QoS}}, From, S)->
+handle_call({publish, {Message,Topic,QoS,PacketId,Retain}}, From, S)->
   send_to_client(S,#'PUBLISH'{
      content = Message,
      topic = Topic,
      qos = QoS,
      dup = error(not_implemented),
-     packet_id = error(not_implemented),
-     retain = error(not_implemented)
+     packet_id = PacketId,
+     retain = Retain
   })
 ;
 

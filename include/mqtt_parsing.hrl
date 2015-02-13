@@ -34,9 +34,3 @@
 %%-define(Reserved, 15).
 
 
-%% QOS
--define(QOS_AT_MOST_ONCE, 0).
--define(QOS_AT_LEAST_ONCE, 1).
--define(QOS_EXACTLY_ONCE, 3).
--define(QOS_RESERVED, 4).
-

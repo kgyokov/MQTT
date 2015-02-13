@@ -11,21 +11,32 @@
 
 -define(REG_TABLE, client_registration).
 
--record(client_reg, {client_id, connection_pid, session_id,  timestamp}).
+-record(client_reg, {client_id, connection_pid, timestamp}).
+
+-define(TABLE_DEF,[
+  {type,set},
+  {attributes,record_info(fields,client_reg)}
+]).
 
 %% API
--export([register/3, unregister/2, get_registration/1, create_tables/0]).
+-export([register/3, unregister/2, get_registration/1, create_tables/2]).
 
 %%
 %% @doc
 %%
-%% Creates the mnesia tables
+%% Creates the mnesia tables. To be called only once.
 %%
 %% @end
-
-create_tables()->
-  mnesia:create_schema("")
-.
+create_tables(Nodes,NFragments)->
+  mnesia:create_schema(Nodes),
+  mnesia:create_table(?REG_TABLE, [
+    {disc_copies, Nodes},
+    {frag_properties,
+      {n_fragments,NFragments},
+      {node_pool,Nodes}
+    }
+    |?TABLE_DEF]
+  ).
 
 
 
@@ -38,8 +49,7 @@ create_tables()->
 %% @end
 
 register(Pid, ClientId, SessionId)->
-  NewReg = #client_reg{client_id = ClientId,connection_pid = Pid,
-                       session_id = SessionId,timestamp = time()},
+  NewReg = #client_reg{client_id = ClientId,connection_pid = Pid,timestamp = time()},
   F = fun()->
       %% take write lock
       case mnesia:read(?REG_TABLE, ClientId, write) of
@@ -59,13 +69,17 @@ register(Pid, ClientId, SessionId)->
           end
       end
     end,
-    case mnesia:activity(transaction,F,[],mnesia_frag) of
-      ok ->
-        ok;
-      {duplicate_detected, #client_reg{connection_pid = ExistingPid}} ->
-        handle_duplicate(ExistingPid),
-        ok
-    end
+
+  case mnesia:activity(transaction,F,[],mnesia_frag) of
+    ok ->
+      ok;
+    {duplicate_detected, #client_reg{connection_pid = ExistingPid}} ->
+      handle_duplicate(ExistingPid),
+      ok
+  end,
+
+  %%
+  mnesia:subscribe()
 .
 
 

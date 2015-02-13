@@ -40,54 +40,61 @@
 
 split_topic_test_()->
   [
-    ?_assertEqual(["/",<<"user"/utf8>>,"/",<<"1234"/utf8>>,"/",<<"location"/utf8>>],
-      mqtt_topic:split_topic(<<"/user/1234/location"/utf8>>))
+    ?_assertEqual(
+      ["/",<<"A"/utf8>>,"/",<<"1"/utf8>>,"/",<<"B"/utf8>>],
+      mqtt_topic:split_topic(<<"/A/1/B"/utf8>>)),
+    ?_assertEqual(
+      [<<"A"/utf8>>,"/",<<"1"/utf8>>,"/",<<"B"/utf8>>,"/"],
+      mqtt_topic:split_topic(<<"A/1/B/"/utf8>>)),
+    ?_assertEqual(
+      [<<"A"/utf8>>,"/",<<"1"/utf8>>,"/","#"],
+      mqtt_topic:split_topic(<<"A/1/#"/utf8>>))
    ].
 
 explode_topic_test_() ->
 [
   ?_test(lists_are_equal([
     <<"/#"/utf8>>,
-    <<"/user/#"/utf8>>,
-    <<"/user/1234/#"/utf8>>,
-    <<"/user/1234/location"/utf8>>,
-    <<"/user/1234/+"/utf8>>,
-    <<"/user/+/location"/utf8>>,
-    <<"/user/+/+"/utf8>>,
-    <<"/+/1234/location"/utf8>>,
-    <<"/+/1234/+"/utf8>>,
-    <<"/+/+/location"/utf8>>,
+    <<"/A/#"/utf8>>,
+    <<"/A/1/#"/utf8>>,
+    <<"/A/1/B"/utf8>>,
+    <<"/A/1/+"/utf8>>,
+    <<"/A/+/B"/utf8>>,
+    <<"/A/+/+"/utf8>>,
+    <<"/+/1/B"/utf8>>,
+    <<"/+/1/+"/utf8>>,
+    <<"/+/+/B"/utf8>>,
     <<"/+/+/+"/utf8>>
   ],
-    mqtt_topic:explode_topic(<<"/user/1234/location"/utf8>>))),
+    mqtt_topic:explode_topic(<<"/A/1/B"/utf8>>))),
   ?_test(lists_are_equal([
     <<"#"/utf8>>,
-    <<"user/#"/utf8>>,
-    <<"user/1234/#"/utf8>>,
-    <<"user/1234/location"/utf8>>,
-    <<"user/1234/+"/utf8>>,
-    <<"user/+/location"/utf8>>,
-    <<"user/+/+"/utf8>>,
-    <<"+/1234/location"/utf8>>,
-    <<"+/1234/+"/utf8>>,
-    <<"+/+/location"/utf8>>,
+    <<"A/#"/utf8>>,
+    <<"A/1/#"/utf8>>,
+    <<"A/1/B"/utf8>>,
+    <<"A/1/+"/utf8>>,
+    <<"A/+/B"/utf8>>,
+    <<"A/+/+"/utf8>>,
+    <<"+/1/B"/utf8>>,
+    <<"+/1/+"/utf8>>,
+    <<"+/+/B"/utf8>>,
     <<"+/+/+"/utf8>>
   ],
-    mqtt_topic:explode_topic(<<"user/1234/location/"/utf8>>))),
+    mqtt_topic:explode_topic(<<"A/1/B/"/utf8>>))),
   ?_test(lists_are_equal([
     <<"#"/utf8>>,
-    <<"user/#"/utf8>>,
-    <<"user/1234/#"/utf8>>,
-    <<"user/1234/location/"/utf8>>,
-    <<"user/1234/+/"/utf8>>,
-    <<"user/+/location/"/utf8>>,
-    <<"user/+/+/"/utf8>>,
-    <<"+/1234/location/"/utf8>>,
-    <<"+/1234/+/"/utf8>>,
-    <<"+/+/location/"/utf8>>,
+    <<"A/#"/utf8>>,
+    <<"A/1/#"/utf8>>,
+    <<"A/1/B/"/utf8>>,
+    <<"A/1/+/"/utf8>>,
+    <<"A/+/B/"/utf8>>,
+    <<"A/+/+/"/utf8>>,
+    <<"+/1/B/"/utf8>>,
+    <<"+/1/+/"/utf8>>,
+    <<"+/+/B/"/utf8>>,
     <<"+/+/+/"/utf8>>
   ],
-    mqtt_topic:explode_topic(<<"user/1234/location"/utf8>>)))
+    mqtt_topic:explode_topic(<<"A/1/B"/utf8>>)))
 ].
 
 is_covered_by_test_()->
