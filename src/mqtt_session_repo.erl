@@ -99,7 +99,7 @@ append_message(Session = #mqtt_session{},{Content,Topic,Retain,{QoS,Ref}}) ->
 message_ack(ClientId,PacketId)  ->
   message_ack(undefined,PacketId);
 
-message_ack(Session,PacketId) ->
+message_ack(Session = #mqtt_session{},PacketId) ->
   #mqtt_session{qos1 = Messages} = Session,
   Session#mqtt_session{ qos1 = dict:erase(PacketId,Messages)}.
 

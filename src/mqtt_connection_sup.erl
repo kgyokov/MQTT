@@ -76,11 +76,11 @@ start_link(Options,TRS = {Transport,_Ref,Socket,_TOpts}) ->
     ?RECEIVER_SPEC(TRS,ConnPid, Options)),
   {ok,SupPid}.
 
-start_link(Options,Security,Transport,_Ref,Socket,ReceiverPid) ->
-  {ok,SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
-  {ok, SenderPid } = supervisor:start_child(SupPid, ?SENDER_SPEC(Transport,Socket)),
-  {ok, _ConnPid} = supervisor:start_child(SupPid, ?CONN_SPEC(SenderPid,Options)),
-  {ok,SupPid}.
+%% start_link(Options,Security,Transport,_Ref,Socket,ReceiverPid) ->
+%%   {ok,SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
+%%   {ok, SenderPid } = supervisor:start_child(SupPid, ?SENDER_SPEC(Transport,Socket)),
+%%   {ok, _ConnPid} = supervisor:start_child(SupPid, ?CONN_SPEC(SenderPid,Options)),
+%%   {ok,SupPid}.
 
 %%%===================================================================
 %%% Supervisor callbacks
