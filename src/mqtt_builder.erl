@@ -78,9 +78,7 @@ build_rest(#'CONNECT'{
 
   (case WillDetails of
       undefined -> <<0:4>>;
-     #will_details{
-       retain = WillRetain,
-       qos = WillQos} ->
+     #will_details{retain = WillRetain,qos = WillQos} ->
         <<(case WillRetain of true -> 1; false -> 0 end):1,WillQos:2,1:1>>
     end)/bits,
 
@@ -94,9 +92,7 @@ build_rest(#'CONNECT'{
  (case WillDetails of
     undefined ->
       <<>>;
-    #will_details{
-      topic = WillTopic,
-      message = WillMessage} ->
+    #will_details{topic = WillTopic,message = WillMessage} ->
       <<(build_string(WillTopic))/binary,(build_string(WillMessage))/binary>>
  end)/binary,
   (maybe_build_string(Username))/binary,
@@ -197,14 +193,13 @@ maybe_build_string(undefined)->
 maybe_build_string(S)->
   build_string(S).
 
-build_string(S) when is_list(S)->
+build_string(S) when is_list(S) ->
   build_string(list_to_binary(S));
 build_string(<<S/binary>>) ->
   <<(byte_size(S)):16,S/binary>>.
 
-build_var_length(Length)->
-  build_var_length(Length,<<>>)
-.
+build_var_length(Length) ->
+  build_var_length(Length,<<>>).
 
 build_var_length(_Length,Acc) when byte_size(Acc) >= 4 ->
   throw(variable_length_too_large);

@@ -11,8 +11,43 @@
 
 -behaviour(supervisor).
 
+-define(SENDER_SPEC(Transport,Socket),
+  {
+    sender,
+    {mqtt_sender, start_link, [Transport,Socket]},
+    permanent,          % must never stop
+    2000,               % should be more than sufficient
+    worker,             % as opposed to supervisor
+    [mqtt_sender]
+  }
+).
+
+-define(CONN_SPEC(SenderPid,Options),
+  {
+    connection,                               %% Id
+    {mqtt_connection, start_link, [SenderPid,Options]},
+    permanent,                                %% must never stop
+    2000,                                     %% should be more than sufficient for the process to unregister
+    worker,                                   %% as opposed to supervisor
+    [mqtt_connection]
+  }
+).
+
+-define(RECEIVER_SPEC(TRS,ConnPid,Opts),
+  {
+    receiver,
+    {mqtt_parser_server, start_link, [TRS,ConnPid,Opts]},
+    permanent,          % must never stop
+    2000,               % should be more than sufficient
+    worker,             % as opposed to supervisor
+    [mqtt_receiver]
+  }
+).
+
+
+
 %% API
--export([start_link/3]).
+-export([start_link/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -31,37 +66,21 @@
 %%--------------------------------------------------------------------
 %% -spec(start_link() ->
 %%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(Socket,Transport,Ref) ->
+start_link(Options,TRS = {Transport,_Ref,Socket,_TOpts}) ->
   SupPid = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
   {ok, SenderPid } = supervisor:start_child(SupPid,
-    {
-      sender,
-      {mqtt_sender, start_link, [Socket,Transport,Ref]},
-      permanent,          % must never stop
-      2000,               % should be more than sufficient
-      worker,             % as opposed to supervisor
-      [mqtt_sender]
-    }),
+    ?SENDER_SPEC(Transport,Socket)),
+  {ok, ConnPid} = supervisor:start_child(SupPid,
+    ?CONN_SPEC(SenderPid,Options)),
+  {ok, _ReceiverPid } = supervisor:start_child(SupPid,
+    ?RECEIVER_SPEC(TRS,ConnPid, Options)),
+  {ok,SupPid}.
 
-  ConnArgs = [SenderPid,[]],
-  {ok, ConnectionPid } = supervisor:start_child(SupPid,{
-    connection,                               %% Id
-    {mqtt_connection, start_link, ConnArgs},
-    permanent,                                %% must never stop
-    2000,                                     %% should be more than sufficient for the process to unregister
-    worker,                                   %% as opposed to supervisor
-    [mqtt_connection]
-  }),
-  {ok, ReceiverPid } = supervisor:start_child(SupPid,
-    {
-      receiver,
-      {mqtt_receiver, start_link, [Socket,Transport,Ref, ConnectionPid]},
-      permanent,          % must never stop
-      2000,               % should be more than sufficient
-      worker,             % as opposed to supervisor
-      [mqtt_receiver]
-    })
-.
+start_link(Options,Security,Transport,_Ref,Socket,ReceiverPid) ->
+  {ok,SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
+  {ok, SenderPid } = supervisor:start_child(SupPid, ?SENDER_SPEC(Transport,Socket)),
+  {ok, _ConnPid} = supervisor:start_child(SupPid, ?CONN_SPEC(SenderPid,Options)),
+  {ok,SupPid}.
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -85,25 +104,6 @@ start_link(Socket,Transport,Ref) ->
   ignore |
   {error, Reason :: term()}).
 init([]) ->
-%%   RestartStrategy = one_for_all,
-%%   MaxRestarts = 0,
-%%   MaxSecondsBetweenRestarts = 1,
-%%
-%%   SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
-
-%%   Restart = permanent,
-%%   Shutdown = 2000,
-%%   Type = worker,
-
-%%   ConnectionChild = {
-%%     connection,
-%%     {mqtt_connection, start_link, []},
-%%     Restart, Shutdown, Type,
-%%     [mqtt_connection]
-%%   },
-
-  %%{ok, {SupFlags, [ConnectionChild ]}}.
-
   {ok, {{one_for_all, 0, 1}, []}}.
 
 %%%===================================================================

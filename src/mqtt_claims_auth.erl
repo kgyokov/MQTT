@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%% Claims-based authentication/authorization
 %%% @end
 %%% Created : 04. Feb 2015 11:33 PM
 %%%-------------------------------------------------------------------
@@ -11,54 +11,57 @@
 
 -behaviour(gen_auth).
 
-%% -record(mqtt_auth_state, {
-%% }).
+-type claims_dict() :: any().
 
-%% API
+%%%===================================================================
+%%% API
+%%%===================================================================
 -export([authenticate/4, authorize/3]).
 
+-spec authenticate([{ClaimsGenerator::module(),Options::any()}],
+    binary(), binary(), binary()) ->
+  claims_dict() | {error, any()}.
 authenticate(Configuration, ClientId, Username, Password) ->
   try
   [
     case ClaimsGenerator:get_claims(Options,ClientId,Username,Password) of
-      {ok,Claims}->
+      {ok,Claims} ->
         Claims;
-      not_applicable ->
+      not_applicable  ->
         [];
       {error,Reason} ->
-        throw({error,Reason})
+        throw({auth_error,Reason})
     end
   || {ClaimsGenerator,Options} <- Configuration
-  ] of ClaimsList -> AllClaims = lists:concat(ClaimsList),
-                     lists:foldr(
-                          fun({ClaimType,ClaimVal},Dict)-> dict:append_list(ClaimType,ClaimVal,Dict) end,
-                          dict:new(), AllClaims)
+  ] of ClaimsLists ->  AllClaims = lists:concat(ClaimsLists),
+                       claims_to_dictionary(AllClaims)
   catch
-  throw:{error,Reason} ->
+  throw:{auth_error,Reason} ->
     {error,Reason}
-end
-.
+end.
 
-authorize(AuthS, Action, Resource) ->
-%%   ClaimType = case Action of
-%%       publish ->
-%%         publish_to;
-%%       subscribe ->
-%%         subscribe_to
-%%   end,
-  case is_covered_by_claim(AuthS, Action, Resource) of
+-spec authorize(claims_dict(), any(), any()) -> ok | {error,any()}.
+authorize(AuthCtx, Action, Resource) ->
+  case is_covered_by_claim(AuthCtx, Action, Resource) of
     true ->
       ok;
-  false ->
-    {error,unauthroized}
+    false ->
+      {error,unauthroized}
   end.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
-is_covered_by_claim(AuthS,ClaimType,Topic)->
-  case dict:find(ClaimType,AuthS) of
+claims_to_dictionary(AllClaims)->
+  lists:foldr(
+    fun({ClaimType,ClaimVal},Dict)-> dict:append_list(ClaimType,ClaimVal,Dict) end,
+    dict:new(), AllClaims).
+
+is_covered_by_claim(AuthCtx,ClaimType,Topic)->
+  case dict:find(ClaimType,AuthCtx) of
     {ok,Claims} ->
       lists:any(fun(ClaimVal)-> mqtt_topic:is_covered_by(Topic,ClaimVal) end,Claims);
     error ->
       false
   end.
-

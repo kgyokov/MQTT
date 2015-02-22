@@ -39,16 +39,16 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(Socket::pid(), Transport::term()) ->
+-spec(start_link(Transport::term(),Socket::pid()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(Socket,Transport) ->
-  gen_server:start_link(?MODULE, [Socket,Transport], []).
+start_link(Transport,Socket) ->
+  gen_server:start_link(?MODULE, [Transport,Socket], []).
 
 
-send_packet(Pid,Packet)->
+send_packet(Pid,Packet) ->
   gen_server:call(Pid, {packet,Packet}).
 
-send_packet_async(Pid,Packet)->
+send_packet_async(Pid,Packet) ->
   gen_server:cast(Pid, {packet,Packet}).
 
 %%%===================================================================
@@ -69,7 +69,7 @@ send_packet_async(Pid,Packet)->
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([Socket,Transport]) ->
+init([Transport,Socket]) ->
   {ok, #state{socket = Socket, transport = Transport}}.
 
 %%--------------------------------------------------------------------
@@ -88,10 +88,13 @@ init([Socket,Transport]) ->
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call({packet,Packet},_From,#state{socket = Socket, transport = Transport})->
-  Binary = mqtt_builder:build_packet(Packet),
-  Transport:send(Socket,Binary)
-;
+handle_call({packet,Packet},_From, S)->
+  case send_as_binary(Packet,S)  of
+    ok ->
+      {reply, ok, S};
+    {error, Reason} ->
+      {stop, normal, {error,Reason}, S}
+  end;
 
 
 handle_call(_Request, _From, State) ->
@@ -108,6 +111,14 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
+handle_cast({packet,Packet},S) ->
+  case send_as_binary(Packet,S) of
+    ok ->
+      {noreply,S};
+    {error, _Reason} ->
+      {stop, normal, S}
+  end;
+
 handle_cast(_Request, State) ->
   {noreply, State}.
 
@@ -161,3 +172,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+send_as_binary(Packet, #state{socket = Socket, transport = Transport})  ->
+  Binary = mqtt_builder:build_packet(Packet),
+  Transport:send(Socket,Binary).

@@ -4,10 +4,17 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 06. Feb 2015 1:12 AM
+%%% Created : 21. Feb 2015 5:38 PM
 %%%-------------------------------------------------------------------
--module(gen_claims).
 -author("Kalin").
 
-%% API
--export([]).
+
+-record(mqtt_session,{
+  client_id,
+  packet_id,
+  packet_seq,
+  qos1,
+  qos2,
+  qos2_rec,
+  refs
+}).

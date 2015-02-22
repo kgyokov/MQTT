@@ -10,16 +10,16 @@
 -author("Kalin").
 
 -callback authenticate(
-    Options::any(),
+    Configuration::any(),
     ClientId::binary(),
     Username::binary(),
     Password::binary()
 )->
-  {ok, AuthS::any()} |        %% AuthS can contain things like claims, etc.
-  {error,Reason::any()}.     %% error, e.g. invalid password
+  {ok, AuthCtx::any()} |     %% AuthCtx can contain things like claims, etc.
+  {error,Reason::bad_credentials | any()}.     %% error, e.g. invalid password
 
 -callback authorize(
-    AuthS::term(),
+    AuthCtx::any(),
     Action::atom(),
     Resource::any()
-)-> ok | {error,Details::any()}.
+)-> ok | {error,Reason::any()}.

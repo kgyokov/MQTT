@@ -13,7 +13,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3,
+-export([start_link/2,
   process_packet/2,
   process_bad_packet/2,
   process_unexpected_disconnect/2,
@@ -29,6 +29,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(CONNECT_DEFAULT_TIMEOUT, 30000).
 
 
 
@@ -36,14 +37,14 @@
   client_id,
   connect_state = connecting, %% CONNECT state: connecting, connected, disconnecting, disconnected
   sender_pid,                 %% The process sending to the actual device
-  receiver_pid,               %% The process receiving from the actual device
-  options,                   %% options such as connection timeouts, etc.
+  receiver_pid,               %% The process receiving from the actual device TODO: Do we even need to know this???
+  options,                    %% options such as connection timeouts, etc.
   session = #{},
   keep_alive_ref = undefined, %% so we can ignore old keep-alive timeout messages after restarting the timer
   keep_alive_timeout = undefined,
   will,
   security,
-  auth
+  auth_ctx                    %% Authorization/Authentication context
 }).
 
 %%%===================================================================
@@ -56,24 +57,24 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(SenderPid::pid(),ReceiverPid::pid(),Options::term()) ->
+-spec(start_link(SenderPid::pid(),Options::term()) ->
    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(SenderPid,ReceiverPid,Options) ->
-  gen_server:start_link(?MODULE, [SenderPid,ReceiverPid,Options], []).
+start_link(SenderPid,Options) ->
+  gen_server:start_link(?MODULE, [SenderPid,Options], []).
 
-publish_packet(Pid,Packet)->
+publish_packet(Pid,Packet) ->
   gen_server:cast(Pid,{publish,Packet}).
 
-process_packet(Pid,Packet)->
+process_packet(Pid,Packet) ->
   gen_server:cast(Pid,{packet, Packet}).
 
-process_bad_packet(Pid,Reason)->
+process_bad_packet(Pid,Reason) ->
   gen_server:cast(Pid,{malformed_packet,Reason}).
 
-process_unexpected_disconnect(Pid,Reason)->
+process_unexpected_disconnect(Pid,Reason) ->
   gen_server:cast(Pid,{client_disconnected, Reason}).
 
-close_duplicate(Pid)->
+close_duplicate(Pid) ->
   gen_server:cast(Pid, {force_close, duplicate}).
 
 
@@ -95,14 +96,30 @@ close_duplicate(Pid)->
 %%  -spec(init(Args :: term()) ->
 %%    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 %%    {stop, Reason :: term()} | ignore).
-init([SenderPid,ReceiverPid,Options]) ->
+init([SenderPid,Options]) ->
   process_flag(trap_exit,true),
-  set_connect_timer(30000),
+  OptsDict = options_to_dict(Options),
+  ConnectTimeOut = case dict:fetch(connect_timeout,OptsDict) of
+                     {ok,TOValue} ->
+                       TOValue;
+                     error ->
+                       ?CONNECT_DEFAULT_TIMEOUT
+                   end,
+  set_connect_timer(ConnectTimeOut),
+  {Security,SecConf} = case dict:fetch(security,OptsDict) of
+                         {ok,SecValue} ->
+                           SecValue;
+                         error ->
+                           {gen_auth_default,undefined}
+                       end,
+
   {ok, #state{
     connect_state = starting,
     sender_pid =  SenderPid,
-    receiver_pid = ReceiverPid,
-    options = Options }}.
+    receiver_pid = undefined, %% TODO decide how to handle this
+    options = OptsDict,
+    security = {Security,SecConf}
+  }}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -121,11 +138,6 @@ init([SenderPid,ReceiverPid,Options]) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_call({packet, Packet}, From, S) ->
-  %% shared functionality between all packets
-  S1 = reset_keep_alive(S),
-  handle_packet(Packet, From, S1);
-
 handle_call({publish, {Message,Topic,QoS,PacketId,Retain}}, From, S)->
   send_to_client(S,#'PUBLISH'{
      content = Message,
@@ -134,10 +146,9 @@ handle_call({publish, {Message,Topic,QoS,PacketId,Retain}}, From, S)->
      dup = error(not_implemented),
      packet_id = PacketId,
      retain = Retain
-  })
-;
+  });
 
-handle_call({malformed_packet,_Reason}, From, S) ->
+handle_call({malformed_packet,_Reason}, _From, S) ->
   abort_connection(S, malformed_packet);
 
 handle_call({client_disconnected, _Reason}, _From, S) ->
@@ -162,6 +173,11 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_cast({packet, Packet}, S) ->
+  S1 = reset_keep_alive(S),
+  handle_packet(Packet, S1);
+
 handle_cast({force_close,_Reason}, State) ->
   {stop, normal, State#state{connect_state = disconnecting}};
 
@@ -184,7 +200,7 @@ handle_cast(_Request, State) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_info({connect_timeout}, S = #state{connect_state = connecting})->
+handle_info(connect_timeout, S = #state{connect_state = connecting})->
   disconnect_client(S,connect_timeout),
   {stop, normal, S#state{connect_state = disconnecting}};
 
@@ -230,36 +246,32 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %% Only accept CONNECT-s when we are NOT connected yet, otherwise disconnect with error
-handle_packet(#'CONNECT'{},  _, S = #state{connect_state = ConnectState})
+handle_packet(#'CONNECT'{}, S = #state{connect_state = ConnectState})
   when ConnectState =/= connecting ->
   abort_connection(S, duplicate_CONNECT);
 
 %% Only accept MQTT
 handle_packet(#'CONNECT'{protocol_name = ProtocolName},
-    _From,
     S = #state{connect_state = connecting}
 ) when ProtocolName =/= <<"MQTT">> ->
   abort_connection(S, unknown_protocol);
 
 %% Only accept version 4
 handle_packet(#'CONNECT'{protocol_version = ProtocolVersion},
-    _From,
     S = #state{connect_state = connecting}
 ) when ProtocolVersion =/= 4 ->
   send_to_client(S,#'CONNACK'{return_code = ?UNACCEPTABLE_PROTOCOL}),
   abort_connection(S, unknown_protocol_version);
 
-handle_packet(#'CONNECT'{client_id = <<>>,clean_session = 0},
-    _From,S) ->
+handle_packet(#'CONNECT'{client_id = <<>>,clean_session = 0}, S) ->
   send_to_client(S, #'CONNACK'{return_code = ?IDENTIFIER_REJECTED}),
   disconnect_client(S,invalid_client_id);
 
 
 %% Valid packet w/o Client Id
-handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = 1},
-    From,S) ->
+handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = 1}, S) ->
   ClientId = auto_generate_client_id(),
-  handle_packet(Packet#'CONNECT'{client_id = ClientId},From,S);
+  handle_packet(Packet#'CONNECT'{client_id = ClientId}, S);
 
 
 %%
@@ -268,18 +280,17 @@ handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = 1},
 handle_packet(Packet = #'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
                                   clean_session = CleanSession,will = Will,
                                   password = Password,username = Username},
-    _From,
     %%disallow duplicate CONNECT packets
-    S = #state{connect_state = connecting,security = Security}) ->
+    S = #state{connect_state = connecting,security = {Security,SecConf}}) ->
 
   %%
   %%
   %% TODO: validate connect packet
   %%
-  %%
+  %% @todo: authorize Will?!?!?
   %%
 
-  case Security:authenticate(ClientId,Username,Password) of
+  case Security:authenticate(SecConf,ClientId,Username,Password) of
     {error,Reason} ->
       Code = case Reason of
                bad_credentials ->
@@ -289,12 +300,12 @@ handle_packet(Packet = #'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTim
              end,
       send_to_client(S,#'CONNACK'{session_present = 0,return_code = Code}),
       disconnect_client(S,bad_auth);
-    {ok, AuthS} ->
-      S1 = S#state{auth = AuthS},
+    {ok, AuthCtx} ->
+      S1 = S#state{auth_ctx = AuthCtx},
       register_self(ClientId),
 
       SessionPresent = if(CleanSession) ->
-                         mqtt_session:clear(ClientId);
+                         mqtt_session_repo:clear(ClientId);
                          false,
                        true ->
                            true  %% @todo: determine session state
@@ -310,13 +321,14 @@ handle_packet(Packet = #'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTim
   end;
 
 %% Catch- all case
-handle_packet(Packet, _From, S = #state{ connect_state = connecting})
+handle_packet(Packet, S = #state{ connect_state = connecting})
   when not is_record(Packet, 'CONNECT') ->
   abort_connection(S, 'CONNECT_expected');
 
 
-handle_packet(Packet = #'PUBLISH'{topic = Topic}, _From, S = #state{security = Security,auth = AuthS}) ->
-  case Security:authorize(AuthS,publish,Topic) of
+handle_packet(Packet = #'PUBLISH'{topic = Topic},
+              S = #state{security = {Security,_},auth_ctx = AuthCtx}) ->
+  case Security:authorize(AuthCtx,publish,Topic) of
     ok ->
       handle_publish(Packet,S);
     {error,_Details}->
@@ -324,40 +336,39 @@ handle_packet(Packet = #'PUBLISH'{topic = Topic}, _From, S = #state{security = S
   end;
 
 
-handle_packet(#'PUBACK'{}, _, S) ->
-  0;
+handle_packet(#'PUBACK'{packet_id = PacketId}, #state{client_id = ClientId}) ->
+  mqtt_session_repo:message_ack(ClientId,PacketId);
 
-handle_packet(#'PUBREC'{}, _, S) ->
-  0;
+handle_packet(#'PUBREC'{packet_id = PacketId}, #state{client_id = ClientId}) ->
+  mqtt_session_repo:message_pub_rec(ClientId,PacketId);
 
-handle_packet(#'PUBREL'{packet_id = PacketId}, _, S) ->
+handle_packet(#'PUBCOMP'{packet_id = PacketId}, #state{client_id = ClientId}) ->
+  mqtt_session_repo:message_pub_comp(ClientId,PacketId);
+
+handle_packet(#'PUBREL'{packet_id = PacketId}, S) ->
   mqtt_publisher:exactly_once_phase2(PacketId),
   send_to_client(S,#'PUBCOMP'{packet_id = PacketId});
 
-handle_packet(#'PUBCOMP'{}, _, S) ->
-  0;
-
-
-handle_packet(#'SUBSCRIBE'{subscriptions = []},_From,S) ->
+handle_packet(#'SUBSCRIBE'{subscriptions = []}, S) ->
   abort_connection(S,protocol_violation);
 
 handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
-              _From,
               S =  #state{client_id = ClientId,session = CleanSession,
-                          security = Security,auth = AuthS }) -> %% TODO: Use CleanSession to determine what to do
+                          security = {Security,_},auth_ctx = AuthCtx }) -> %% TODO: Use CleanSession to determine what to do
 
 
 
   ok = if CleanSession ->
-        mqtt_session:clear(ClientId);
+        mqtt_session_repo:clear(ClientId);
         true -> ok
       end,
 
 
+
   Results = [
-    case Security:authorize(AuthS,subscribe,Sub) of
+    case Security:authorize(AuthCtx,subscribe,Sub) of
       ok ->
-        case mqtt_session:append_subscription(ClientId,Sub) of
+        case mqtt_session_repo:append_sub(ClientId,Sub) of
           {error,_}->
             ?SUBSCRIPTION_FAILURE;
           {ok,QoS}->
@@ -372,25 +383,24 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
 
 
 handle_packet(#'UNSUBSCRIBE'{packet_id = PacketId,topic_filters = Filters},
-                _From,
                S = #state{client_id = ClientId}) ->
-  [ ok = mqtt_session:remove_subscription(ClientId,Filter) || Filter <- Filters],
+  [ ok = mqtt_session_repo:remove_sub(ClientId,Filter) || Filter <- Filters],
   Ack = #'UNSUBACK'{packet_id = PacketId},
   send_to_client(S,Ack);
 
 
-handle_packet(#'PINGREQ'{}, From, _S) ->
-  send_to_client(From, #'PINGRESP'{});
+handle_packet(#'PINGREQ'{}, S) ->
+  send_to_client(S, #'PINGRESP'{});
 
 
-handle_packet(#'DISCONNECT'{}, _From, S) ->
+handle_packet(#'DISCONNECT'{}, S) ->
   %% Graceful disonnect. We must NOT publish a Will message
   disconnect_client(S, client_request),
   {stop,normal,
     {disconnected, normal},
     S#state{connect_state = disconnecting}};
 
-handle_packet({'Reserved', _}, _, S) ->
+handle_packet(_, S) ->
   abort_connection(S,malformed_packet).
 
 
@@ -403,39 +413,30 @@ handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
 .
 
 %%
-%%
 %% Publish
-%%
 %%
 
 publish(S,Topic,Content,_PacketId,_Qos = 0,Retain)->
-  mqtt_publisher:at_most_once(Topic,Content,Retain)
-;
+  mqtt_publisher:at_most_once(Topic,Content,Retain);
 
 publish(S,Topic,Content,PacketId,_Qos = 1,Retain)->
   mqtt_publisher:at_least_once(Topic,PacketId,Content,Retain),
-  send_to_client(S, #'PUBACK'{packet_id = PacketId})
-;
+  send_to_client(S, #'PUBACK'{packet_id = PacketId});
 
 publish(S,Topic,Content,PacketId,_Qos = 2,Retain)->
   mqtt_publisher:exactly_once_phase1(Topic,PacketId,Content,Retain),
-  send_to_client(S, #'PUBREC'{packet_id = PacketId})
-.
+  send_to_client(S, #'PUBREC'{packet_id = PacketId}).
 
 
-%%
 %%
 %% SESSION interaction
-%%
 %%
 
 register_self(ClientId)->
   mqtt_registration_repo:register(self(),ClientId).
 
 %%
-%%
 %% Timer
-%%
 %%
 
 set_connect_timer(Timeout)->
@@ -463,27 +464,20 @@ reset_timer(Ref,TimeOut)->
       timer:cancel(Ref);
     true -> ok
   end,
-  set_keep_alive_timer(TimeOut)
-.
+  set_keep_alive_timer(TimeOut).
 
-%%
 %%
 %% Communication with Sender process
 %%
-%%
 
 send_to_client(#state{sender_pid = SenderPid},Packet)->
-  mqtt_sender:send_packet(SenderPid,Packet)
-%% gen_server:call(ClientPid, {send, Packet}).
-;
+  mqtt_sender:send_packet(SenderPid,Packet);
 
 send_to_client(SenderPid,Packet) when is_pid(SenderPid)->
-  mqtt_sender:send_packet(SenderPid,Packet)
-.
+  mqtt_sender:send_packet(SenderPid,Packet).
 
 
-abort_connection(S = #state{will = Will},Reason)->
- %% TODO: Disconnect client direclty through SenderPid????
+abort_connection(S = #state{will = Will},Reason)  ->
   case Will of
     undefined ->
       ok;
@@ -496,22 +490,23 @@ abort_connection(S = #state{will = Will},Reason)->
     S#state{connect_state = disconnecting}}
 .
 
-disconnect_client(#state{receiver_pid =  ReceiverPid},Reason)->
+disconnect_client(#state{receiver_pid =  ReceiverPid},Reason) ->
   %% gen_server:call(ClientPid,{disconnect,Reason})
   disconnect_client(ReceiverPid,Reason)
 ;
 
-disconnect_client(ReceiverPid,Reason)->
+disconnect_client(_ReceiverPid,_Reason)->
   %% gen_server:call(ClientPid,{disconnect,Reason})
-  0
+  ok  %% TODO: Disconnect client direclty through ReceiverPid????
 .
 
 
-%%
-%%
+%% ==========================================================
 %% Misc.
-%%
-%%
+%% ==========================================================
 
-auto_generate_client_id()->
+auto_generate_client_id() ->
   0.
+
+options_to_dict(Options)->
+  lists:foldr(fun({Name,Val},Acc) -> dict:append(Name,Val,Acc) end,dict:new(),Options).

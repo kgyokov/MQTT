@@ -24,7 +24,12 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {sender_pid, receiver_pid, state = connecting, subscriptions}).
+-record(state, {
+  sender_pid,
+  receiver_pid,
+  state = connecting,
+  subscriptions= []
+}).
 
 %%%===================================================================
 %%% API
@@ -40,7 +45,6 @@
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -147,8 +151,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-send_to_server(S,Packet)->
+send_to_server(S,Packet)  ->
   send_to_server(S#state.sender_pid,Packet);
 
-send_to_server(SenderPid,Packet)->
+send_to_server(SenderPid,Packet)  ->
   mqtt_sender:send_packet(SenderPid,Packet).

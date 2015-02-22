@@ -4,9 +4,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 09. Jan 2015 9:17 PM
+%%% Created : 21. Feb 2015 9:53 AM
 %%%-------------------------------------------------------------------
--module(mqtt_receiver).
+-module(mqtt_parser_serv2).
 -author("Kalin").
 
 -behaviour(gen_server).
@@ -24,7 +24,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {socket, forward_pid}).
+-record(state, {}).
 
 %%%===================================================================
 %%% API
@@ -77,7 +77,6 @@ init([]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
-
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
@@ -109,12 +108,6 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
-
-handle_info({tcp,Socket,Data}, State = #state{socket = Socket, forward_pid = ForwardPid})->
-  mqtt_connection:process_packet(ForwardPid,mqtt_parser:read()),
-0
-;
-
 handle_info(_Info, State) ->
   {noreply, State}.
 

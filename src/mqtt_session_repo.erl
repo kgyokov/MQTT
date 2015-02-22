@@ -4,15 +4,75 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 21. Feb 2015 5:37 PM
+%%% Created : 14. Jan 2015 12:33 AM
 %%%-------------------------------------------------------------------
--module(mqtt_session).
+-module(mqtt_session_repo).
 -author("Kalin").
-
 -include("mqtt_packets.hrl").
 -include("mqtt_session.hrl").
+%%-include("mqtt_pubsub.hrl").
+
 %% API
--export([append_message/2, message_ack/2, message_pub_rec/2, message_pub_comp/2, recover/1]).
+-export([create_tables/2, append_message/2,
+  clear/1, recover/1, message_ack/2, message_pub_rec/2, message_pub_comp/2]).
+
+
+%% {Message,Topic,Qos,State}
+%% @doc
+%%
+%%
+%%
+%%
+%% @end
+
+-define(SESSION_TABLE, mqtt_session).
+
+-define(TABLE_DEF,[
+  {type,set},
+  {attributes,record_info(fields,mqtt_session)}
+]).
+
+%%
+%% @doc
+%%
+%% Creates the mnesia tables. To be called only once.
+%%
+%% @end
+create_tables(Nodes,NFragments)->
+  mnesia:create_schema(Nodes),
+  mnesia:create_table(?SESSION_TABLE, [
+    {disc_copies, Nodes},
+    {frag_properties,
+      {n_fragments,NFragments},
+      {node_pool,Nodes}
+    }
+    |?TABLE_DEF]
+  ).
+
+%%
+%% @doc
+%% Sets up a message for delivery
+%%
+%%
+%%
+%% @end
+
+append_message(ClientId, Package = {Content,Topic,Retain,{QoS,Ref}})->
+  Fun =
+    fun() ->
+      Session =
+        case mnesia:read(?SESSION_TABLE,ClientId, write) of
+          [] ->
+            new(ClientId);
+          [S]->
+            S
+        end,
+      {UpdatedSession,PacketId} = append_message(Session,Package),
+      mnesia:write(UpdatedSession),
+      PacketId
+    end,
+  PacketId = mnesia:activity(transaction,Fun),
+  mqtt_connection:publish_packet(undefined,{Content,Topic,QoS,PacketId});
 
 
 %%
@@ -36,28 +96,58 @@ append_message(Session = #mqtt_session{},{Content,Topic,Retain,{QoS,Ref}}) ->
   #mqtt_session{packet_id = NewPacketId, refs = dict:store(Ref,Ref,Refs)},
   {NewSession,PacketId}.
 
+message_ack(ClientId,PacketId)  ->
+  message_ack(undefined,PacketId);
+
 message_ack(Session,PacketId) ->
   #mqtt_session{qos1 = Messages} = Session,
   Session#mqtt_session{ qos1 = dict:erase(PacketId,Messages)}.
 
+message_pub_rec(ClientId,PacketId)->
+  message_pub_rec(undefined,PacketId);
 
 message_pub_rec(Session = #mqtt_session{},PacketId) ->
   #mqtt_session{qos2 = Messages, qos2_rec = Ack} = Session,
   case dict:find(PacketId,Messages) of
     {ok,_} ->
       Session#mqtt_session{qos2 = dict:erase(PacketId,Messages),
-        qos2_rec = dict:store(PacketId,PacketId,Ack)};
+                           qos2_rec = dict:store(PacketId,PacketId,Ack)};
     error ->
       Session
   end.
 
+message_pub_comp(ClientId,PacketId) ->
+  message_pub_comp(undefined,PacketId);
 
 message_pub_comp(Session = #mqtt_session{},PacketId)  ->
   #mqtt_session{qos2_rec = Ack} = Session,
   Session#mqtt_session{qos2 = dict:erase(PacketId,Ack)}.
 
+clear(ClientId)->
+  Fun = fun() ->
+    case mnesia:read(?SESSION_TABLE,ClientId, write) of
+      [] ->
+        ok;
+      [_] ->
+        mnesia:write(new(ClientId))
+    end
+  end,
+  mnesia:activity(transaction,Fun).
+
+recover(ClientId)->
+  Fun = fun() ->
+    case mnesia:read(?SESSION_TABLE,ClientId, read) of
+      [] ->
+        {0,[]};
+      [Session] ->
+        recover(Session)
+    end
+  end;
+
+
+
 recover(#mqtt_session{qos1 = UnAck1, qos2 = UnAck2,
-  qos2_rec = Rec, packet_id = PacketSeq}) ->
+                      qos2_rec = Rec, packet_id = PacketSeq}) ->
   NewPackets =
     [ to_publish(?QOS_AT_LEAST_ONCE,Packet) || Packet  <- dict:to_list(UnAck1)] ++
     [ to_publish(?QOS_AT_MOST_ONCE,Packet)  || Packet  <- dict:to_list(UnAck2)] ++
@@ -67,8 +157,8 @@ recover(#mqtt_session{qos1 = UnAck1, qos2 = UnAck2,
 
 to_publish(QoS,{PacketId,{Content,Topic,Retain}})->
   #'PUBLISH'{content = Content,packet_id = PacketId,
-    qos = QoS,topic = Topic,
-    dup = true,retain = Retain}.
+              qos = QoS,topic = Topic,
+              dup = true,retain = Retain}.
 
 to_pubrel(PacketId)->
   #'PUBREL'{packet_id = PacketId}.
@@ -84,3 +174,8 @@ new(ClientId)->
     qos2_rec = dict:new(),
     refs = dict:new()
   }.
+
+client_do(ClientId,Action)  ->
+ok
+.
+

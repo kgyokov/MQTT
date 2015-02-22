@@ -13,14 +13,14 @@
 -include("mqtt_packets.hrl").
 
 %% API
--export([read/1, read/3, read_at_least/2, parse_string/1, parse_variable_length/1, parse_packet/1]).
+-export([parse_packet/1
+  %% ,read/1, read/3, read_at_least/2, parse_string/1, parse_variable_length/1
+]).
 
 
-%%
-%%
+%% ========================================================
 %% Communication Adaptors
-%%
-%%
+%% ========================================================
 
 read_at_least(#parse_state {max_buffer_size =  MaxBufferSize},  TotalExpected)
   when TotalExpected >  byte_size(MaxBufferSize) ->
@@ -54,15 +54,13 @@ read(ReadFun, _MaxBufferSize, Buffer) ->
 read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun = ReadFun}) ->
   S#parse_state{ buffer =  read(ReadFun, MaxBufferSize, Buffer)}.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
+%% ========================================================
 %%      PRIMITIVES:
 %%
 %%      strings
 %%      variable lengths
 %%      etc
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ========================================================
 
 %%[MQTT-1.5.3]
 parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
@@ -92,8 +90,7 @@ parse_string_maybe(Flag, Buffer)->
     1 ->
       {ok, Str, Rest} =  parse_string(Buffer),
       {Str,Rest}
-  end
-.
+  end.
 
 %%
 %% Parses integer using variable length-encoding
@@ -110,8 +107,7 @@ parse_variable_length(S = #parse_state{buffer = <<HasMore:1,Length:7, Rest/binar
   if HasMore =:= 1 ->
     parse_variable_length(S#parse_state{buffer = Rest}, NewSum, Multiplier * 128);
     true -> {ok, NewSum, Rest}
-  end
-;
+  end;
 
 parse_variable_length(S, Sum, Multiplier) ->
   parse_variable_length(read(S), Sum, Multiplier) %% not enough data in the buffer
@@ -129,12 +125,12 @@ parse_variable_length(S, Sum, Multiplier) ->
 %%   parse_variable_length(ReadFun, ReadFun(Bytes), Sum, Multiplier).
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
+%% ========================================================
 %% Parsing
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ========================================================
 
+
+-spec parse_packet(S::any()) -> {ok, tuple(), #parse_state{}} | {error, any()}.
 parse_packet(S)->
   try parse_packet_unsafe(S) of
     {ParsedPacket, NewState} -> {ok,ParsedPacket, NewState}
@@ -153,17 +149,16 @@ parse_packet_unsafe(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binar
   %% parse the entire packet based on type, flags, and all other remaining data
   ParsedPacket = parse_specific_type(Type,Flags,S#parse_state{buffer = PacketRemainder}),
   %% return
-  {ParsedPacket, S#parse_state{buffer = StartOfNextPacket}}
-;
+  {ParsedPacket, S#parse_state{buffer = StartOfNextPacket}};
 
 %% Insufficient data in Buffer
 parse_packet_unsafe(S)->
   parse_packet_unsafe(read(S))
 .
 
-%%%%%%%%%%%%%%
+%% ========================================================
 %% CONNECT -- COMPLETE!!!
-%%%%%%%%%%%%%%
+%% ========================================================
 
 %% MQTT 3.1.2.1 - "The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”, capitalized as shown.
 %% The string, its offset and length will not be changed by future versions of the MQTT specification."
@@ -190,8 +185,7 @@ parse_specific_type(?CONNECT,
     will = WillDetails,
     username = Username,
     password = Password
-  }
-;
+  };
 
 
 parse_specific_type(?CONNACK,_Flags, #parse_state{buffer = <<0:7,SessionPresent:1,Code:8>>}) ->
@@ -200,18 +194,18 @@ parse_specific_type(?CONNACK,_Flags, #parse_state{buffer = <<0:7,SessionPresent:
 parse_specific_type(?DISCONNECT,_Flags,_S) ->
   #'DISCONNECT'{};
 
-%%%%%%%%%%%%%%
+%% ========================================================
 %% PING -- COMPLETE!!!
-%%%%%%%%%%%%%%
+%% ========================================================
 parse_specific_type(?PINGREQ,_Flags,_S) ->
   #'PINGREQ'{};
 
 parse_specific_type(?PINGRESP,_Flags,_S) ->
   #'PINGRESP'{};
 
-%%%%%%%%%%%%%%
+%% ========================================================
 %% PUBLISH -- COMPLETE!!!
-%%%%%%%%%%%%%%
+%% ========================================================
 
 parse_specific_type(?PUBLISH,Flags,S) ->
   <<Dup:1,QoS:2,Retain:1>> = Flags,
@@ -255,9 +249,9 @@ parse_specific_type(?PUBREL,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
 parse_specific_type(?PUBCOMP,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
   #'PUBCOMP'{packet_id = PacketId};
 
-%%%%%%%%%%%%%%
+%% ========================================================
 %% SUBSCRIPTIONS - COMPLETE!!!
-%%%%%%%%%%%%%%
+%% ========================================================
 
 parse_specific_type(?SUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
   Subscriptions = lists:reverse(parse_topic_subscriptions(Rest)),
@@ -340,6 +334,5 @@ parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer)->
           topic = WillTopic
         },
         Rest2
-      }
-.
+      }.
 

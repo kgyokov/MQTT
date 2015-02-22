@@ -48,7 +48,10 @@ split_topic_test_()->
       mqtt_topic:split_topic(<<"A/1/B/"/utf8>>)),
     ?_assertEqual(
       [<<"A"/utf8>>,"/",<<"1"/utf8>>,"/","#"],
-      mqtt_topic:split_topic(<<"A/1/#"/utf8>>))
+      mqtt_topic:split_topic(<<"A/1/#"/utf8>>)),
+    ?_assertEqual(
+      [<<"A"/utf8>>,"/",<<>>,"/"],
+      mqtt_topic:split_topic(<<"A//"/utf8>>))
    ].
 
 explode_topic_test_() ->

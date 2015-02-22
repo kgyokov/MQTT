@@ -10,9 +10,13 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    {ok,_} = ranch:start_listener(mqtt, 100, ranch_tcp, [{port,5555}],mqtt_connection_sup1,[]),
-    %%io:write(Return),
-    mqtt_sup:start_link().
+  TransOpts = [{port,5555}],
+  ProtOpts = [
+    {shutdown,5000},
+    {connection_type, supervisor} %% mqtt_ranch_sup is an adaptor for the mqtt_connection_sup
+  ],
+  {ok,_} = ranch:start_listener(mqtt, 1000, ranch_tcp, TransOpts, mqtt_ranch_sup, ProtOpts),
+  mqtt_sup:start_link().
 
 stop(_State) ->
     ok.

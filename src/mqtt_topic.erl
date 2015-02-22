@@ -17,11 +17,8 @@
 
 
 
--record(high_fan_in, {topic, subscribers = []}).
-
-
 %% @doc
-%% Tells us if second topic pattern covers the first one.
+%% Tells us if the 2nd topic pattern covers the 1st one.
 %% Examples
 %% /user/+/location covers /user/123/location
 %% /user/# covers /user/123/location
@@ -35,12 +32,13 @@ is_covered_by(Pattern,Cover)->
   seg_is_covered_by(PL,CL)
 .
 
-seg_is_covered_by(_,["/","#"])  -> true;  %%  '/#' definiteyl covers '_' (everyrhing)
-seg_is_covered_by(_,["#"])      -> true;  %%  '#' definiteyl covers '_' (everyrhing)
+seg_is_covered_by(_,["/","#"])  -> true;  %%  '/#' definitely covers '_' (everything)
+seg_is_covered_by(_,["#"])      -> true;  %%  '#' definitely covers '_' (everything)
 seg_is_covered_by([],[_|_])     -> false; %% else if the pattern is longer than the potential match, there is no match
 seg_is_covered_by([_|_],[])     -> false; %% else if the patter is shorter than the potential match
-seg_is_covered_by([],[])        -> true;  %% if the pattern is as long as the potential match, there is a match
+seg_is_covered_by([],[])        -> true;  %% if the pattern is as long as the potential match, THIS IS a match
 
+%% # > + > char
 seg_is_covered_by([PH|PT],[CH|CT])->
   case {PH,CH} of
     {_,"#"}->
@@ -54,9 +52,6 @@ seg_is_covered_by([PH|PT],[CH|CT])->
     _ ->
       false
   end.
-
-
-
 
 
 %% @doc
@@ -98,16 +93,14 @@ explode_topic(ParentLevels,["/"|T]) ->
   [
     ["#","/"|ParentLevels] |
     explode_topic(["/"|ParentLevels],T)
-  ]
-;
+  ];
 
 explode_topic(ParentLevels,[Level|T]) ->
-    explode_topic([Level|ParentLevels],T) ++ explode_topic(["+"|ParentLevels],T)
-;
+    explode_topic([Level|ParentLevels],T) ++
+    explode_topic(["+"|ParentLevels],T);
 
 explode_topic(ParentLevels,[])->
-  [ParentLevels]
-.
+  [ParentLevels].
 
 %% @doc
 %% Splits a topic pattern based on delimiter
@@ -133,29 +126,15 @@ split_topic(Split,<<Rest/binary>>) ->
 
 
 
-consume_level(Binary)->
+consume_level(Binary) ->
   consume_level(<<>>,Binary).
 
-consume_level(<<>>,<<"/"/utf8,_/binary>>) ->
-  throw({error,empty_level});
-
-consume_level(<<>>,<<"#"/utf8>>) ->
-  {"#",<<>>};
-
-consume_level(_Level,<<"#"/utf8,_/binary>>) ->
-  throw({error,unexpected_wildcard});
-
-consume_level(<<>>,<<"+"/utf8,Rest/binary>>) ->
-  {"+",Rest};
-
-consume_level(Level,Rest = <<"/"/utf8,_/binary>>) ->
-  {Level,Rest};
-
-consume_level(Level,<<>>) ->
-  {Level,<<>>};
-
-consume_level(Level,<<NextChar/utf8,Rest/binary>>) ->
-  consume_level(<<Level/binary,NextChar/utf8>>,Rest).
+consume_level(<<>>,<<"#"/utf8>>) ->                   {"#",<<>>};
+consume_level(_,<<"#"/utf8,_/binary>>) ->             throw({error,unexpected_wildcard});
+consume_level(<<>>,<<"+"/utf8,Rest/binary>>) ->       {"+",Rest};
+consume_level(Level,Rest = <<"/"/utf8,_/binary>>) ->  {Level,Rest};
+consume_level(Level,<<>>) ->                          {Level,<<>>};
+consume_level(Level,<<NextCh/utf8,Rest/binary>>) ->   consume_level(<<Level/binary,NextCh/utf8>>,Rest).
 
 
 
