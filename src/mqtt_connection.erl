@@ -364,7 +364,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
   Results = [
     case Security:authorize(AuthCtx,subscribe,Sub) of
       ok ->
-        case mqtt_session_repo:append_sub(ClientId,Sub) of
+        case mqtt_session:subscribe(ClientId,Sub) of
           {error,_}->
             ?SUBSCRIPTION_FAILURE;
           {ok,QoS}->
