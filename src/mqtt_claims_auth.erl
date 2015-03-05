@@ -33,8 +33,12 @@ authenticate(Configuration, ClientId, Username, Password) ->
         throw({auth_error,Reason})
     end
   || {ClaimsGenerator,Options} <- Configuration
-  ] of ClaimsLists ->  AllClaims = lists:concat(ClaimsLists),
-                       claims_to_dictionary(AllClaims)
+  ] of ClaimsLists ->
+                        AllClaims = lists:concat(ClaimsLists),
+                        lists:foldr(
+                          fun({ClaimType,ClaimVal},Dict)-> dict:append_list(ClaimType,ClaimVal,Dict) end,
+                          dict:new(), AllClaims
+                        )
   catch
   throw:{auth_error,Reason} ->
     {error,Reason}
@@ -53,10 +57,6 @@ authorize(AuthCtx, Action, Resource) ->
 %%% Internal functions
 %%%===================================================================
 
-claims_to_dictionary(AllClaims)->
-  lists:foldr(
-    fun({ClaimType,ClaimVal},Dict)-> dict:append_list(ClaimType,ClaimVal,Dict) end,
-    dict:new(), AllClaims).
 
 is_covered_by_claim(AuthCtx,ClaimType,Topic)->
   case dict:find(ClaimType,AuthCtx) of

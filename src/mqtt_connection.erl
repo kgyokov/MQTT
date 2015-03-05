@@ -10,6 +10,7 @@
 -author("Kalin").
 
 -include("mqtt_packets.hrl").
+-include("mqtt_session.hrl").
 -behaviour(gen_server).
 
 %% API
@@ -98,26 +99,16 @@ close_duplicate(Pid) ->
 %%    {stop, Reason :: term()} | ignore).
 init([SenderPid,Options]) ->
   process_flag(trap_exit,true),
-  OptsDict = options_to_dict(Options),
-  ConnectTimeOut = case dict:fetch(connect_timeout,OptsDict) of
-                     {ok,TOValue} ->
-                       TOValue;
-                     error ->
-                       ?CONNECT_DEFAULT_TIMEOUT
-                   end,
+
+  ConnectTimeOut = proplists:get_value(connect_timeout,Options,?CONNECT_DEFAULT_TIMEOUT),
   set_connect_timer(ConnectTimeOut),
-  {Security,SecConf} = case dict:fetch(security,OptsDict) of
-                         {ok,SecValue} ->
-                           SecValue;
-                         error ->
-                           {gen_auth_default,undefined}
-                       end,
+  {Security,SecConf} = proplists:get_value(security,{gen_auth_default,undefined}),
 
   {ok, #state{
     connect_state = starting,
     sender_pid =  SenderPid,
     receiver_pid = undefined, %% TODO decide how to handle this
-    options = OptsDict,
+    options = Options,
     security = {Security,SecConf}
   }}.
 
@@ -138,7 +129,7 @@ init([SenderPid,Options]) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_call({publish, {Message,Topic,QoS,PacketId,Retain}}, From, S)->
+handle_call({publish, {Message,Topic,QoS,PacketId,Retain}}, _From, S)->
   send_to_client(S,#'PUBLISH'{
      content = Message,
      topic = Topic,
@@ -263,13 +254,13 @@ handle_packet(#'CONNECT'{protocol_version = ProtocolVersion},
   send_to_client(S,#'CONNACK'{return_code = ?UNACCEPTABLE_PROTOCOL}),
   abort_connection(S, unknown_protocol_version);
 
-handle_packet(#'CONNECT'{client_id = <<>>,clean_session = 0}, S) ->
+handle_packet(#'CONNECT'{client_id = <<>>,clean_session = false}, S) ->
   send_to_client(S, #'CONNACK'{return_code = ?IDENTIFIER_REJECTED}),
   disconnect_client(S,invalid_client_id);
 
 
 %% Valid packet w/o Client Id
-handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = 1}, S) ->
+handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = true}, S) ->
   ClientId = auto_generate_client_id(),
   handle_packet(Packet#'CONNECT'{client_id = ClientId}, S);
 
@@ -277,9 +268,9 @@ handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = 1}, S) ->
 %%
 %% Valid complete packet!
 %%
-handle_packet(Packet = #'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
-                                  clean_session = CleanSession,will = Will,
-                                  password = Password,username = Username},
+handle_packet(#'CONNECT'{ client_id = ClientId,keep_alive = KeepAliveTimeout,
+                          clean_session = CleanSession,will = Will,
+                          password = Password,username = Username},
     %%disallow duplicate CONNECT packets
     S = #state{connect_state = connecting,security = {Security,SecConf}}) ->
 
@@ -317,7 +308,7 @@ handle_packet(Packet = #'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTim
       %% @todo:  Determine session present
       send_to_client(S, #'CONNACK'{return_code = ?CONECTION_ACCEPTED, session_present = SessionPresent}),
       S3 = S2#state{client_id = ClientId,connect_state = connected,will = Will},
-      {ok, S3}
+      {noreply,S3}
   end;
 
 %% Catch- all case
@@ -330,24 +321,29 @@ handle_packet(Packet = #'PUBLISH'{topic = Topic},
               S = #state{security = {Security,_},auth_ctx = AuthCtx}) ->
   case Security:authorize(AuthCtx,publish,Topic) of
     ok ->
-      handle_publish(Packet,S);
+      handle_publish(Packet,S),
+      {noreply,S};
     {error,_Details}->
       abort_connection(S,unauthorized)
   end;
 
 
-handle_packet(#'PUBACK'{packet_id = PacketId}, #state{client_id = ClientId}) ->
-  mqtt_session_repo:message_ack(ClientId,PacketId);
+handle_packet(#'PUBACK'{packet_id = PacketId}, S = #state{client_id = ClientId}) ->
+  mqtt_session:message_ack(ClientId,PacketId),
+  {noreply,S};
 
-handle_packet(#'PUBREC'{packet_id = PacketId}, #state{client_id = ClientId}) ->
-  mqtt_session_repo:message_pub_rec(ClientId,PacketId);
+handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{client_id = ClientId}) ->
+  mqtt_session:message_pub_rec(ClientId,PacketId),
+  {noreply,S};
 
-handle_packet(#'PUBCOMP'{packet_id = PacketId}, #state{client_id = ClientId}) ->
-  mqtt_session_repo:message_pub_comp(ClientId,PacketId);
+handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{client_id = ClientId}) ->
+  mqtt_session:message_pub_comp(ClientId,PacketId),
+  {noreply,S};
 
 handle_packet(#'PUBREL'{packet_id = PacketId}, S) ->
-  mqtt_publisher:exactly_once_phase2(PacketId),
-  send_to_client(S,#'PUBCOMP'{packet_id = PacketId});
+  mqtt_publish:exactly_once_phase2(PacketId, S),
+  send_to_client(S,#'PUBCOMP'{packet_id = PacketId}),
+  {noreply,S};
 
 handle_packet(#'SUBSCRIBE'{subscriptions = []}, S) ->
   abort_connection(S,protocol_violation);
@@ -379,18 +375,21 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
     end
     || Sub  <- Subs],
   Ack = #'SUBACK'{packet_id = PacketId,return_codes = Results},
-  send_to_client(S,Ack);
+  send_to_client(S,Ack),
+  {noreply,S};
 
 
 handle_packet(#'UNSUBSCRIBE'{packet_id = PacketId,topic_filters = Filters},
                S = #state{client_id = ClientId}) ->
   [ ok = mqtt_session_repo:remove_sub(ClientId,Filter) || Filter <- Filters],
   Ack = #'UNSUBACK'{packet_id = PacketId},
-  send_to_client(S,Ack);
+  send_to_client(S,Ack),
+  {noreply,S};
 
 
 handle_packet(#'PINGREQ'{}, S) ->
-  send_to_client(S, #'PINGRESP'{});
+  send_to_client(S, #'PINGRESP'{}),
+  {noreply,S};
 
 
 handle_packet(#'DISCONNECT'{}, S) ->
@@ -404,40 +403,44 @@ handle_packet(_, S) ->
   abort_connection(S,malformed_packet).
 
 
-handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
-                          qos = Qos,content = Content,
-                          dup = Dup,topic = Topic},
-    S)
-  ->
-  publish(S, Topic,Content,PacketId,Qos,Retain)
-.
-
-%%
+%% =================================================
 %% Publish
-%%
+%% =================================================
 
-publish(S,Topic,Content,_PacketId,_Qos = 0,Retain)->
-  mqtt_publisher:at_most_once(Topic,Content,Retain);
+handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
+                                qos = Qos,content = Content,
+                                dup = Dup,topic = Topic},
+                S = #state{client_id = ClientId})
+  ->
+  Msg = #mqtt_message{packet_id = PacketId,client_id = ClientId,
+                      content = Content,dup = Dup,
+                      qos = Qos,retain = Retain,
+                      topic = Topic},
+  publish(Msg,S).
 
-publish(S,Topic,Content,PacketId,_Qos = 1,Retain)->
-  mqtt_publisher:at_least_once(Topic,PacketId,Content,Retain),
-  send_to_client(S, #'PUBACK'{packet_id = PacketId});
+publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},S)->
+  case Qos of
+    0 ->
+      mqtt_publish:at_most_once(Msg,S);
+    1 ->
+      mqtt_publish:at_least_once(Msg,S),
+      send_to_client(S, #'PUBACK'{packet_id = PacketId});
+    2 ->
+      mqtt_publish:exactly_once_phase1(Msg,S),
+      send_to_client(S, #'PUBREC'{packet_id = PacketId})
+  end.
 
-publish(S,Topic,Content,PacketId,_Qos = 2,Retain)->
-  mqtt_publisher:exactly_once_phase1(Topic,PacketId,Content,Retain),
-  send_to_client(S, #'PUBREC'{packet_id = PacketId}).
 
-
-%%
+%%%===================================================================
 %% SESSION interaction
-%%
+%%%===================================================================
 
 register_self(ClientId)->
   mqtt_registration_repo:register(self(),ClientId).
 
-%%
+%% =================================================
 %% Timer
-%%
+%% =================================================
 
 set_connect_timer(Timeout)->
   timer:send_after(Timeout, connect_timeout).
@@ -466,9 +469,9 @@ reset_timer(Ref,TimeOut)->
   end,
   set_keep_alive_timer(TimeOut).
 
-%%
+%% =================================================
 %% Communication with Sender process
-%%
+%% =================================================
 
 send_to_client(#state{sender_pid = SenderPid},Packet)->
   mqtt_sender:send_packet(SenderPid,Packet);
@@ -477,28 +480,23 @@ send_to_client(SenderPid,Packet) when is_pid(SenderPid)->
   mqtt_sender:send_packet(SenderPid,Packet).
 
 
-abort_connection(S = #state{will = Will},Reason)  ->
+abort_connection(S = #state{will = Will, client_id = ClientId},Reason) ->
   case Will of
     undefined ->
       ok;
-    #will_details{message = Message, topic = Topic,
-                  qos = QoS, retain = WillRetain} ->
-      publish(S,Topic,Message, undefined, QoS, WillRetain)
+    #will_details{message = Content, topic = Topic,
+                  qos = QoS, retain = Retain} ->
+      publish(#mqtt_message{topic = Topic, retain = Retain,
+                            qos = QoS, client_id = ClientId,
+                            content = Content}, S)
   end,
-  disconnect_client(S,Reason),
+  disconnect_client(S,Reason)
+.
+
+disconnect_client(S,Reason) ->
+  %% gen_server:call(ClientPid,{disconnect,Reason})
   {stop,normal,
-    S#state{connect_state = disconnecting}}
-.
-
-disconnect_client(#state{receiver_pid =  ReceiverPid},Reason) ->
-  %% gen_server:call(ClientPid,{disconnect,Reason})
-  disconnect_client(ReceiverPid,Reason)
-;
-
-disconnect_client(_ReceiverPid,_Reason)->
-  %% gen_server:call(ClientPid,{disconnect,Reason})
-  ok  %% TODO: Disconnect client direclty through ReceiverPid????
-.
+    S#state{connect_state = disconnecting}}.
 
 
 %% ==========================================================
@@ -506,7 +504,4 @@ disconnect_client(_ReceiverPid,_Reason)->
 %% ==========================================================
 
 auto_generate_client_id() ->
-  0.
-
-options_to_dict(Options)->
-  lists:foldr(fun({Name,Val},Acc) -> dict:append(Name,Val,Acc) end,dict:new(),Options).
+  base64:encode_to_string("__" ++ crypto:rand_bytes(24)).

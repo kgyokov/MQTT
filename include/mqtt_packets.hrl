@@ -8,25 +8,29 @@
 %%%-------------------------------------------------------------------
 -author("Kalin").
 
+-type packet_id() :: 0..16#ffff.
+-type client_id() :: binary().
+
 %%%%%%%%%%%%%%%%%%%%%%%
 %% Connections
 %%%%%%%%%%%%%%%%%%%%%%%
 
 -record(will_details,{
-  topic,
-  message,
-  qos,
-  retain
+  topic           ::binary(),
+  message         ::binary(),
+  qos             ::byte(),
+  retain          ::boolean()
 }).
 
--record('CONNECT', {protocol_name,
-  protocol_version,
-  client_id,
-  will,
-  username,
-  password,
-  clean_session,
-  keep_alive
+-record('CONNECT', {
+  protocol_name       ::binary(),
+  protocol_version    ::byte(),
+  client_id           ::client_id(),
+  will                ::#will_details{},
+  username            ::binary(),
+  password            ::binary(),
+  clean_session       ::boolean(),
+  keep_alive          ::0..16#ffff
 }).
 
 %%-record(connack_flags, {session_present}).

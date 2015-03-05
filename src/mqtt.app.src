@@ -6,7 +6,11 @@
   {applications, [
                   kernel,
                   stdlib,
-                  ranch
+%%                   crypto,
+%%                   public_key,
+%%                   sasl,
+                  ranch,
+                  poolboy
                  ]},
   {mod, { mqtt_app, []}},
   {env, []}

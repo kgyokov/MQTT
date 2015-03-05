@@ -173,21 +173,21 @@ build_rest(#'UNSUBSCRIBE'{packet_id = PacketId, topic_filters = TopicFilters})->
 build_rest(#'UNSUBACK'{packet_id = PacketId}) ->
   <<PacketId:16>>;
 
-build_rest(#'PINGREQ'{})->
+build_rest(#'PINGREQ'{})  ->
   <<>>;
 
-build_rest(#'PINGRESP'{})->
+build_rest(#'PINGRESP'{}) ->
   <<>>;
 
-build_rest(#'DISCONNECT'{})->
+build_rest(#'DISCONNECT'{}) ->
   <<>>.
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%
-%%% HELPERS
-%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%=========================================================
+%%
+%% HELPERS
+%%
+%%=========================================================
 maybe_build_string(undefined)->
   <<>>;
 maybe_build_string(S)->

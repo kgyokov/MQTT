@@ -8,17 +8,17 @@
 %%%-------------------------------------------------------------------
 -author("Kalin").
 
--record(mqtt_session, {
-  client_id,
-  subscriptions = [],
-  outgoing_qos0 = [],
-  outgoing_qos1 = [],
-  outgoing_qos2 = [],
-
-  incoming_qos0 = [], %% messages with QoS = 2 in the 2-step process of being published
-  incoming_qos1 = [],
-  incoming_qos2 = []
-}).
+%% -record(mqtt_session, {
+%%   client_id,
+%%   subscriptions = [],
+%%   outgoing_qos0 = [],
+%%   outgoing_qos1 = [],
+%%   outgoing_qos2 = [],
+%%
+%%   incoming_qos0 = [], %% messages with QoS = 2 in the 2-step process of being published
+%%   incoming_qos1 = [],
+%%   incoming_qos2 = []
+%% }).
 
 
 
@@ -56,14 +56,15 @@
 %%
 %% @end
 %%
--record(mqtt_message, {
-  packet_id,
-  state = new,  %% published, received, relegated
-  content,
-  topic,
-  qos,
-  dup = 0,
-  retain = 0
-}).
+%% -record(mqtt_message, {
+%%   packet_id,
+%%   state = new,  %% published, received, relegated
+%%   content,
+%%   topic,
+%%   qos,
+%%   dup = 0,
+%%   retain = 0
+%% }).
+
 
 

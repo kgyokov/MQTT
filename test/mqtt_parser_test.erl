@@ -340,11 +340,10 @@ parse_chunked_packet_test()->
 
 
 
-%%
-%%
+
+%%-----------------------------------------------------------
 %% Test Utilities
-%%
-%%
+%%-----------------------------------------------------------
 
 test_packet(OriginalPacket)->
   Binary = mqtt_builder:build_packet(OriginalPacket),

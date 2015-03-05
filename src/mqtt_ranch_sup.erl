@@ -16,4 +16,4 @@
 
 start_link(Ref, Socket, Transport, ProtocolOptions) ->
   TRS = {Transport,Ref,Socket},
-  mqtt_connection_sup:start_link(ProtocolOptions,TRS).
+  mqtt_connection_sup:start_link(TRS,ProtocolOptions).

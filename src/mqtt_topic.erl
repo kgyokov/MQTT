@@ -41,20 +41,17 @@ seg_is_covered_by([],[])        -> true;  %% if the pattern is as long as the po
 %% # > + > char
 seg_is_covered_by([PH|PT],[CH|CT])->
   case {PH,CH} of
-    {_,"#"}->
-      true;
-    {"#",_}->
-      false;
-    {_,"+"}->
-      seg_is_covered_by(PT,CT);
-    {PH,PH}->
-      seg_is_covered_by(PT,CT);
-    _ ->
-      false
+    {_,"#"} -> true;
+    {"#",_} -> false;
+    {_,"+"} -> seg_is_covered_by(PT,CT);
+    {PH,PH} -> seg_is_covered_by(PT,CT);
+    _       -> false
   end.
 
 
 %% @doc
+%% Number of possible matching subscriptions is O(N^2), where N is the number of levels
+%%
 %% Explodes a topic into the various possible patterns that can match it
 %% e.g.   /user/1234/location :
 %% /#
@@ -71,7 +68,6 @@ seg_is_covered_by([PH|PT],[CH|CT])->
 %%
 %% This ensures quick matching to high fan-in subscriptions, e.g. /user/#
 %% @end
-%%
 
 explode_topic(<<TopicLevels/binary>>)->
   explode_topic(split_topic(TopicLevels));

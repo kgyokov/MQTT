@@ -40,7 +40,7 @@
     permanent,          % must never stop
     2000,               % should be more than sufficient
     worker,             % as opposed to supervisor
-    [mqtt_receiver]
+    [mqtt_parser_server]
   }
 ).
 
@@ -66,7 +66,7 @@
 %%--------------------------------------------------------------------
 %% -spec(start_link() ->
 %%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(Options,TRS = {Transport,_Ref,Socket,_TOpts}) ->
+start_link(TRS = {Transport,_Ref,Socket},Options) ->
   SupPid = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
   {ok, SenderPid } = supervisor:start_child(SupPid,
     ?SENDER_SPEC(Transport,Socket)),
