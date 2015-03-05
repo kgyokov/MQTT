@@ -32,6 +32,26 @@ merge_max(Maximals,NewMax) ->
 		false   -> [NewMax|DedupL]
 	end.
 
+normalize(<<Pattern>>) ->
+	LPattern = split_topic(Pattern),
+	list_to_binary(normalize(LPattern));
+
+normalize([Ptn]) ->
+	RPtn = lists:reverse(Ptn),
+	NPtn = case RPtn of
+		       ["#"|T] -> lists:reverse(["#" | eliminate_p(T)]);
+		       _       -> Ptn
+	       end,
+	case NPtn of
+		["/","#"|T] -> ["#",T];
+		_           -> NPtn
+	end.
+
+eliminate_p(["/","+"|T]) ->
+	eliminate_p(T);
+
+eliminate_p(T) ->
+	T.
 %% @doc
 %% Tells us if the 2nd topic pattern covers the 1st one.
 %% Examples
