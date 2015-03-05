@@ -21,6 +21,7 @@
 
 
 subscribe(Session = #session_out{subscriptions = Subs},NewSubs) ->
+
 	Results = [ {add_or_replace(NewSub,Subs),NewSub} || NewSub <- NewSubs ],
 	ok.
 

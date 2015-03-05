@@ -14,8 +14,8 @@
 
 %% API
 -export([parse_packet/1
-  %% ,read/1, read/3, read_at_least/2, parse_string/1, parse_variable_length/1
-]).
+	%% ,read/1, read/3, read_at_least/2, parse_string/1, parse_variable_length/1
+	, parse_string/1, parse_variable_length/1]).
 
 
 %% ========================================================

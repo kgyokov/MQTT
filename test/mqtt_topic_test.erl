@@ -38,6 +38,38 @@
 %% /+/+/+
 
 
+distinct_test_() ->
+	[
+		?_test(lists_are_equal(
+								[],
+			mqtt_topic:distinct([])
+		)),
+		?_test(lists_are_equal(
+			mqtt_topic:distinct([<<"/A/1/B">>]),
+			[<<"/A/1/B">>]
+		)),
+		?_test(lists_are_equal(
+			mqtt_topic:distinct([<<"/A/1/B">>,<<"/A/2/B">>]),
+			[<<"/A/1/B">>,<<"/A/2/B">>]
+		)),
+		?_test(lists_are_equal(
+			mqtt_topic:distinct([<<"/A/1/B">>,<<"/A/2/B">>,<<"/A/1/+">>]),
+			[<<"/A/2/B">>,<<"/A/1/+">>]
+		)),
+		?_test(lists_are_equal(
+			mqtt_topic:distinct([<<"/A/1/B">>,<<"/A/2/B">>,<<"/A/+/B">>]),
+			[<<"/A/+/B">>]
+		)),
+		?_test(lists_are_equal(
+			mqtt_topic:distinct([<<"/A/1/B">>,<<"/A/2/B">>,<<"/A/+/B">>,<<"/A/3/C">>]),
+			[<<"/A/+/B">>,<<"/A/3/C">>]
+		)),
+		?_test(lists_are_equal(
+			mqtt_topic:distinct([<<"/A/1/B">>,<<"/A/2/B">>,<<"/A/+/B">>,<<"/A/3/C">>,<<"/A/4/C">>,<<"/A/+/C">>,<<"/A/#">>]),
+			[<<"/A/#">>]
+		))
+	].
+
 split_topic_test_()->
   [
     ?_assertEqual(

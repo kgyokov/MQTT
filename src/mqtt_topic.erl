@@ -10,12 +10,27 @@
 -author("Kalin").
 
 %% API
--export([explode_topic/1, is_covered_by/2, split_topic/1]).
-
-%%
-%% Expands a topic to any possible wildcard match
+-export([explode_topic/1, is_covered_by/2, split_topic/1, distinct/1]).
 
 
+%% Topic patterns form a Partially-ordered set through the 'is_covered_by' relationship.
+%% Runs O(N^2)
+distinct(Covers) ->
+	distinct([],Covers).
+
+distinct(Maximals,[]) ->
+	Maximals;
+
+distinct(Maximals,[H|T]) ->
+	distinct(merge_max(Maximals,H),T).
+
+merge_max(Maximals,NewMax) ->
+	%% DedupL = lists:filter(fun(Max) -> not is_covered_by(Max,NewMax)  end, Maximals),
+	DedupL = [ Max || Max <- Maximals, not is_covered_by(Max,NewMax) ],
+	case lists:any(fun(Max) -> is_covered_by(NewMax,Max) end, DedupL) of
+		true    -> DedupL;
+		false   -> [NewMax|DedupL]
+	end.
 
 %% @doc
 %% Tells us if the 2nd topic pattern covers the 1st one.
@@ -29,8 +44,7 @@
 is_covered_by(Pattern,Cover)->
   PL = split_topic(Pattern),
   CL = split_topic(Cover),
-  seg_is_covered_by(PL,CL)
-.
+  seg_is_covered_by(PL,CL).
 
 seg_is_covered_by(_,["/","#"])  -> true;  %%  '/#' definitely covers '_' (everything)
 seg_is_covered_by(_,["#"])      -> true;  %%  '#' definitely covers '_' (everything)
@@ -40,13 +54,13 @@ seg_is_covered_by([],[])        -> true;  %% if the pattern is as long as the po
 
 %% # > + > char
 seg_is_covered_by([PH|PT],[CH|CT])->
-  case {PH,CH} of
-    {_,"#"} -> true;
-    {"#",_} -> false;
-    {_,"+"} -> seg_is_covered_by(PT,CT);
-    {PH,PH} -> seg_is_covered_by(PT,CT);
-    _       -> false
-  end.
+	case {PH,CH} of
+		{_,"#"} -> true;
+		{"#",_} -> false;
+		{_,"+"} -> seg_is_covered_by(PT,CT);
+		{PH,PH} -> seg_is_covered_by(PT,CT);
+		_       -> false
+	end.
 
 
 %% @doc
