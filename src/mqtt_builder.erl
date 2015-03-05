@@ -18,8 +18,7 @@ build_packet(Packet) ->
   Rest = build_rest(Packet),
   <<(build_packet_type(Packet)):4,(build_flags(Packet))/bits,
   (build_var_length(byte_size(Rest)))/binary,
-  Rest/binary>>
-.
+  Rest/binary>>.
 
 build_flags(Packet)->
   case Packet of
@@ -30,8 +29,7 @@ build_flags(Packet)->
     #'PUBLISH' { qos = QoS, dup = Dup, retain = Retain } ->
       <<Dup:1,QoS:2,Retain:1>>;
     _ -> <<0:4>>
-  end
-.
+  end.
 
 build_packet_type(Packet)->
   case Packet of
@@ -49,8 +47,7 @@ build_packet_type(Packet)->
        #'PINGREQ'{}  -> ?PINGREQ;
        #'PINGRESP'{}  ->?PINGRESP;
        #'DISCONNECT'{}  -> ?DISCONNECT
-     end
-.
+     end.
 
 
 build_rest(#'CONNECT'{
@@ -99,7 +96,9 @@ build_rest(#'CONNECT'{
   (maybe_build_string(Password))/binary
  >>;
 
+%%--------------------------------------------------------
 %% CONNACK
+%%--------------------------------------------------------
 build_rest(#'CONNACK'{ session_present = SessionPresent, return_code = ReturnCode})->
    <<
    0:7,
@@ -107,10 +106,9 @@ build_rest(#'CONNACK'{ session_present = SessionPresent, return_code = ReturnCod
    ReturnCode:8
   >>;
 
-%%
+%%--------------------------------------------------------
 %% PUBLISH
-%%
-
+%%--------------------------------------------------------
 %% PacketId used with Qos = 1 or 2
 build_rest(#'PUBLISH'{
   packet_id = PacketId,
@@ -149,19 +147,20 @@ build_rest(#'PUBCOMP'{packet_id = PacketId})->
 
 %%% TODO: maybe build binaries more efficiently than lists:map)
 
+%%--------------------------------------------------------
+%% Subscriptions
+%%--------------------------------------------------------
 build_rest(#'SUBSCRIBE'{packet_id = PacketId, subscriptions = Subscriptions})->
   <<
   PacketId:16,
   (list_to_binary(lists:map(fun({Topic,QoS})-> <<(build_string(Topic))/binary,0:6,QoS:2>> end, Subscriptions)))/binary
-  >>
-;
+  >>;
 
 build_rest(#'SUBACK'{packet_id = PacketId, return_codes = ReturnCodes})->
   <<
   PacketId:16,
   (list_to_binary(lists:map(fun(Code)-> <<Code:8>> end, ReturnCodes)))/binary
-  >>
-;
+  >>;
 
 
 build_rest(#'UNSUBSCRIBE'{packet_id = PacketId, topic_filters = TopicFilters})->
@@ -173,12 +172,18 @@ build_rest(#'UNSUBSCRIBE'{packet_id = PacketId, topic_filters = TopicFilters})->
 build_rest(#'UNSUBACK'{packet_id = PacketId}) ->
   <<PacketId:16>>;
 
+%%--------------------------------------------------------
+%% PING
+%%--------------------------------------------------------
 build_rest(#'PINGREQ'{})  ->
   <<>>;
 
 build_rest(#'PINGRESP'{}) ->
   <<>>;
 
+%%--------------------------------------------------------
+%% Misc
+%%--------------------------------------------------------
 build_rest(#'DISCONNECT'{}) ->
   <<>>.
 
@@ -209,8 +214,7 @@ build_var_length(Length,Acc)->
   case NextLength of
     0 -> <<Acc/binary,0:1,Length:7>>;
     _ -> build_var_length(NextLength, <<Acc/binary,1:1,Length:7>>)
-  end
-.
+  end.
 
 maybe_flag(undefined)->
   <<0:1>>;
