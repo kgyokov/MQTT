@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([explode_topic/1, is_covered_by/2, split_topic/1, distinct/1]).
+-export([explode_topic/1, is_covered_by/2, split_topic/1, distinct/1, normalize/1]).
 
 
 %% Topic patterns form a Partially-ordered set through the 'is_covered_by' relationship.
@@ -32,26 +32,30 @@ merge_max(Maximals,NewMax) ->
 		false   -> [NewMax|DedupL]
 	end.
 
-normalize(<<Pattern>>) ->
+normalize(<<Pattern/binary>>) ->
 	LPattern = split_topic(Pattern),
 	list_to_binary(normalize(LPattern));
 
-normalize([Ptn]) ->
+normalize(Ptn) when is_list(Ptn) ->
 	RPtn = lists:reverse(Ptn),
-	NPtn = case RPtn of
-		       ["#"|T] -> lists:reverse(["#" | eliminate_p(T)]);
-		       _       -> Ptn
-	       end,
+	NPtn = lists:reverse(normalize_r(RPtn)),
 	case NPtn of
-		["/","#"|T] -> ["#",T];
+		["/","#"|T2] -> ["#",T2];
 		_           -> NPtn
 	end.
 
-eliminate_p(["/","+"|T]) ->
-	eliminate_p(T);
+normalize_r(RPtn) ->
+	case RPtn of
+		["#"|T1] -> ["#" | eliminate_w(T1)];
+		_       -> RPtn
+	end.
 
-eliminate_p(T) ->
+eliminate_w(["/","+"|T]) ->
+	eliminate_w(T);
+
+eliminate_w(T) ->
 	T.
+
 %% @doc
 %% Tells us if the 2nd topic pattern covers the 1st one.
 %% Examples
@@ -117,7 +121,7 @@ explode_topic(TopicLevels) when is_list(TopicLevels)->
 %%     end).
   %lists:reverse(explode_topic([],TopicLevels)).
   %explode_topic([],TopicLevels).
-  [ list_to_binary(lists:reverse(RL)) || RL <- explode_topic([],TopicLevels)].
+  [ list_to_binary(lists:reverse(normalize_r(RL))) || RL <- explode_topic([],TopicLevels)].
 
 explode_topic(ParentLevels,["/"|T]) ->
   [
