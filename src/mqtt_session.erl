@@ -17,13 +17,15 @@
 	message_ack/2,
 	message_pub_rec/2,
 	message_pub_comp/2,
-	recover/1, subscribe/2]).
+	recover/1,
+	subscribe/2,
+	unsubscribe/2]).
 
 
 subscribe(Session = #session_out{subscriptions = Subs},NewSubs) ->
-
-	Results = [ {add_or_replace(NewSub,Subs),NewSub} || NewSub <- NewSubs ],
-	ok.
+	DistinctSubs = mqtt_topic:distinct(NewSubs),
+	[ {add_or_replace(NewSub,Subs),NewSub} || NewSub <- DistinctSubs ],
+	Session#session_out{subscriptions = []}.
 
 unsubscribe(Session = #session_out{subscriptions = Subs},Subs) ->
 	ok.
@@ -38,8 +40,7 @@ add_or_replace({Topic,QoS},Subs)->
 		        {ok,CurrentQoS} when CurrentQoS =:= QoS ->
 			        exists
 	        end,
-	dict:store(Topic,QoS,Subs),
-	State.
+	{State,dict:store(Topic,QoS,Subs)}.
 
 %%
 %% @doc

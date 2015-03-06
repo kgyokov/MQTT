@@ -40,7 +40,8 @@
 	sender_pid,                 %% The process sending to the actual device
 	receiver_pid,               %% The process receiving from the actual device TODO: Do we even need to know this???
 	options,                    %% options such as connection timeouts, etc.
-	session = #{},
+	clean_session,
+	session,
 	keep_alive_ref = undefined, %% so we can ignore old keep-alive timeout messages after restarting the timer
 	keep_alive_timeout = undefined,
 	will,
@@ -129,26 +130,6 @@ init([SenderPid,Options]) ->
 	{stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_call({publish, {Message,Topic,QoS,PacketId,Retain}}, _From, S)->
-	send_to_client(S,#'PUBLISH'{
-		content = Message,
-		topic = Topic,
-		qos = QoS,
-		dup = error(not_implemented),
-		packet_id = PacketId,
-		retain = Retain
-	});
-
-handle_call({malformed_packet,_Reason}, _From, S) ->
-	abort_connection(S, malformed_packet);
-
-handle_call({client_disconnected, _Reason}, _From, S) ->
-	{stop,normal, S#state{connect_state = disconnecting}};
-
-handle_call({force_close, Reason}, _From, S) ->
-	abort_connection(S,Reason);
-
-
 handle_call(_Request, _From, State) ->
 	{reply, ok, State}.
 
@@ -171,6 +152,25 @@ handle_cast({packet, Packet}, S) ->
 
 handle_cast({force_close,_Reason}, State) ->
 	{stop, normal, State#state{connect_state = disconnecting}};
+
+handle_cast({publish, {Message,Topic,QoS,PacketId,Retain}}, S)->
+	send_to_client(S,#'PUBLISH'{
+		content = Message,
+		topic = Topic,
+		qos = QoS,
+		dup = error(not_implemented),
+		packet_id = PacketId,
+		retain = Retain
+	});
+
+handle_cast({malformed_packet,_Reason}, S) ->
+	abort_connection(S, malformed_packet);
+
+handle_cast({force_close, Reason}, S) ->
+	abort_connection(S,Reason);
+
+handle_cast({client_disconnected, _Reason}, S) ->
+	{stop,normal, S#state{connect_state = disconnecting}};
 
 handle_cast(_Request, State) ->
 	{noreply, State}.
@@ -351,18 +351,12 @@ handle_packet(#'SUBSCRIBE'{subscriptions = []}, S) ->
 	abort_connection(S,protocol_violation);
 
 handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
-			  S = #state{client_id = ClientId,session = CleanSession,
-			             security = {Security,_},auth_ctx = AuthCtx }) ->
+			  S = #state{client_id = ClientId,security = {Security,_},
+				          auth_ctx = AuthCtx }) ->
 
+	%%=======================================================================
 	%% TODO: Use CleanSession to determine what to do
-
-
-	ok = if CleanSession ->
-		mqtt_session_repo:clear(ClientId);
-		     true -> ok
-	     end,
-
-
+	%%=======================================================================
 
 	Results = [
 		case Security:authorize(AuthCtx,subscribe,Sub) of
@@ -411,9 +405,9 @@ handle_packet(_, S) ->
 %% =================================================
 
 handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
-	qos = Qos,content = Content,
-	dup = Dup,topic = Topic},
-	S = #state{client_id = ClientId}) ->
+		qos = Qos,content = Content,
+		dup = Dup,topic = Topic},
+		S = #state{client_id = ClientId}) ->
 	%% Map packet ot internal representation
 	Msg = #mqtt_message{packet_id = PacketId,client_id = ClientId,
 		content = Content,dup = Dup,
@@ -491,10 +485,10 @@ abort_connection(S = #state{will = Will, client_id = ClientId},Reason) ->
 		undefined ->
 			ok;
 		#will_details{message = Content, topic = Topic,
-			qos = QoS, retain = Retain} ->
+					  qos = QoS, retain = Retain} ->
 			publish(#mqtt_message{topic = Topic, retain = Retain,
-				qos = QoS, client_id = ClientId,
-				content = Content}, S)
+								  qos = QoS, client_id = ClientId,
+								  content = Content}, S)
 	end,
 	disconnect_client(S,Reason)
 .
