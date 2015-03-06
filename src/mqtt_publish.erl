@@ -68,7 +68,7 @@ recover(Session =  #session_in{packet_seq = Seq, msg_in_flight = Msg}) ->
   persist_session(Session#session_in{msg_in_flight = undefined}).
 
 fwd_message(Msg = #mqtt_message{ topic = Topic},Seq) ->
-  [ fwd_to_cover(Cover,Msg,Seq) || Cover <- mqtt_topic:explode_topic(Topic)].
+  [ fwd_to_cover(Cover,Msg,Seq) || Cover <- mqtt_topic:explode(Topic)].
 
 fwd_to_cover(Cover,Msg,Seq) ->
   ok.

@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([explode_topic/1, is_covered_by/2, split_topic/1, distinct/1, normalize/1]).
+-export([explode/1, is_covered_by/2, split/1, distinct/1, normalize/1]).
 
 
 %% Topic patterns form a Partially-ordered set through the 'is_covered_by' relationship.
@@ -33,7 +33,7 @@ merge_max(Maximals,NewMax) ->
 	end.
 
 normalize(<<Pattern/binary>>) ->
-	LPattern = split_topic(Pattern),
+	LPattern = split(Pattern),
 	list_to_binary(normalize(LPattern));
 
 normalize(Ptn) when is_list(Ptn) ->
@@ -66,8 +66,8 @@ eliminate_w(T) ->
 %%
 %% @end
 is_covered_by(Pattern,Cover)->
-  PL = split_topic(Pattern),
-  CL = split_topic(Cover),
+  PL = split(Pattern),
+  CL = split(Cover),
   seg_is_covered_by(PL,CL).
 
 seg_is_covered_by(_,["/","#"])  -> true;  %%  '/#' definitely covers '_' (everything)
@@ -107,10 +107,10 @@ seg_is_covered_by([PH|PT],[CH|CT])->
 %% This ensures quick matching to high fan-in subscriptions, e.g. /user/#
 %% @end
 
-explode_topic(<<TopicLevels/binary>>)->
-  explode_topic(split_topic(TopicLevels));
+explode(<<TopicLevels/binary>>)->
+  explode(split(TopicLevels));
 
-explode_topic(TopicLevels) when is_list(TopicLevels)->
+explode(TopicLevels) when is_list(TopicLevels)->
 %%   lists:map(
 %%     fun(Topic)->
 %%       list_to_binary(lists:map(
@@ -141,22 +141,22 @@ explode_topic(ParentLevels,[])->
 %% /user/123/location -> ["/",<<"user">>,"/",<<"123>>,"/",<<"location">>]
 %%
 %% @end
-split_topic(Topic) ->
-  lists:reverse(split_topic([],Topic))
+split(Topic) ->
+  lists:reverse(split([],Topic))
 .
 
-split_topic(Split,<<>>) ->
+split(Split,<<>>) ->
   Split;
 
-split_topic(["#"|_],_Rest) ->
+split(["#"|_],_Rest) ->
   throw({error,invalid_wildcard});
 
-split_topic(Split,<<"/"/utf8,Rest/binary>>) ->
-  split_topic(["/"|Split],Rest);
+split(Split,<<"/"/utf8,Rest/binary>>) ->
+  split(["/"|Split],Rest);
 
-split_topic(Split,<<Rest/binary>>) ->
+split(Split,<<Rest/binary>>) ->
   {NextLevel,Rest1} = consume_level(Rest),
-  split_topic([NextLevel|Split],Rest1).
+  split([NextLevel|Split],Rest1).
 
 
 
