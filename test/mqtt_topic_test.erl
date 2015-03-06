@@ -77,7 +77,7 @@ distinct_test_() ->
 		))
 	].
 
-split_topic_test_()->
+split_test_()->
   [
     ?_assertEqual(
       ["/",<<"A"/utf8>>,"/",<<"1"/utf8>>,"/",<<"B"/utf8>>],
@@ -93,7 +93,7 @@ split_topic_test_()->
       mqtt_topic:split(<<"A//"/utf8>>))
    ].
 
-explode_topic_test_() ->
+explode_test_() ->
 [
   ?_test(lists_are_equal([
     <<"/#"/utf8>>,
@@ -103,6 +103,7 @@ explode_topic_test_() ->
     <<"/A/1/+"/utf8>>,
     <<"/A/+/B"/utf8>>,
     <<"/A/+/+"/utf8>>,
+	<<"/+/1/#"/utf8>>,
     <<"/+/1/B"/utf8>>,
     <<"/+/1/+"/utf8>>,
     <<"/+/+/B"/utf8>>,
@@ -113,28 +114,34 @@ explode_topic_test_() ->
     <<"#"/utf8>>,
     <<"A/#"/utf8>>,
     <<"A/1/#"/utf8>>,
-    <<"A/1/B"/utf8>>,
-    <<"A/1/+"/utf8>>,
-    <<"A/+/B"/utf8>>,
-    <<"A/+/+"/utf8>>,
-    <<"+/1/B"/utf8>>,
-    <<"+/1/+"/utf8>>,
-    <<"+/+/B"/utf8>>,
-    <<"+/+/+"/utf8>>
+    <<"A/1/B/"/utf8>>,
+	<<"A/1/B/#"/utf8>>,
+    <<"A/1/+/"/utf8>>,
+    <<"A/+/B/"/utf8>>,
+	<<"A/+/B/#"/utf8>>,
+    <<"A/+/+/"/utf8>>,
+    <<"+/1/B/"/utf8>>,
+	<<"+/1/B/#"/utf8>>,
+	<<"+/1/#"/utf8>>,
+    <<"+/1/+/"/utf8>>,
+    <<"+/+/B/"/utf8>>,
+	<<"+/+/B/#"/utf8>>,
+    <<"+/+/+/"/utf8>>
   ],
     mqtt_topic:explode(<<"A/1/B/"/utf8>>))),
   ?_test(lists_are_equal([
     <<"#"/utf8>>,
     <<"A/#"/utf8>>,
     <<"A/1/#"/utf8>>,
-    <<"A/1/B/"/utf8>>,
-    <<"A/1/+/"/utf8>>,
-    <<"A/+/B/"/utf8>>,
-    <<"A/+/+/"/utf8>>,
-    <<"+/1/B/"/utf8>>,
-    <<"+/1/+/"/utf8>>,
-    <<"+/+/B/"/utf8>>,
-    <<"+/+/+/"/utf8>>
+    <<"A/1/B"/utf8>>,
+    <<"A/1/+"/utf8>>,
+    <<"A/+/B"/utf8>>,
+    <<"A/+/+"/utf8>>,
+	<<"+/1/#"/utf8>>,
+    <<"+/1/B"/utf8>>,
+    <<"+/1/+"/utf8>>,
+    <<"+/+/B"/utf8>>,
+    <<"+/+/+"/utf8>>
   ],
     mqtt_topic:explode(<<"A/1/B"/utf8>>)))
 ].

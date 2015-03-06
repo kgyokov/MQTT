@@ -107,33 +107,26 @@ seg_is_covered_by([PH|PT],[CH|CT])->
 %% This ensures quick matching to high fan-in subscriptions, e.g. /user/#
 %% @end
 
+-spec explode(binary()) -> [binary()].
 explode(<<TopicLevels/binary>>)->
   explode(split(TopicLevels));
 
-explode(TopicLevels) when is_list(TopicLevels)->
-%%   lists:map(
-%%     fun(Topic)->
-%%       list_to_binary(lists:map(
-%%         fun(Level)->
-%%
-%%         end,
-%%         Topic))
-%%     end).
-  %lists:reverse(explode_topic([],TopicLevels)).
-  %explode_topic([],TopicLevels).
-  [ list_to_binary(lists:reverse(normalize_r(RL))) || RL <- explode_topic([],TopicLevels)].
+explode(TopicLevels) when is_list(TopicLevels) ->
+	RawList = [ list_to_binary(lists:reverse(normalize_r(RL))) || RL <- explode([],TopicLevels)],
+	Set = sets:from_list(RawList),
+	sets:to_list(Set).
 
-explode_topic(ParentLevels,["/"|T]) ->
+explode(ParentLevels,["/"|T]) ->
   [
     ["#","/"|ParentLevels] |
-    explode_topic(["/"|ParentLevels],T)
+    explode(["/"|ParentLevels],T)
   ];
 
-explode_topic(ParentLevels,[Level|T]) ->
-    explode_topic([Level|ParentLevels],T) ++
-    explode_topic(["+"|ParentLevels],T);
+explode(ParentLevels,[Level|T]) ->
+    explode([Level|ParentLevels],T) ++
+    explode(["+"|ParentLevels],T);
 
-explode_topic(ParentLevels,[])->
+explode(ParentLevels,[])->
   [ParentLevels].
 
 %% @doc
