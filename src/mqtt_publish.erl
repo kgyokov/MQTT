@@ -13,7 +13,11 @@
 -include("mqtt_session.hrl").
 
 %% API
--export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2, recover/1]).
+-export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2, recover/1, discard_will/1]).
+
+discard_will(Session) ->
+	NewSession = Session#session_in{will = undefined},
+	persist_session(NewSession).
 
 at_most_once(Msg,Session) ->
   fwd_message(Msg,Session),
