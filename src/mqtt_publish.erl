@@ -15,13 +15,11 @@
 %% API
 -export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2, recover/1]).
 
-
-
 at_most_once(Msg,Session) ->
   fwd_message(Msg,Session),
   Session.
 
-at_least_once(Msg,Session)  ->
+at_least_once(Msg,Session) ->
   fwd_message(Msg,Session),
   Session.
 
