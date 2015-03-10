@@ -9,7 +9,7 @@
 -module(mqtt_session).
 -author("Kalin").
 
--include("mqtt_packets.hrl").
+%%-include("mqtt_packets.hrl").
 -include("mqtt_session.hrl").
 %% API
 -export([append_msg/4,

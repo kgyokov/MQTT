@@ -44,6 +44,7 @@ read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, TotalExpec
 read(_ReadFun, MaxBufferSize, Buffer) when byte_size(Buffer) > MaxBufferSize  ->
   throw({error, buffer_overflow });
 read(ReadFun, _MaxBufferSize, Buffer) ->
+  io:format("Attempting to read ~n",[0]),
   case ReadFun(0) of
     {ok,NewFragment} ->
       <<Buffer/binary,NewFragment/binary>>; %% append the newly retrieved bytes

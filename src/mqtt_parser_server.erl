@@ -79,6 +79,9 @@ disconnect(Pid) ->
   {stop, Reason :: term()} | ignore).
 init([{Transport,Ref,Socket},ConnPid,Opts]) ->
   process_flag(trap_exit,true),
+  io:format("------Accepting  Connection in INIT ~p -------------~n",[Ref]),
+	%% ok = ranch:accept_ack(Ref),
+	io:format("------Accepted  Connection in INIT ~p -------------~n",[Ref]),
   ParserPid = spawn_link(fun() -> start_loop(Transport,Ref,Socket,ConnPid,Opts) end),
   S = #state{parser = ParserPid},
   {ok, S}.
@@ -180,10 +183,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 start_loop(Transport,Ref,Socket,ConnPid, Opts) ->
+  io:format("Starting loop~n"),
   TimeOut = proplists:get_value(read_timeout,Opts,30000),
   BufferSize = proplists:get_value(buffer_size,Opts,128000),
+	io:format("------Accepting  Connection in loop -------------~n"),
   ok = ranch:accept_ack(Ref),
-
+  io:format("------Accepted  Connection-------------~n"),
   %% calback for the parser process to get new data
   ReadFun =
     fun(ExpectedSize) ->
@@ -200,6 +205,7 @@ start_loop(Transport,Ref,Socket,ConnPid, Opts) ->
 loop_over_socket(ConnPid, ParseState) ->
   case mqtt_parser:parse_packet(ParseState) of
     {ok, NewPacket,NewParseState} ->
+	  io:format("received packet ~p ~n",[NewPacket]),
       mqtt_connection:process_packet(ConnPid,NewPacket),
       loop_over_socket(ConnPid,NewParseState);
     {error,Reason} ->
@@ -207,6 +213,7 @@ loop_over_socket(ConnPid, ParseState) ->
   end.
 
 handle_error(ConnPid, Reason) ->
+	io:format("received error _p ~n",[Reason]),
   case Reason of
     invalid_flags ->
       mqtt_connection:process_bad_packet(ConnPid,invalid_flags);
@@ -218,8 +225,12 @@ handle_error(ConnPid, Reason) ->
   end.
 
 %% callback for parser process
-receive_data(Transport,Socket,ExpectedData,TimeOut)->
+receive_data(Transport,Socket,ExpectedData,TimeOut) ->
   %% we can just return the {ok,Data} or {error,_} values directly to the parser process
-  Transport:recv(Socket, ExpectedData, TimeOut).
+	io:format("receiving data.."),
+	{ok,Data} =  Transport:recv(Socket, ExpectedData, TimeOut),
+	io:format("received ~n",[Data]),
+	{ok,Data}
+.
 
 

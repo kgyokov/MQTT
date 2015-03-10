@@ -88,7 +88,7 @@ init([Transport,Socket]) ->
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call({packet,Packet},_From, S)->
+handle_call({packet,Packet},_From, S) ->
   case send_as_binary(Packet,S)  of
     ok ->
       {reply, ok, S};

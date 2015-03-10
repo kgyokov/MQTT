@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 20. Feb 2015 12:40 AM
 %%%-------------------------------------------------------------------
--module(mqtt_ranch_sup).
+-module(mqtt_ranch_sup2).
 -author("Kalin").
 
 -behaviour(ranch_protocol).
@@ -15,6 +15,5 @@
 -export([start_link/4]).
 
 start_link(Ref, Socket, Transport, ProtocolOptions) ->
-  TRS = {Transport,Ref,Socket},
-	io:format("TRS = ~p, ProtOpts = ~p ~n", [TRS,ProtocolOptions]),
-  mqtt_connection_sup:start_link(TRS,ProtocolOptions).
+	mqtt_connection_sup2:create_tree(undefined,self(),Transport,Socket,ProtocolOptions),
+	mqtt_connection_sup:start_link(TRS,ProtocolOptions).

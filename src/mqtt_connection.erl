@@ -9,7 +9,7 @@
 -module(mqtt_connection).
 -author("Kalin").
 
--include("mqtt_packets.hrl").
+%%-include("mqtt_packets.hrl").
 -include("mqtt_session.hrl").
 -behaviour(gen_server).
 
@@ -45,7 +45,7 @@
 	session_out,
 	keep_alive_ref = undefined, %% so we can ignore old keep-alive timeout messages after restarting the timer
 	keep_alive_timeout = undefined,
-	will,
+	%% will,
 	security,
 	auth_ctx                    %% Authorization/Authentication context
 }).
@@ -104,7 +104,7 @@ init([SenderPid,Options]) ->
 
 	ConnectTimeOut = proplists:get_value(connect_timeout,Options,?CONNECT_DEFAULT_TIMEOUT),
 	set_connect_timer(ConnectTimeOut),
-	{Security,SecConf} = proplists:get_value(security,{gen_auth_default,undefined}),
+	{Security,SecConf} = proplists:get_value(security,Options,{gen_auth_default,undefined}),
 
 	{ok, #state{
 		connect_state = connecting,
@@ -326,7 +326,7 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
 
 			%% @todo:  Determine session present
 			send_to_client(S, #'CONNACK'{return_code = ?CONECTION_ACCEPTED, session_present = SessionPresent}),
-			S4 = S3#state{client_id = ClientId,connect_state = connected,will = Will},
+			S4 = S3#state{client_id = ClientId,connect_state = connected},
 			{noreply,S4}
 	end;
 
@@ -340,8 +340,8 @@ handle_packet(Packet = #'PUBLISH'{topic = Topic},
 	S = #state{security = {Security,_},auth_ctx = AuthCtx}) ->
 	case Security:authorize(AuthCtx,publish,Topic) of
 		ok ->
-			handle_publish(Packet,S),
-			{noreply,S};
+			S1 = handle_publish(Packet,S),
+			{noreply,S1};
 		{error,_Details} ->
 			abort_connection(S,unauthorized)
 	end;
@@ -427,7 +427,7 @@ handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
 		content = Content,dup = Dup,
 		qos = Qos,retain = Retain,
 		topic = Topic},
-	publish(Msg,S#state.session_out).
+	S#state{session_in = publish(Msg,S#state.session_in)}.
 
 publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},S)->
 	case Qos of
@@ -575,8 +575,7 @@ bad_disconnect(S) ->
 %% 				  qos = QoS, retain = Retain} = Will
 %% 	publish(#mqtt_message{topic = Topic, retain = Retain,
 %% 							qos = QoS, client_id = ClientId,
-%% 							content = Content}, S)
-.
+%% 							content = Content}, S).
 
 session_cleanup(#state{client_id = ClientId, clean_session = CleanSession}) ->
 	unregister_self(ClientId,CleanSession).

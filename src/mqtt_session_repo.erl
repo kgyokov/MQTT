@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(mqtt_session_repo).
 -author("Kalin").
--include("mqtt_packets.hrl").
+%%-include("mqtt_packets.hrl").
 -include("mqtt_session.hrl").
 %%-include("mqtt_pubsub.hrl").
 
