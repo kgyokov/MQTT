@@ -12,36 +12,36 @@
 -behaviour(supervisor).
 
 -define(SENDER_SPEC(Transport,Socket),
-	{
-		sender,
-		{mqtt_sender, start_link, [Transport,Socket]},
-		permanent,          % cannot recover from a lost connection
-		2000,               % should be more than sufficient
-		worker,             % as opposed to supervisor
-		[mqtt_sender]
-	}
+    {
+        sender,
+        {mqtt_sender, start_link, [Transport,Socket]},
+        permanent,          % cannot recover from a lost connection
+        2000,               % should be more than sufficient
+        worker,             % as opposed to supervisor
+        [mqtt_sender]
+    }
 ).
 
 -define(CONN_SPEC(SenderPid,Options),
-	{
-		connection,                               %% Id
-		{mqtt_connection, start_link, [SenderPid,Options]},
-		permanent,                                %% must never stop
-		5000,                                     %% should be more than sufficient for the process to clean up
-		worker,                                   %% as opposed to supervisor
-		[mqtt_connection]
-	}
+    {
+        connection,                               %% Id
+        {mqtt_connection, start_link, [SenderPid,Options]},
+        permanent,                                %% must never stop
+        5000,                                     %% should be more than sufficient for the process to clean up
+        worker,                                   %% as opposed to supervisor
+        [mqtt_connection]
+    }
 ).
 
 -define(RECEIVER_SPEC(TRS,ConnPid,Opts),
-	{
-		receiver,
-		{mqtt_parser_server, start_link, [TRS,ConnPid,Opts]},
-		permanent,          % must never stop
-		2000,               % should be more than sufficient
-		worker,             % as opposed to supervisor
-		[mqtt_parser_server]
-	}
+    {
+        receiver,
+        {mqtt_parser_server, start_link, [TRS,ConnPid,Opts]},
+        permanent,          % must never stop
+        2000,               % should be more than sufficient
+        worker,             % as opposed to supervisor
+        [mqtt_parser_server]
+    }
 ).
 
 
@@ -67,14 +67,14 @@
 %% -spec(start_link() ->
 %%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(TRS = {Transport,_Ref,Socket},Options) ->
-	{ok, SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
-	{ok, SenderPid } = supervisor:start_child(SupPid,
-		?SENDER_SPEC(Transport,Socket)),
-	{ok, ConnPid} = supervisor:start_child(SupPid,
-		?CONN_SPEC(SenderPid,Options)),
-	{ok, _ReceiverPid } = supervisor:start_child(SupPid,
-		?RECEIVER_SPEC(TRS,ConnPid, Options)),
-	{ok,SupPid}.
+    {ok, SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
+    {ok, SenderPid } = supervisor:start_child(SupPid,
+        ?SENDER_SPEC(Transport,Socket)),
+    {ok, ConnPid} = supervisor:start_child(SupPid,
+        ?CONN_SPEC(SenderPid,Options)),
+    {ok, _ReceiverPid } = supervisor:start_child(SupPid,
+        ?RECEIVER_SPEC(TRS,ConnPid, Options)),
+    {ok,SupPid}.
 
 %% start_link(Options,Security,Transport,_Ref,Socket,ReceiverPid) ->
 %%   {ok,SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
@@ -97,14 +97,14 @@ start_link(TRS = {Transport,_Ref,Socket},Options) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
-	{ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-		MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-		[ChildSpec :: supervisor:child_spec()]
-	}} |
-	ignore |
-	{error, Reason :: term()}).
+    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
+        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
+        [ChildSpec :: supervisor:child_spec()]
+    }} |
+    ignore |
+    {error, Reason :: term()}).
 init([]) ->
-	{ok, {{one_for_all, 0, 1}, []}}.
+    {ok, {{one_for_all, 0, 1}, []}}.
 
 %%%===================================================================
 %%% Internal functions

@@ -15,5 +15,5 @@
 -export([start_link/4]).
 
 start_link(Ref, Socket, Transport, ProtocolOptions) ->
-	mqtt_connection_sup2:create_tree(undefined,self(),Transport,Socket,ProtocolOptions),
+	mqtt_parser_server:start_link({Transport,Ref,Socket})
 	mqtt_connection_sup:start_link(TRS,ProtocolOptions).

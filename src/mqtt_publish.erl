@@ -73,7 +73,6 @@ fwd_message(Msg = #mqtt_message{ topic = Topic},Seq) ->
   [ fwd_to_cover(Cover,Msg,Seq) || Cover <- mqtt_topic:explode(Topic)].
 
 fwd_to_cover(Cover,Msg,Seq) ->
-	io:format("~n ~n ~n",[Cover,Msg,Seq]),
 	ok.
 
 persist_session(Session) ->

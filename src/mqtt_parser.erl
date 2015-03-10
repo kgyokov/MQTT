@@ -44,7 +44,6 @@ read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, TotalExpec
 read(_ReadFun, MaxBufferSize, Buffer) when byte_size(Buffer) > MaxBufferSize  ->
   throw({error, buffer_overflow });
 read(ReadFun, _MaxBufferSize, Buffer) ->
-  io:format("Attempting to read ~n",[0]),
   case ReadFun(0) of
     {ok,NewFragment} ->
       <<Buffer/binary,NewFragment/binary>>; %% append the newly retrieved bytes
@@ -65,18 +64,17 @@ read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun 
 
 %%[MQTT-1.5.3]
 parse_string(#parse_state{buffer = <<0:16,Rest/binary>>}) ->
-  {ok, <<"">>,Rest} %% empty string
-;
+  {ok, <<"">>,Rest};  %% empty string
+
 parse_string(#parse_state{buffer = <<StrLen:16,Str:StrLen/bytes,Rest/binary>>}) ->
-  {ok,Str,Rest}
-;
+  {ok,Str,Rest};
+
 parse_string(S = #parse_state{})-> %
-  parse_string(read(S)) %% fallthrough case: not enough data in the buffer
-;
+  parse_string(read(S)); %% fallthrough case: not enough data in the buffer
 
 parse_string(<<0:16,Rest/binary>>) ->
-  {ok, <<"">>,Rest} %% empty string
-;
+  {ok, <<"">>,Rest}; %% empty string
+
 parse_string(<<StrLen:16,Str:StrLen/bytes,Rest/binary>>) ->
   {ok,Str,Rest};
 
@@ -113,17 +111,6 @@ parse_variable_length(S = #parse_state{buffer = <<HasMore:1,Length:7, Rest/binar
 parse_variable_length(S, Sum, Multiplier) ->
   parse_variable_length(read(S), Sum, Multiplier) %% not enough data in the buffer
 .
-
-
-%% parse_variable_length(ReadFun, <<HasMore:1,Length:7, Rest/binary>>, Sum, Multiplier) ->
-%%   NewSum = Sum + Length * Multiplier,
-%%   if HasMore =:= 1 ->
-%%       parse_variable_length(ReadFun, Rest, NewSum, Multiplier * 128);
-%%     true -> {NewSum, Rest}
-%%   end;
-%%
-%% parse_variable_length(ReadFun, Bytes, Sum, Multiplier) ->
-%%   parse_variable_length(ReadFun, ReadFun(Bytes), Sum, Multiplier).
 
 
 %% ========================================================
@@ -280,13 +267,6 @@ parse_specific_type(?UNSUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Re
 parse_specific_type(?UNSUBACK,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
   #'UNSUBACK'{packet_id = PacketId}
 ;
-
-%% parse_specific_type('CONNECT', S) when byte_size(S#parse_state.buffer) < 10 ->
-%%   parse_specific_type('CONNECT', read(S))
-%% ;
-%% parse_specific_type('CONNECT', _) ->
-%%   throw(malformed_packet)
-%% .
 
 parse_specific_type(_Type,_Flags,_State) ->
   throw({error,malformed_packet})

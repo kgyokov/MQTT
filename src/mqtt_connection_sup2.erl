@@ -12,25 +12,25 @@
 -behaviour(supervisor).
 
 -define(SENDER_SPEC(Transport,Socket),
-	{
-		sender,
-		{mqtt_sender, start_link, [Transport,Socket]},
-		permanent,          % cannot recover from a lost connection
-		2000,               % should be more than sufficient
-		worker,             % as opposed to supervisor
-		[mqtt_sender]
-	}
+    {
+        sender,
+        {mqtt_sender, start_link, [Transport,Socket]},
+        permanent,          % cannot recover from a lost connection
+        2000,               % should be more than sufficient
+        worker,             % as opposed to supervisor
+        [mqtt_sender]
+    }
 ).
 
 -define(CONN_SPEC(SenderPid,ReceiverPid,Options),
-	{
-		connection,                               %% Id
-		{mqtt_connection, start_link, [SenderPid,ReceiverPidOptions]},
-		permanent,                                %% must never stop
-		5000,                                     %% should be more than sufficient for the process to clean up
-		worker,                                   %% as opposed to supervisor
-		[mqtt_connection]
-	}
+    {
+        connection,                               %% Id
+        {mqtt_connection, start_link, [SenderPid,ReceiverPidOptions]},
+        permanent,                                %% must never stop
+        5000,                                     %% should be more than sufficient for the process to clean up
+        worker,                                   %% as opposed to supervisor
+        [mqtt_connection]
+    }
 ).
 
 %% API
@@ -54,14 +54,15 @@
 %% -spec(start_link() ->
 %%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-	supervisor:start_link(?MODULE, []).
+    supervisor:start_link(?MODULE, []).
 
 create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
-	{ok, SenderPid } = supervisor:start_child(SupPid,
-		?SENDER_SPEC(Transport,Socket)),
-	{ok, ConnPid} = supervisor:start_child(SupPid,
-		?CONN_SPEC(SenderPid,ReceiverPid,Options)),
-	{ok, ConnPid}.
+    link()
+    {ok, SenderPid } = supervisor:start_child(SupPid,
+        ?SENDER_SPEC(Transport,Socket)),
+    {ok, ConnPid} = supervisor:start_child(SupPid,
+        ?CONN_SPEC(SenderPid,ReceiverPid,Options)),
+    {ok, ConnPid}.
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -78,14 +79,14 @@ create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
-	{ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-		MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-		[ChildSpec :: supervisor:child_spec()]
-	}} |
-	ignore |
-	{error, Reason :: term()}).
+    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
+        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
+        [ChildSpec :: supervisor:child_spec()]
+    }} |
+    ignore |
+    {error, Reason :: term()}).
 init([]) ->
-	{ok, {{one_for_all, 0, 1}, []}}.
+    {ok, {{one_for_all, 0, 1}, []}}.
 
 %%%===================================================================
 %%% Internal functions

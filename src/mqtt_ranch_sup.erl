@@ -16,5 +16,4 @@
 
 start_link(Ref, Socket, Transport, ProtocolOptions) ->
   TRS = {Transport,Ref,Socket},
-	io:format("TRS = ~p, ProtOpts = ~p ~n", [TRS,ProtocolOptions]),
   mqtt_connection_sup:start_link(TRS,ProtocolOptions).
