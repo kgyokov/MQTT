@@ -15,8 +15,8 @@
     Username::binary(),
     Password::binary()
 )->
-	{ok, AuthCtx::any()} |     %% AuthCtx can contain things like claims, etc.
-	{error,Reason::bad_credentials | any()}.     %% error, e.g. invalid password
+    {ok, AuthCtx::any()} |     %% AuthCtx can contain things like claims, etc.
+    {error,Reason::bad_credentials | any()}.     %% error, e.g. invalid password
 
 -callback authorize(
     AuthCtx::any(),

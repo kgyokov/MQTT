@@ -14,7 +14,7 @@
 -export([authenticate/4, authorize/3]).
 
 authenticate(_Configuration, _ClientId, _Username, _Password) ->
-  {ok, default}.
+    {ok, default}.
 
 authorize(default, _Action, _Resource) ->
-  ok.
+    ok.

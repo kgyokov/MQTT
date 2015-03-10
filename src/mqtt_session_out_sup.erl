@@ -12,14 +12,14 @@
 -behaviour(supervisor).
 
 -define(SESSION_SPEC(ConnPid),
-  {
-    session_serv,
-    {mqtt_session_serv, start_link, [ConnPid]},
-    permanent,
-    200,
-    worker,
-    [mqtt_session_serv]
-}).
+    {
+        session_serv,
+        {mqtt_session_serv, start_link, [ConnPid]},
+        permanent,
+        200,
+        worker,
+        [mqtt_session_serv]
+    }).
 
 %% API
 -export([start_link/1]).
@@ -39,9 +39,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec(start_link(ConnPid :: pid()) ->
-  {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(ConnPid) ->
-  supervisor:start_link(?MODULE, [ConnPid]).
+    supervisor:start_link(?MODULE, [ConnPid]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -58,12 +58,12 @@ start_link(ConnPid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
-  {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-    MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-    [ChildSpec :: supervisor:child_spec()]
-  }} |
-  ignore |
-  {error, Reason :: term()}).
+    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
+        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
+        [ChildSpec :: supervisor:child_spec()]
+    }} |
+    ignore |
+    {error, Reason :: term()}).
 init([ConnPid]) ->
     {ok, {{one_for_one, 20, 200}, [?SESSION_SPEC(ConnPid)]}}.
 

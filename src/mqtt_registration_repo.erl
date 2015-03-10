@@ -14,8 +14,8 @@
 -record(client_reg, {client_id, connection_pid, timestamp}).
 
 -define(TABLE_DEF,[
-  {type,set},
-  {attributes,record_info(fields,client_reg)}
+    {type,set},
+    {attributes,record_info(fields,client_reg)}
 ]).
 
 %% API
@@ -28,15 +28,15 @@
 %%
 %% @end
 create_tables(Nodes,NFragments)->
-  mnesia:create_schema(Nodes),
-  mnesia:create_table(?REG_TABLE, [
-    {disc_copies, Nodes},
-    {frag_properties,
-      {n_fragments,NFragments},
-      {node_pool,Nodes}
-    }
-    |?TABLE_DEF]
-  ).
+    mnesia:create_schema(Nodes),
+    mnesia:create_table(?REG_TABLE, [
+        {disc_copies, Nodes},
+        {frag_properties,
+            {n_fragments,NFragments},
+            {node_pool,Nodes}
+        }
+        |?TABLE_DEF]
+    ).
 
 
 
@@ -49,37 +49,37 @@ create_tables(Nodes,NFragments)->
 %% @end
 
 register(Pid, ClientId, SessionId)->
-  NewReg = #client_reg{client_id = ClientId,connection_pid = Pid,timestamp = time()},
-  F = fun()->
-      %% take write lock
-      case mnesia:read(?REG_TABLE, ClientId, write) of
-        [] ->
-          mnesia:write({?REG_TABLE,NewReg}),
-          ok;
-        [E = #client_reg{connection_pid = EPid}] ->
-          case EPid of
-            Pid ->
-              ok;
-            undefined ->
-              mnesia:write({?REG_TABLE,NewReg}),
-              ok;
-            _ ->
-              mnesia:write({?REG_TABLE,NewReg}),
-              {duplicate_detected, E}
-          end
-      end
+    NewReg = #client_reg{client_id = ClientId,connection_pid = Pid,timestamp = time()},
+    F = fun()->
+        %% take write lock
+        case mnesia:read(?REG_TABLE, ClientId, write) of
+            [] ->
+                mnesia:write({?REG_TABLE,NewReg}),
+                ok;
+            [E = #client_reg{connection_pid = EPid}] ->
+                case EPid of
+                    Pid ->
+                        ok;
+                    undefined ->
+                        mnesia:write({?REG_TABLE,NewReg}),
+                        ok;
+                    _ ->
+                        mnesia:write({?REG_TABLE,NewReg}),
+                        {duplicate_detected, E}
+                end
+        end
     end,
 
-  case mnesia:activity(transaction,F,[],mnesia_frag) of
-    ok ->
-      ok;
-    {duplicate_detected, #client_reg{connection_pid = ExistingPid}} ->
-      handle_duplicate(ExistingPid),
-      ok
-  end,
+    case mnesia:activity(transaction,F,[],mnesia_frag) of
+        ok ->
+            ok;
+        {duplicate_detected, #client_reg{connection_pid = ExistingPid}} ->
+            handle_duplicate(ExistingPid),
+            ok
+    end,
 
-  %%
-  mnesia:subscribe()
+    %%
+    mnesia:subscribe()
 .
 
 
@@ -91,23 +91,23 @@ register(Pid, ClientId, SessionId)->
 %%
 %% @end
 unregister(Pid,ClientId)->
-  F = fun()->
-    %% take write lock
-    case mnesia:read(?REG_TABLE, ClientId, write) of
-      [] ->
-        ok;
-      [E = #client_reg{connection_pid = EPid}] when EPid =:= Pid ->
-        mnesia:write({?REG_TABLE,E#client_reg{connection_pid = undefined}}),
-        ok;
-      [#client_reg{connection_pid = EPid}] when EPid =/= Pid ->
-        ok
-    end
-  end,
-  mnesia:activity(transaction,F,[],mnesia_frag).
+    F = fun()->
+        %% take write lock
+        case mnesia:read(?REG_TABLE, ClientId, write) of
+            [] ->
+                ok;
+            [E = #client_reg{connection_pid = EPid}] when EPid =:= Pid ->
+                mnesia:write({?REG_TABLE,E#client_reg{connection_pid = undefined}}),
+                ok;
+            [#client_reg{connection_pid = EPid}] when EPid =/= Pid ->
+                ok
+        end
+    end,
+    mnesia:activity(transaction,F,[],mnesia_frag).
 
 get_registration(ClientId)->
-  mnesia:dirty_read(?REG_TABLE, ClientId).
+    mnesia:dirty_read(?REG_TABLE, ClientId).
 
 
 handle_duplicate(Pid)->
-  mqtt_connection:close_duplicate(Pid).
+    mqtt_connection:close_duplicate(Pid).

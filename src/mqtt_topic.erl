@@ -16,45 +16,45 @@
 %% Topic patterns form a Partially-ordered set through the 'is_covered_by' relationship.
 %% Runs O(N^2)
 distinct(Covers) ->
-	distinct([],Covers).
+    distinct([],Covers).
 
 distinct(Maximals,[]) ->
-	Maximals;
+    Maximals;
 
 distinct(Maximals,[H|T]) ->
-	distinct(merge_max(Maximals,H),T).
+    distinct(merge_max(Maximals,H),T).
 
 merge_max(Maximals,NewMax) ->
-	%% DedupL = lists:filter(fun(Max) -> not is_covered_by(Max,NewMax)  end, Maximals),
-	DedupL = [ Max || Max <- Maximals, not is_covered_by(Max,NewMax) ],
-	case lists:any(fun(Max) -> is_covered_by(NewMax,Max) end, DedupL) of
-		true    -> DedupL;
-		false   -> [NewMax|DedupL]
-	end.
+    %% DedupL = lists:filter(fun(Max) -> not is_covered_by(Max,NewMax)  end, Maximals),
+    DedupL = [ Max || Max <- Maximals, not is_covered_by(Max,NewMax) ],
+    case lists:any(fun(Max) -> is_covered_by(NewMax,Max) end, DedupL) of
+        true    -> DedupL;
+        false   -> [NewMax|DedupL]
+    end.
 
 normalize(<<Pattern/binary>>) ->
-	LPattern = split(Pattern),
-	list_to_binary(normalize(LPattern));
+    LPattern = split(Pattern),
+    list_to_binary(normalize(LPattern));
 
 normalize(Ptn) when is_list(Ptn) ->
-	RPtn = lists:reverse(Ptn),
-	NPtn = lists:reverse(normalize_r(RPtn)),
-	case NPtn of
-		["/","#"|T2] -> ["#",T2];
-		_           -> NPtn
-	end.
+    RPtn = lists:reverse(Ptn),
+    NPtn = lists:reverse(normalize_r(RPtn)),
+    case NPtn of
+        ["/","#"|T2] -> ["#",T2];
+        _           -> NPtn
+    end.
 
 normalize_r(RPtn) ->
-	case RPtn of
-		["#"|T1] -> ["#" | eliminate_w(T1)];
-		_       -> RPtn
-	end.
+    case RPtn of
+        ["#"|T1] -> ["#" | eliminate_w(T1)];
+        _       -> RPtn
+    end.
 
 eliminate_w(["/","+"|T]) ->
-	eliminate_w(T);
+    eliminate_w(T);
 
 eliminate_w(T) ->
-	T.
+    T.
 
 %% @doc
 %% Tells us if the 2nd topic pattern covers the 1st one.
@@ -66,9 +66,9 @@ eliminate_w(T) ->
 %%
 %% @end
 is_covered_by(Pattern,Cover)->
-  PL = split(Pattern),
-  CL = split(Cover),
-  seg_is_covered_by(PL,CL).
+    PL = split(Pattern),
+    CL = split(Cover),
+    seg_is_covered_by(PL,CL).
 
 seg_is_covered_by(_,["/","#"])  -> true;  %%  '/#' definitely covers '_' (everything)
 seg_is_covered_by(_,["#"])      -> true;  %%  '#' definitely covers '_' (everything)
@@ -78,13 +78,13 @@ seg_is_covered_by([],[])        -> true;  %% if the pattern is as long as the po
 
 %% # > + > char
 seg_is_covered_by([PH|PT],[CH|CT])->
-	case {PH,CH} of
-		{_,"#"} -> true;
-		{"#",_} -> false;
-		{_,"+"} -> seg_is_covered_by(PT,CT);
-		{PH,PH} -> seg_is_covered_by(PT,CT);
-		_       -> false
-	end.
+    case {PH,CH} of
+        {_,"#"} -> true;
+        {"#",_} -> false;
+        {_,"+"} -> seg_is_covered_by(PT,CT);
+        {PH,PH} -> seg_is_covered_by(PT,CT);
+        _       -> false
+    end.
 
 
 %% @doc
@@ -109,25 +109,25 @@ seg_is_covered_by([PH|PT],[CH|CT])->
 
 -spec explode(binary()) -> [binary()].
 explode(<<TopicLevels/binary>>)->
-  explode(split(TopicLevels));
+    explode(split(TopicLevels));
 
 explode(TopicLevels) when is_list(TopicLevels) ->
-	RawList = [ list_to_binary(lists:reverse(normalize_r(RL))) || RL <- explode([],TopicLevels)],
-	Set = sets:from_list(RawList),
-	sets:to_list(Set).
+    RawList = [ list_to_binary(lists:reverse(normalize_r(RL))) || RL <- explode([],TopicLevels)],
+    Set = sets:from_list(RawList),
+    sets:to_list(Set).
 
 explode(ParentLevels,["/"|T]) ->
-  [
-    ["#","/"|ParentLevels] |
-    explode(["/"|ParentLevels],T)
-  ];
+    [
+        ["#","/"|ParentLevels] |
+        explode(["/"|ParentLevels],T)
+    ];
 
 explode(ParentLevels,[Level|T]) ->
     explode([Level|ParentLevels],T) ++
     explode(["+"|ParentLevels],T);
 
 explode(ParentLevels,[])->
-  [ParentLevels].
+    [ParentLevels].
 
 %% @doc
 %% Splits a topic pattern based on delimiter
@@ -135,26 +135,26 @@ explode(ParentLevels,[])->
 %%
 %% @end
 split(Topic) ->
-  lists:reverse(split([],Topic))
+    lists:reverse(split([],Topic))
 .
 
 split(Split,<<>>) ->
-  Split;
+    Split;
 
 split(["#"|_],_Rest) ->
-  throw({error,invalid_wildcard});
+    throw({error,invalid_wildcard});
 
 split(Split,<<"/"/utf8,Rest/binary>>) ->
-  split(["/"|Split],Rest);
+    split(["/"|Split],Rest);
 
 split(Split,<<Rest/binary>>) ->
-  {NextLevel,Rest1} = consume_level(Rest),
-  split([NextLevel|Split],Rest1).
+    {NextLevel,Rest1} = consume_level(Rest),
+    split([NextLevel|Split],Rest1).
 
 
 
 consume_level(Binary) ->
-  consume_level(<<>>,Binary).
+    consume_level(<<>>,Binary).
 
 consume_level(<<>>,<<"#"/utf8>>) ->                   {"#",<<>>};
 consume_level(_,<<"#"/utf8,_/binary>>) ->             throw({error,unexpected_wildcard});

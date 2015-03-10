@@ -30,12 +30,12 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec(start_link(Options::any(),Security::any()) ->
-  {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(Options,Security) ->
-  supervisor:start_link({local, ?SERVER}, ?MODULE, [Options,Security]).
+    supervisor:start_link({local, ?SERVER}, ?MODULE, [Options,Security]).
 
 handle_socket(Ref,Socket,Transport) ->
-  supervisor:start_child({local, ?SERVER},[Ref,Socket,Transport,self()]).
+    supervisor:start_child({local, ?SERVER},[Ref,Socket,Transport,self()]).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -52,18 +52,18 @@ handle_socket(Ref,Socket,Transport) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
-  {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-    MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-    [ChildSpec :: supervisor:child_spec()]
-  }} |
-  ignore |
-  {error, Reason :: term()}).
+    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
+        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
+        [ChildSpec :: supervisor:child_spec()]
+    }} |
+    ignore |
+    {error, Reason :: term()}).
 init([Options,Security]) ->
-  {ok, { {simple_one_for_one, 0, 1},
-    [
-      {mqtt_connection_sup, {mqtt_connection_sup, start_link, [Options,Security]},
-      temporary, brutal_kill, supervisor, [mqtt_connection_sup]}
-    ]}}.
+    {ok, { {simple_one_for_one, 0, 1},
+        [
+            {mqtt_connection_sup, {mqtt_connection_sup, start_link, [Options,Security]},
+                temporary, brutal_kill, supervisor, [mqtt_connection_sup]}
+        ]}}.
 
 %%%===================================================================
 %%% Internal functions

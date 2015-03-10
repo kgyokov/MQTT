@@ -59,10 +59,10 @@ start_link() ->
 create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
     link()
     {ok, SenderPid } = supervisor:start_child(SupPid,
-        ?SENDER_SPEC(Transport,Socket)),
-    {ok, ConnPid} = supervisor:start_child(SupPid,
-        ?CONN_SPEC(SenderPid,ReceiverPid,Options)),
-    {ok, ConnPid}.
+?SENDER_SPEC(Transport,Socket)),
+{ok, ConnPid} = supervisor:start_child(SupPid,
+?CONN_SPEC(SenderPid,ReceiverPid,Options)),
+{ok, ConnPid}.
 
 %%%===================================================================
 %%% Supervisor callbacks

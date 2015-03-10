@@ -19,8 +19,8 @@
 -define(SUB_TABLE, mqtt_sub).
 
 -define(TABLE_DEF,[
-	{type,set},
-	{attributes,record_info(fields,mqtt_sub)}
+    {type,set},
+    {attributes,record_info(fields,mqtt_sub)}
 ]).
 
 %% @doc
@@ -29,71 +29,71 @@
 %%
 %% @end
 create_tables(Nodes,NFragments) ->
-	mnesia:create_schema(Nodes),
-	mnesia:create_table(?SUB_TABLE, [
-		{disc_copies, Nodes},
-		{frag_properties,
-			{n_fragments,NFragments},
-			{node_pool,Nodes}
-		}
-		|?TABLE_DEF]
-	).
+    mnesia:create_schema(Nodes),
+    mnesia:create_table(?SUB_TABLE, [
+        {disc_copies, Nodes},
+        {frag_properties,
+            {n_fragments,NFragments},
+            {node_pool,Nodes}
+        }
+        |?TABLE_DEF]
+    ).
 
 
 add_sub(ClientId, Topic)->
-	Fun =
-		fun() ->
-			Subs =
-				case mnesia:read(?SUB_TABLE,Topic, write) of
-					[] ->
-						new(Topic);
-					[S]->
-						S
-				end,
-			#mqtt_sub{clients = Clients} = Subs,
-			case gb_sets:is_member(ClientId,Clients) of
-				false ->
-					mnesia:write(Subs#mqtt_sub{clients = gb_sets:add(ClientId,Clients)});
-				true -> ok
-			end
-		end,
-	mnesia:activity(transaction,Fun).
+    Fun =
+        fun() ->
+            Subs =
+                case mnesia:read(?SUB_TABLE,Topic, write) of
+                    [] ->
+                        new(Topic);
+                    [S]->
+                        S
+                end,
+            #mqtt_sub{clients = Clients} = Subs,
+            case gb_sets:is_member(ClientId,Clients) of
+                false ->
+                    mnesia:write(Subs#mqtt_sub{clients = gb_sets:add(ClientId,Clients)});
+                true -> ok
+            end
+        end,
+    mnesia:activity(transaction,Fun).
 
 remove_sub(ClientId, Topic) ->
-	Fun =
-		fun() ->
-			case mnesia:read(?SUB_TABLE,Topic, write) of
-				[] ->
-					ok;
-				[S = #mqtt_sub{clients = Clients}]->
-					case gb_sets:is_member(ClientId,Clients) of
-						true ->
-							mnesia:write(S#mqtt_sub{clients = gb_sets:delete(ClientId,Clients)});
-						false -> ok
-					end
-			end
-		end,
-	mnesia:activity(transaction,Fun).
+    Fun =
+        fun() ->
+            case mnesia:read(?SUB_TABLE,Topic, write) of
+                [] ->
+                    ok;
+                [S = #mqtt_sub{clients = Clients}]->
+                    case gb_sets:is_member(ClientId,Clients) of
+                        true ->
+                            mnesia:write(S#mqtt_sub{clients = gb_sets:delete(ClientId,Clients)});
+                        false -> ok
+                    end
+            end
+        end,
+    mnesia:activity(transaction,Fun).
 
 get_all(Topic) ->
-	Fun =
-		fun() ->
-			case mnesia:read(?SUB_TABLE,Topic) of
-				[] ->
-					[];
-				[#mqtt_sub{clients = Clients}] ->
-					gb_sets:to_list(Clients)
-			end
-		end,
-	mnesia:async_dirty(Fun).
+    Fun =
+        fun() ->
+            case mnesia:read(?SUB_TABLE,Topic) of
+                [] ->
+                    [];
+                [#mqtt_sub{clients = Clients}] ->
+                    gb_sets:to_list(Clients)
+            end
+        end,
+    mnesia:async_dirty(Fun).
 
 
 new(Topic) ->
-	#mqtt_sub{topic = Topic,clients = gb_sets:new()}.
+    #mqtt_sub{topic = Topic,clients = gb_sets:new()}.
 
 publish_to_all(Message,Topic,Pids) ->
-	[
-		mqtt_session_out:publish(Message,Topic,Pid) ||
-		Pid	<- Pids
-	],
-	ok.
+    [
+        mqtt_session_out:publish(Message,Topic,Pid) ||
+        Pid	<- Pids
+    ],
+    ok.

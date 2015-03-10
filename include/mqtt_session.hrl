@@ -23,6 +23,7 @@
 
 -record(session_out,{
 	client_id                 ::binary(),            %% The id of the client
+    is_persistent             ::boolean(),           %% whether the session needs to be persisted
 	packet_seq                ::non_neg_integer(),   %% The latest packet id (incremented by 1 for every packet
 	qos1 = dict:new()         ,
 	qos2 = dict:new()         ,
