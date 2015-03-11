@@ -34,6 +34,7 @@
 
 -record(session_in,{
 	client_id                 ::binary(),
+    is_persistent             ::boolean(),         %% whether the session needs to be persisted
 	packet_seq                ::non_neg_integer(), %% packet sequence number (ever increasing)
 	msg_in_flight             ::#mqtt_message{},
 	qos2_rec = dict:new(),

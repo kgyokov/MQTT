@@ -17,7 +17,7 @@
 
 discard_will(Session) ->
     NewSession = Session#session_in{will = undefined},
-    persist_session(NewSession).
+    maybe_persist(NewSession).
 
 at_most_once(Msg,Session) ->
     fwd_message(Msg,Session),
@@ -45,12 +45,12 @@ exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId},
                 packet_seq = NewSeq,
                 msg_in_flight = Msg,
                 qos2_rec = NewRec},
-            persist_session(NewSession),
+            maybe_persist(NewSession),
 
             %% Actually Forward the  message. Because the message has a unique incremental seq number,
             %% this can be performed multiple times during recovery
             fwd_message(Msg,NewSeq),
-            persist_session(Session#session_in{msg_in_flight = undefined});
+            maybe_persist(Session#session_in{msg_in_flight = undefined});
 
         false ->
             Session %% packet already processed, do nothing
@@ -59,7 +59,7 @@ exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId},
 %%  Completes message send
 exactly_once_phase2(PacketId,Session = #session_in{qos2_rec = Qos2Rec}) ->
     Session#session_in{qos2_rec = gb_sets:delete(PacketId,Qos2Rec)},
-    persist_session(Session).
+    maybe_persist(Session).
 
 
 recover(Session =  #session_in{msg_in_flight = undefined}) ->
@@ -67,7 +67,7 @@ recover(Session =  #session_in{msg_in_flight = undefined}) ->
 
 recover(Session =  #session_in{packet_seq = Seq, msg_in_flight = Msg}) ->
     fwd_message(Msg,Seq),
-    persist_session(Session#session_in{msg_in_flight = undefined}).
+    maybe_persist(Session#session_in{msg_in_flight = undefined}).
 
 fwd_message(Msg = #mqtt_message{ topic = Topic},Seq) ->
     [ fwd_to_cover(Cover,Msg,Seq) || Cover <- mqtt_topic:explode(Topic)].
@@ -75,5 +75,6 @@ fwd_message(Msg = #mqtt_message{ topic = Topic},Seq) ->
 fwd_to_cover(Cover,Msg,Seq) ->
     ok.
 
-persist_session(Session) ->
+maybe_persist(Session = #session_in{is_persistent = IsPersistent}) ->
+    %% @todo: handle persistence
     Session.

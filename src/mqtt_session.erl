@@ -75,10 +75,10 @@ forward_msg(Session,CTRPacket,QoS,Ref)->
     #session_out{packet_seq = PacketSeq, refs = Refs} = Session,
 
     PacketId = if QoS =:= ?QOS_AT_LEAST_ONCE;
-    QoS =:= ?QOS_EXACTLY_ONCE ->
-        (PacketSeq+1) band 16#ffff;
-                   true ->
-                       undefined
+                  QoS =:= ?QOS_EXACTLY_ONCE ->
+                        (PacketSeq+1) band 16#ffff;
+                  true ->
+                        undefined
                end,
     Session1 = Session#session_out{refs = gb_sets:add(Ref,Refs)},
     NewSession = (case QoS of

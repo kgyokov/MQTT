@@ -45,7 +45,6 @@
     session_out,
     keep_alive_ref = undefined, %% so we can ignore old keep-alive timeout messages after restarting the timer
     keep_alive_timeout = undefined,
-    %% will,
     security,
     auth_ctx                    %% Authorization/Authentication context
 }).
@@ -406,7 +405,7 @@ handle_packet(#'PINGREQ'{}, S) ->
     {noreply,S};
 
 
-handle_packet(#'DISCONNECT'{}, S = #state{session_in = SessionIn}) ->
+handle_packet(#'DISCONNECT'{}, S) ->
     %% Graceful disonnect. We must NOT publish a Will message
     graceful_disconnect(S);
 
@@ -566,16 +565,6 @@ graceful_disconnect(S = #state{session_in = SessionIn}) ->
 
 bad_disconnect(S) ->
     session_cleanup(S).
-
-%% maybe_publish_will(#state{will = undefined}) ->
-%% 	ok;
-%%
-%% maybe_publish_will(S = #state{will = Will, client_id = ClientId}) ->
-%% 	#will_details{message = Content, topic = Topic,
-%% 				  qos = QoS, retain = Retain} = Will
-%% 	publish(#mqtt_message{topic = Topic, retain = Retain,
-%% 							qos = QoS, client_id = ClientId,
-%% 							content = Content}, S).
 
 session_cleanup(#state{client_id = ClientId, clean_session = CleanSession}) ->
     unregister_self(ClientId,CleanSession).

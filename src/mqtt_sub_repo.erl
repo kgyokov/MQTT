@@ -75,6 +75,9 @@ remove_sub(ClientId, Topic) ->
         end,
     mnesia:activity(transaction,Fun).
 
+
+
+
 get_all(Topic) ->
     Fun =
         fun() ->
