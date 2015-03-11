@@ -3,7 +3,7 @@
 -behaviour(application).
 
 %% Application callbacks
--export([start/2, stop/1]).
+-export([start/2, stop/1, install/1, install/2, wait_for_tables/1]).
 
 %% ===================================================================
 %% Application callbacks
@@ -30,3 +30,20 @@ start(_StartType, _StartArgs) ->
 
 stop(_State) ->
     ok.
+
+%% ===================================================================
+%% Misc
+%% ===================================================================
+
+
+wait_for_tables(Nodes) ->
+    mqtt_sub_repo:wait_for_tables().
+
+install(Nodes) ->
+    install(Nodes,1).
+
+install(Nodes,Frags) ->
+    mnesia:create_schema(Nodes),
+    rpc:multicall(Nodes, application, ensure_started, [mnesia]),
+
+    mqtt_sub_repo:create_tables(Nodes,Frags).

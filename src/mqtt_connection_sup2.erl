@@ -25,7 +25,7 @@
 -define(CONN_SPEC(SenderPid,ReceiverPid,Options),
     {
         connection,                               %% Id
-        {mqtt_connection, start_link, [SenderPid,ReceiverPidOptions]},
+        {mqtt_connection, start_link, [SenderPid,ReceiverPid,Options]},
         permanent,                                %% must never stop
         5000,                                     %% should be more than sufficient for the process to clean up
         worker,                                   %% as opposed to supervisor
@@ -57,12 +57,11 @@ start_link() ->
     supervisor:start_link(?MODULE, []).
 
 create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
-    link()
     {ok, SenderPid } = supervisor:start_child(SupPid,
-?SENDER_SPEC(Transport,Socket)),
-{ok, ConnPid} = supervisor:start_child(SupPid,
-?CONN_SPEC(SenderPid,ReceiverPid,Options)),
-{ok, ConnPid}.
+                        ?SENDER_SPEC(Transport,Socket)),
+    {ok, ConnPid} = supervisor:start_child(SupPid,
+                        ?CONN_SPEC(SenderPid,ReceiverPid,Options)),
+    {ok, ConnPid}.
 
 %%%===================================================================
 %%% Supervisor callbacks
