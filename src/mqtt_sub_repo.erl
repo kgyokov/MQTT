@@ -16,7 +16,10 @@
 -export([create_tables/2, add_sub/3, remove_sub/2, get_all/1, wait_for_tables/0]).
 
 -ifdef(TEST).
--export([clear_tables/0,delete_tables/0]).
+    -export([clear_tables/0,delete_tables/0]).
+    -define(PERSISTENCE, ram_copies).
+-else.
+    -define(PERSISTENCE, disc_copies).
 -endif.
 
 -record(mqtt_sub, {topic, subs}).
@@ -24,10 +27,17 @@
 
 -define(SUB_TABLE, mqtt_sub).
 
--define(TABLE_DEF,[
+-define(BASIC_TABLE_DEF(Nodes),[
+    {?PERSISTENCE, Nodes},
     {type,set},
     {attributes,record_info(fields,mqtt_sub)}
 ]).
+
+-define(DISTRIBUTED_DEF(NFragments,Nodes), (
+    {frag_properties,
+        {n_fragments,NFragments},
+        {node_pool,Nodes}}
+)).
 
 
 
@@ -43,12 +53,11 @@ create_tables([],NFragments) ->
     create_tables([node()],NFragments);
 
 create_tables(Nodes,NFragments) ->
-    DefaultProps = [{disc_copies, Nodes} | ?TABLE_DEF],
-    Props = if NFragments < 2 -> DefaultProps;
-               true -> [ {frag_properties,
-                            {n_fragments,NFragments},
-                            {node_pool,Nodes}
-                         } | DefaultProps]
+    DefaultProps = ?BASIC_TABLE_DEF(Nodes),
+    Props = if NFragments < 2 ->
+                    DefaultProps;
+               true ->
+                   [?DISTRIBUTED_DEF(NFragments,Nodes) | DefaultProps]
             end,
     {atomic, ok} = mnesia:create_table(?SUB_TABLE, Props).
 
@@ -57,7 +66,7 @@ create_tables(Nodes,NFragments) ->
 %%
 %% @end
 
-add_sub(ClientId, QoS, Topic) ->
+add_sub(ClientId, Topic, QoS) ->
     Fun =
         fun() ->
             R =
@@ -77,8 +86,8 @@ add_sub(ClientId, QoS, Topic) ->
         end,
     mnesia:activity(transaction,Fun).
 
-append_sub(Subs =  #mqtt_sub{subs = Clients}, ClientId,QoS) ->
-    mnesia:write(Subs#mqtt_sub{subs = dict:store(ClientId,QoS,Clients)}).
+append_sub(R =  #mqtt_sub{subs = Clients}, ClientId,QoS) ->
+    mnesia:write(R#mqtt_sub{subs = dict:store(ClientId,QoS,Clients)}).
 
 
 %% @doc
@@ -115,20 +124,23 @@ get_all(Topic) ->
     Spec = [{{'_',P},[],['$_']} || P <- Patterns],
     Fun =
         fun() ->
-            Subs = mnesia:dirty_select(?SUB_TABLE, Spec),
+            %% Rs = mnesia:dirty_select(?SUB_TABLE, Spec),
+            Rs = lists:flatten([ mnesia:read({?SUB_TABLE,Pattern}) || Pattern <- Patterns]),
+            AllSubs = lists:flatmap(fun(#mqtt_sub{subs = Subs}) -> dict:to_list(Subs) end, Rs),
             Merged = lists:foldr(
                 fun({ClientId,QoS},Acc) ->
                     case dict:find(ClientId,Acc) of
-                        {ok,OldQoS} when QoS < OldQoS ->
+                        {ok,OldQoS} when QoS =< OldQoS ->
                             Acc;
                         _ ->
                             dict:store(ClientId,QoS,Acc)
                     end
                 end,
-                dict:new(), Subs),
+                dict:new(), AllSubs),
             dict:to_list(Merged)
         end,
-    mnesia:async_dirty(Fun).
+    mnesia:activity(transaction,Fun).
+    %%mnesia:async_dirty(Fun).
 
 
 wait_for_tables()->
