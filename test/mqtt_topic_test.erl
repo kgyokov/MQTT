@@ -37,42 +37,42 @@
 %% /+/+/location
 %% /+/+/+
 
-normalize_test_() ->
-	[
-		?_assertEqual(mqtt_topic:normalize(<<"/#"/utf8>>),<<"#"/utf8>>),
-		?_assertEqual(mqtt_topic:normalize(<<"/A/+/#"/utf8>>),<<"/A/#"/utf8>>),
-		?_assertEqual(mqtt_topic:normalize(<<"/+/+/#"/utf8>>),<<"#"/utf8>>)
-	].
+%% normalize_test_() ->
+%% 	[
+%% 		?_assertEqual(mqtt_topic:normalize(<<"/#"/utf8>>),<<"#"/utf8>>),
+%% 		?_assertEqual(mqtt_topic:normalize(<<"/A/+/#"/utf8>>),<<"/A/#"/utf8>>),
+%% 		?_assertEqual(mqtt_topic:normalize(<<"/+/+/#"/utf8>>),<<"#"/utf8>>)
+%% 	].
 
 distinct_test_() ->
 	[
 		?_test(lists_are_equal(
 								[],
-			mqtt_topic:distinct([])
+			mqtt_topic:min_cover([])
 		)),
 		?_test(lists_are_equal(
-			mqtt_topic:distinct([<<"/A/1/B"/utf8>>]),
+			mqtt_topic:min_cover([<<"/A/1/B">>]),
 			[<<"/A/1/B"/utf8>>]
 		)),
 		?_test(lists_are_equal(
-			mqtt_topic:distinct([<<"/A/1/B"/utf8>>,<<"/A/2/B"/utf8>>]),
-			[<<"/A/1/B"/utf8>>,<<"/A/2/B"/utf8>>]
+			mqtt_topic:min_cover([<<"/A/1/B">>,<<"/A/2/B">>]),
+			[<<"/A/1/B"/utf8>>,<<"/A/2/B">>]
 		)),
 		?_test(lists_are_equal(
-			mqtt_topic:distinct([<<"/A/1/B"/utf8>>,<<"/A/2/B"/utf8>>,<<"/A/1/+"/utf8>>]),
-			[<<"/A/2/B"/utf8>>,<<"/A/1/+"/utf8>>]
+			mqtt_topic:min_cover([<<"/A/1/B">>,<<"/A/2/B">>,<<"/A/1/+">>]),
+			[<<"/A/2/B"/utf8>>,<<"/A/1/+">>]
 		)),
 		?_test(lists_are_equal(
-			mqtt_topic:distinct([<<"/A/1/B"/utf8>>,<<"/A/2/B"/utf8>>,<<"/A/+/B"/utf8>>]),
+			mqtt_topic:min_cover([<<"/A/1/B">>,<<"/A/2/B">>,<<"/A/+/B">>]),
 			[<<"/A/+/B"/utf8>>]
 		)),
 		?_test(lists_are_equal(
-			mqtt_topic:distinct([<<"/A/1/B"/utf8>>,<<"/A/2/B"/utf8>>,<<"/A/+/B"/utf8>>,<<"/A/3/C"/utf8>>]),
-			[<<"/A/+/B"/utf8>>,<<"/A/3/C"/utf8>>]
+			mqtt_topic:min_cover([<<"/A/1/B">>,<<"/A/2/B">>,<<"/A/+/B">>,<<"/A/3/C">>]),
+			[<<"/A/+/B"/utf8>>,<<"/A/3/C">>]
 		)),
 		?_test(lists_are_equal(
-			mqtt_topic:distinct([<<"/A/1/B"/utf8>>,<<"/A/2/B"/utf8>>,<<"/A/+/B"/utf8>>,	<<"/A/3/C"/utf8>>,
-								<<"/A/4/C"/utf8>>,<<"/A/+/C"/utf8>>,<<"/A/#"/utf8>>]),
+			mqtt_topic:min_cover([<<"/A/1/B">>,<<"/A/2/B">>,<<"/A/+/B">>,	<<"/A/3/C">>,
+								<<"/A/4/C">>,<<"/A/+/C">>,<<"/A/#">>]),
 			[<<"/A/#"/utf8>>]
 		))
 	].
@@ -80,70 +80,84 @@ distinct_test_() ->
 split_test_()->
   [
     ?_assertEqual(
-      ["/",<<"A"/utf8>>,"/",<<"1"/utf8>>,"/",<<"B"/utf8>>],
+      ["/",<<"A">>,"/",<<"1">>,"/",<<"B">>],
       mqtt_topic:split(<<"/A/1/B"/utf8>>)),
     ?_assertEqual(
-      [<<"A"/utf8>>,"/",<<"1"/utf8>>,"/",<<"B"/utf8>>,"/"],
-      mqtt_topic:split(<<"A/1/B/"/utf8>>)),
+      [<<"A">>,"/",<<"1">>,"/",<<"B">>,"/"],
+      mqtt_topic:split(<<"A/1/B/">>)),
     ?_assertEqual(
-      [<<"A"/utf8>>,"/",<<"1"/utf8>>,"/","#"],
-      mqtt_topic:split(<<"A/1/#"/utf8>>)),
+      [<<"A">>,"/",<<"1">>,"/","#"],
+      mqtt_topic:split(<<"A/1/#">>)),
     ?_assertEqual(
-      [<<"A"/utf8>>,"/",<<>>,"/"],
-      mqtt_topic:split(<<"A//"/utf8>>))
+      [<<"A">>,"/",<<>>,"/"],
+      mqtt_topic:split(<<"A//">>))
    ].
 
 explode_test_() ->
 [
   ?_test(lists_are_equal([
-    <<"/#"/utf8>>,
-    <<"/A/#"/utf8>>,
-    <<"/A/1/#"/utf8>>,
-    <<"/A/1/B"/utf8>>,
-    <<"/A/1/+"/utf8>>,
-    <<"/A/+/B"/utf8>>,
-    <<"/A/+/+"/utf8>>,
-	<<"/+/1/#"/utf8>>,
-    <<"/+/1/B"/utf8>>,
-    <<"/+/1/+"/utf8>>,
-    <<"/+/+/B"/utf8>>,
-    <<"/+/+/+"/utf8>>
+    <<"#">>,
+    <<"/#">>,
+    <<"/A/#">>,
+    <<"/A/1/#">>,
+    <<"/A/1/B">>,
+    <<"/A/1/+">>,
+    <<"/A/+/#">>,
+    <<"/A/+/B">>,
+    <<"/A/+/+">>,
+    <<"/+/#">>,
+	<<"/+/1/#">>,
+    <<"/+/1/B">>,
+    <<"/+/1/+">>,
+    <<"/+/+/#">>,
+    <<"/+/+/B">>,
+    <<"/+/+/+">>
   ],
-    mqtt_topic:explode(<<"/A/1/B"/utf8>>))),
+    mqtt_topic:explode(<<"/A/1/B">>))),
   ?_test(lists_are_equal([
-    <<"#"/utf8>>,
-    <<"A/#"/utf8>>,
-    <<"A/1/#"/utf8>>,
-    <<"A/1/B/"/utf8>>,
-	<<"A/1/B/#"/utf8>>,
-    <<"A/1/+/"/utf8>>,
-    <<"A/+/B/"/utf8>>,
-	<<"A/+/B/#"/utf8>>,
-    <<"A/+/+/"/utf8>>,
-    <<"+/1/B/"/utf8>>,
-	<<"+/1/B/#"/utf8>>,
-	<<"+/1/#"/utf8>>,
-    <<"+/1/+/"/utf8>>,
-    <<"+/+/B/"/utf8>>,
-	<<"+/+/B/#"/utf8>>,
-    <<"+/+/+/"/utf8>>
+    <<"#">>,
+    <<"A/#">>,
+    <<"A/1/#">>,
+    <<"A/1/B/">>,
+	<<"A/1/B/#">>,
+    <<"A/1/+/">>,
+    <<"A/1/+/#">>,
+    <<"A/+/#">>,
+    <<"A/+/B/">>,
+	<<"A/+/B/#">>,
+    <<"A/+/+/#">>,
+    <<"A/+/+/">>,
+    <<"+/#">>,
+    <<"+/1/B/">>,
+	<<"+/1/B/#">>,
+	<<"+/1/#">>,
+    <<"+/1/+/#">>,
+    <<"+/1/+/">>,
+    <<"+/+/#">>,
+    <<"+/+/B/">>,
+	<<"+/+/B/#">>,
+    <<"+/+/+/#">>,
+    <<"+/+/+/">>
   ],
-    mqtt_topic:explode(<<"A/1/B/"/utf8>>))),
+    mqtt_topic:explode(<<"A/1/B/">>))),
   ?_test(lists_are_equal([
-    <<"#"/utf8>>,
-    <<"A/#"/utf8>>,
-    <<"A/1/#"/utf8>>,
-    <<"A/1/B"/utf8>>,
-    <<"A/1/+"/utf8>>,
-    <<"A/+/B"/utf8>>,
-    <<"A/+/+"/utf8>>,
-	<<"+/1/#"/utf8>>,
-    <<"+/1/B"/utf8>>,
-    <<"+/1/+"/utf8>>,
-    <<"+/+/B"/utf8>>,
-    <<"+/+/+"/utf8>>
+    <<"#">>,
+    <<"A/#">>,
+    <<"A/1/#">>,
+    <<"A/1/B">>,
+    <<"A/1/+">>,
+    <<"A/+/#">>,
+    <<"A/+/B">>,
+    <<"A/+/+">>,
+    <<"+/#">>,
+	<<"+/1/#">>,
+    <<"+/1/B">>,
+    <<"+/1/+">>,
+    <<"+/+/#">>,
+    <<"+/+/B">>,
+    <<"+/+/+">>
   ],
-    mqtt_topic:explode(<<"A/1/B"/utf8>>)))
+    mqtt_topic:explode(<<"A/1/B">>)))
 ].
 
 is_covered_by_test_()->

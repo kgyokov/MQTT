@@ -10,39 +10,38 @@
 -author("Kalin").
 
 %% API
--export([explode/1, is_covered_by/2, split/1, distinct/1, normalize/1]).
+-export([explode/1, is_covered_by/2, split/1, min_cover/1]).
 
 
-%% Topic patterns form a Partially-ordered set through the 'is_covered_by' relationship.
-%% Runs O(N^2)
-distinct(Covers) ->
-    distinct([],Covers).
+%% Determines the minimum subset of Patterns that covers the same topics
+%% e.g. [ /A/B/+ , /A/B/C ] can be reduced to [/A/B/+]
+min_cover(Patterns) ->
+    min_cover([],Patterns).
 
-distinct(Maximals,[]) ->
+min_cover(Maximals,[]) ->
     Maximals;
 
-distinct(Maximals,[H|T]) ->
-    distinct(merge_max(Maximals,H),T).
+min_cover(Maximals,[H|T]) ->
+    min_cover(merge_max(Maximals,H),T).
 
 merge_max(Maximals,NewMax) ->
-    %% DedupL = lists:filter(fun(Max) -> not is_covered_by(Max,NewMax)  end, Maximals),
     DedupL = [ Max || Max <- Maximals, not is_covered_by(Max,NewMax) ],
     case lists:any(fun(Max) -> is_covered_by(NewMax,Max) end, DedupL) of
         true    -> DedupL;
         false   -> [NewMax|DedupL]
     end.
 
-normalize(<<Pattern/binary>>) ->
-    LPattern = split(Pattern),
-    list_to_binary(normalize(LPattern));
-
-normalize(Ptn) when is_list(Ptn) ->
-    RPtn = lists:reverse(Ptn),
-    NPtn = lists:reverse(normalize_r(RPtn)),
-    case NPtn of
-        ["/","#"|T2] -> ["#",T2];
-        _           -> NPtn
-    end.
+%% normalize(<<Pattern/binary>>) ->
+%%     LPattern = split(Pattern),
+%%     list_to_binary(normalize(LPattern));
+%%
+%% normalize(Ptn) when is_list(Ptn) ->
+%%     RPtn = lists:reverse(Ptn),
+%%     NPtn = lists:reverse(normalize_r(RPtn)),
+%%     case NPtn of
+%%         ["/","#"|T2] -> ["#",T2];
+%%         _           -> NPtn
+%%     end.
 
 normalize_r(RPtn) ->
     case RPtn of
@@ -55,6 +54,9 @@ eliminate_w(["/","+"|T]) ->
 
 eliminate_w(T) ->
     T.
+
+is_covered_by({Pattern1,QoS1},{Pattern2,QoS2}) ->
+    is_covered_by(Pattern1,Pattern2) andalso QoS2 >= QoS1;
 
 %% @doc
 %% Tells us if the 2nd topic pattern covers the 1st one.
@@ -112,9 +114,9 @@ explode(<<TopicLevels/binary>>)->
     explode(split(TopicLevels));
 
 explode(TopicLevels) when is_list(TopicLevels) ->
-    RawList = [ list_to_binary(lists:reverse(normalize_r(RL))) || RL <- explode([],TopicLevels)],
+    RawList = [ list_to_binary(lists:reverse(RL)) || RL <- explode([],TopicLevels)],
     Set = sets:from_list(RawList),
-    sets:to_list(Set).
+    [<<"#">>|sets:to_list(Set)].
 
 explode(ParentLevels,["/"|T]) ->
     [

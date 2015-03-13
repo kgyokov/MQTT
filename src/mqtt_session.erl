@@ -23,7 +23,7 @@
 
 
 subscribe(Session = #session_out{subscriptions = Subs},NewSubs) ->
-    DistinctSubs = mqtt_topic:distinct(NewSubs),
+    DistinctSubs = mqtt_topic:min_cover(NewSubs),
     [ {add_or_replace(NewSub,Subs),NewSub} || NewSub <- DistinctSubs ],
     Session#session_out{subscriptions = []}.
 
