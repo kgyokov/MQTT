@@ -70,24 +70,24 @@ add_sub(ClientId, Topic, QoS) ->
     Fun =
         fun() ->
             R =
-                case mnesia:read(?SUB_TABLE,Topic, write) of
+                case mnesia:read(?SUB_TABLE, Topic, write) of
                     [] ->
                         new(Topic);
                     [S]->
                         S
                 end,
             #mqtt_sub{subs = Subs} = R,
-            case dict:find(ClientId,Subs) of
+            case orddict:find(ClientId,Subs) of
                 {ok, QoS} ->
                     ok;
-                _  ->
+                T  ->
                     append_sub(R,ClientId,QoS)
             end
         end,
-    mnesia:activity(transaction,Fun).
+    ok = mnesia:activity(transaction,Fun).
 
-append_sub(R =  #mqtt_sub{subs = Clients}, ClientId,QoS) ->
-    mnesia:write(R#mqtt_sub{subs = dict:store(ClientId,QoS,Clients)}).
+append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
+    mnesia:write(R#mqtt_sub{subs = orddict:store(ClientId,QoS,Subs)}).
 
 
 %% @doc
@@ -97,18 +97,18 @@ append_sub(R =  #mqtt_sub{subs = Clients}, ClientId,QoS) ->
 remove_sub(ClientId, Topic) ->
     Fun =
         fun() ->
-            case mnesia:read(?SUB_TABLE,Topic, write) of
+            case mnesia:read({?SUB_TABLE, Topic}) of
                 [] ->
                     ok;
-                [S = #mqtt_sub{subs = Clients}] ->
-                    case dict:is_key(ClientId,Clients) of
+                [S = #mqtt_sub{subs = Subs}] ->
+                    case orddict:is_key(ClientId,Subs) of
                         true ->
-                            mnesia:write(S#mqtt_sub{subs = dict:erase(ClientId,Clients)});
+                            mnesia:write(S#mqtt_sub{subs = orddict:erase(ClientId,Subs)});
                         false -> ok
                     end
             end
         end,
-    mnesia:activity(transaction,Fun).
+    ok = mnesia:activity(transaction,Fun).
 
 
 %% @doc
@@ -118,26 +118,23 @@ remove_sub(ClientId, Topic) ->
 %% @end
 get_all(Topic) ->
     Patterns = mqtt_topic:explode(Topic),
-
-
-
     Spec = [{{'_',P},[],['$_']} || P <- Patterns],
     Fun =
         fun() ->
             %% Rs = mnesia:dirty_select(?SUB_TABLE, Spec),
             Rs = lists:flatten([ mnesia:read({?SUB_TABLE,Pattern}) || Pattern <- Patterns]),
-            AllSubs = lists:flatmap(fun(#mqtt_sub{subs = Subs}) -> dict:to_list(Subs) end, Rs),
+            AllSubs = lists:flatmap(fun(#mqtt_sub{subs = Subs}) -> orddict:to_list(Subs) end, Rs),
             Merged = lists:foldr(
                 fun({ClientId,QoS},Acc) ->
-                    case dict:find(ClientId,Acc) of
+                    case orddict:find(ClientId,Acc) of
                         {ok,OldQoS} when QoS =< OldQoS ->
                             Acc;
                         _ ->
-                            dict:store(ClientId,QoS,Acc)
+                            orddict:store(ClientId,QoS,Acc)
                     end
                 end,
-                dict:new(), AllSubs),
-            dict:to_list(Merged)
+                orddict:new(), AllSubs),
+            orddict:to_list(Merged)
         end,
     mnesia:activity(transaction,Fun).
     %%mnesia:async_dirty(Fun).
@@ -147,7 +144,7 @@ wait_for_tables()->
     mnesia:wait_for_tables(?SUB_TABLE,20000).
 
 new(Topic) ->
-    #mqtt_sub{topic = Topic, subs = dict:new()}.
+    #mqtt_sub{topic = Topic, subs = orddict:new()}.
 
 
 -ifdef(TEST).
