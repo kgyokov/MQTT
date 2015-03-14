@@ -84,7 +84,7 @@ add_sub(ClientId, Topic, QoS) ->
                     append_sub(R,ClientId,QoS)
             end
         end,
-    ok = mnesia:activity(transaction,Fun).
+    ok = mnesia:activity(transaction,Fun,[],mnesia_frag).
 
 append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
     mnesia:write(R#mqtt_sub{subs = orddict:store(ClientId,QoS,Subs)}).
@@ -108,7 +108,7 @@ remove_sub(ClientId, Topic) ->
                     end
             end
         end,
-    ok = mnesia:activity(transaction,Fun).
+    ok = mnesia:activity(transaction,Fun,[],mnesia_frag).
 
 
 %% @doc
@@ -136,7 +136,7 @@ get_all(Topic) ->
                 orddict:new(), AllSubs),
             orddict:to_list(Merged)
         end,
-    mnesia:activity(transaction,Fun).
+    mnesia:activity(transaction,Fun,[],mnesia_frag).
     %%mnesia:async_dirty(Fun).
 
 
