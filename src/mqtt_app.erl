@@ -10,6 +10,8 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    init(),
+
     TransOpts = [
         {port,1883}
     ],
@@ -35,15 +37,24 @@ stop(_State) ->
 %% Misc
 %% ===================================================================
 
+init() ->
+    Nodes = [node()],
+    ok = mnesia:start(),
+    wait_for_tables(Nodes).
 
 wait_for_tables(Nodes) ->
-    mqtt_sub_repo:wait_for_tables().
+    mqtt_sub_repo:wait_for_tables(),
+    mqtt_reg_repo:wait_for_tables().
 
 install(Nodes) ->
     install(Nodes,1).
 
 install(Nodes,Frags) ->
+    error_logger:info_msg("Creating mnesia schema"),
     mnesia:create_schema(Nodes),
     rpc:multicall(Nodes, application, ensure_started, [mnesia]),
+    error_logger:info_msg("Mnesia started on all nodes"),
+    mqtt_sub_repo:create_tables(Nodes,Frags),
+    mqtt_reg_repo:create_tables(Nodes,Frags),
 
-    mqtt_sub_repo:create_tables(Nodes,Frags).
+    error_logger:info_msg("Installation complete").
