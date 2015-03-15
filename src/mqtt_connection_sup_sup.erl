@@ -12,7 +12,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0, start_monitored_connection/3]).
+-export([start_link/0, start_link_tree/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -32,6 +32,7 @@
 -spec(start_link() ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
+    error_logger:info_msg("Start_link ~p",[?SERVER]),
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 %%%===================================================================
@@ -58,15 +59,17 @@ start_link() ->
 init([]) ->
     SupFlags = {simple_one_for_one, 0, 1},
 
-    AChild = {conn_sup, {mqtt_connection_sup2, start_link, []},
-        permanent, 2000, supervisor, [mqtt_connection_sup2]},
+    AChild = {conn_sup,
+        {mqtt_connection_sup2, start_link, []},
+        temporary, infinity, supervisor, [mqtt_connection_sup2]},
 
     {ok, {SupFlags, [AChild]}}.
 
-start_monitored_connection(Transport,Socket,Options) ->
+start_link_tree(Transport,Socket,Options) ->
+    error_logger:info_msg("Starting Sup",[?SERVER]),
     {ok,SupPid} = supervisor:start_child(?SERVER, []),
-    mqtt_connection_sup2:create_tree(SupPid,self(),Transport,Socket,Options)
-.
+    error_logger:info_msg("Started Sup ~p",[SupPid]),
+    mqtt_connection_sup2:create_tree(SupPid,self(),Transport,Socket,Options).
 
 %%%===================================================================
 %%% Internal functions

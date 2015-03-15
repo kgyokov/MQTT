@@ -39,7 +39,6 @@
     connect_state = connecting, %% CONNECT state: connecting, connected, disconnecting, disconnected
     sender_pid,                 %% The process sending to the actual device
     receiver_pid,               %% The process receiving from the actual device TODO: Do we even need to know this???
-    receiver_ref,
     options,                    %% options such as connection timeouts, etc.
     clean_session,
     session_in,
@@ -198,11 +197,11 @@ handle_cast(_Request, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_info(async_init, S = #state{receiver_pid = ReceiverPid}) ->
-    Ref = monitor(process,ReceiverPid),
-    {noreply,S#state{receiver_ref = Ref}};
+    link(ReceiverPid),
+    {noreply,S};
 
-handle_info({'DOWN',_,process,ReceiverPid,Reason}, S = #state{receiver_pid = ReceiverPid,
-                                                              connect_state = connected}) ->
+handle_info({'EXIT',ReceiverPid,Reason}, S = #state{receiver_pid = ReceiverPid,
+                                                    connect_state = connected}) ->
     receiver_closing(S,Reason);
 
 handle_info(connect_timeout, S = #state{connect_state = connecting}) ->
@@ -337,7 +336,7 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
                                  true -> false
                              end,
 
-            S3 = (start_keep_alive(S1, KeepAliveTimeout))
+            S3 = (start_keep_alive(S1, KeepAliveTimeout * 1000))
             #state{session_in = #session_in{client_id = ClientId,will = Will},
             session_out = #session_out{client_id = ClientId,is_persistent = CleanSession}},
 
@@ -445,18 +444,19 @@ handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
         content = Content,dup = Dup,
         qos = Qos,retain = Retain,
         topic = Topic},
-    S#state{session_in = publish(Msg,S#state.session_in)}.
+    S#state{session_in = publish(Msg,S)}.
 
-publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},S)->
+publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},
+        S = #state{session_in = SessionIn, sender_pid = SenderPid})->
     case Qos of
         0 ->
-            mqtt_publish:at_most_once(Msg,S);
+            mqtt_publish:at_most_once(Msg,SessionIn);
         1 ->
-            mqtt_publish:at_least_once(Msg,S),
-            send_to_client(S, #'PUBACK'{packet_id = PacketId});
+            mqtt_publish:at_least_once(Msg,SessionIn),
+            send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId});
         2 ->
-            mqtt_publish:exactly_once_phase1(Msg,S),
-            send_to_client(S, #'PUBREC'{packet_id = PacketId})
+            mqtt_publish:exactly_once_phase1(Msg,SessionIn),
+            send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId})
     end.
 
 
@@ -576,6 +576,7 @@ prevent_connection(S,Reason) ->
 %% The server reacts accordingly.
 %% @end
 graceful_disconnect(S = #state{session_in = SessionIn}) ->
+    error_logger:info_msg("SessionIn is ~p",[SessionIn]),
     S1 = S#state{session_in = mqtt_publish:discard_will(SessionIn)},
     session_cleanup(S1),
     disconnect_client(S1, graceful),

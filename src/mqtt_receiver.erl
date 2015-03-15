@@ -30,10 +30,9 @@
 -record(state, {
     socket,
     transport,
-    ref,
     opts,
     conn_pid,
-    parser
+    parser_pid
 }).
 
 %%%===================================================================
@@ -78,10 +77,8 @@ disconnect(Pid) ->
     {stop, Reason :: term()} | ignore).
 init([{Transport,Ref,Socket},Opts]) ->
     process_flag(trap_exit,true),
-    {ok,ConnPid} = mqtt_connection_sup_sup:start_monitored_connection(Transport,Socket,Opts),
-    ConnRef = monitor(process,ConnPid),
-    ParserPid = spawn_link(fun() -> start_loop(Transport,Ref,Socket,ConnPid,Opts) end),
-    S = #state{parser = ParserPid, conn_pid = ConnPid},
+    self() ! {async_init,Ref,Opts},
+    S = #state{socket = Socket,transport = Transport},
     {ok, S}.
 
 %%--------------------------------------------------------------------
@@ -137,15 +134,36 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_info({'EXIT',Reason, ParserPid},
-    State = #state{parser = ParserPid, conn_pid = ConnPid}) ->
+handle_info({'EXIT',ParserPid, Reason},S = #state{parser_pid = ParserPid, conn_pid = ConnPid}) ->
     mqtt_connection:process_unexpected_disconnect(ConnPid,Reason),
-    {stop, normal, State};
+    {stop, normal, S};
 
-handle_info({'DOWN',process,ConnPid, Reason},
-    State = #state{conn_pid = ConnPid}) ->
-    mqtt_connection:process_unexpected_disconnect(ConnPid,unknown)
-    {stop, normal, State};
+handle_info({'EXIT',ConnPid, Reason}, S = #state{conn_pid = ConnPid}) ->
+     mqtt_connection:process_unexpected_disconnect(ConnPid,Reason),
+    {stop, normal, S};
+
+
+handle_info({async_init,Ref,Opts},S = #state{transport = Transport, socket = Socket}) ->
+    {ok,ConnPid} = mqtt_connection_sup_sup:start_link_tree(Transport,Socket,Opts),
+    error_logger:info_msg(ConnPid),
+    ok = ranch:accept_ack(Ref),
+    ok = Transport:setopts(Socket, [{active, once}]),
+    ParserPid = spawn_link(fun() -> start_loop(ConnPid,Opts) end),
+    {noreply, S#state{conn_pid = ConnPid, parser_pid = ParserPid}};
+
+handle_info({tcp, Socket, Data}, S = #state{socket=Socket, transport=Transport, parser_pid = ParserPid}) ->
+    Transport:setopts(Socket, [{active, once}]),
+    error_logger:info_msg("received data ~p",[Data]),
+    ParserPid ! {data,Data},
+    {noreply, S};
+
+handle_info({tcp_closed, Socket}, S = #state{conn_pid = ConnPid, socket = Socket}) ->
+    mqtt_connection:process_unexpected_disconnect(ConnPid,closed),
+    {stop, normal, S};
+
+handle_info({tcp_error, Socket, Reason},  S = #state{conn_pid = ConnPid, socket = Socket}) ->
+    mqtt_connection:process_unexpected_disconnect(ConnPid,Reason),
+    {stop, normal, S};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -163,7 +181,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
+terminate(_Reason, State = #state{transport = Transport, socket = Socket}) ->
+    error_logger:info_msg("Receiver shutting down ~p~n", [_Reason]),
+    Transport:close(Socket),
     ok.
 
 %%--------------------------------------------------------------------
@@ -185,14 +205,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-start_loop(Transport,Ref,Socket,ConnPid, Opts) ->
+start_loop(ConnPid, Opts) ->
     TimeOut = proplists:get_value(read_timeout,Opts,30000),
     BufferSize = proplists:get_value(buffer_size,Opts,128000),
-    ok = ranch:accept_ack(Ref),
     %% calback for the parser process to get new data
     ReadFun =
         fun(ExpectedSize) ->
-            receive_data(Transport,Socket,ExpectedSize,TimeOut)
+            receive_data(ExpectedSize)
         end,
 
     ParseState = #parse_state{
@@ -205,9 +224,11 @@ start_loop(Transport,Ref,Socket,ConnPid, Opts) ->
 loop_over_socket(ConnPid, ParseState) ->
     case mqtt_parser:parse_packet(ParseState) of
         {ok, NewPacket,NewParseState} ->
+            error_logger:info_msg("processing packet ~p~n", [NewPacket]),
             mqtt_connection:process_packet(ConnPid,NewPacket),
             loop_over_socket(ConnPid,NewParseState);
         {error,Reason} ->
+            error_logger:info_msg("Parse error ~p~n", [Reason]),
             handle_error(ConnPid,Reason)
     end.
 
@@ -223,10 +244,24 @@ handle_error(ConnPid, Reason) ->
     end.
 
 %% callback for parser process
-receive_data(Transport,Socket,ExpectedData,TimeOut) ->
-    %% we can just return the {ok,Data} or {error,_} values directly to the parser process
-    {ok,Data} =  Transport:recv(Socket, ExpectedData, TimeOut),
-    {ok,Data}
-.
+receive_data(MinExpected) ->
+    receive_data(MinExpected,<<>>).
+
+receive_data(0,Acc) ->
+    receive
+        {data,Data} ->
+            {ok,<<Acc/binary,Data/binary>>};
+        _ -> exit(normal)
+    end;
+
+receive_data(MinExpected,Acc) when byte_size(Acc) >= MinExpected ->
+    {ok,Acc};
+
+receive_data(MinExpected,Acc) ->
+    receive
+        {data,Data} ->
+            receive_data(MinExpected,<<Acc/binary,Data/binary>>);
+        _ -> exit(normal)
+    end.
 
 
