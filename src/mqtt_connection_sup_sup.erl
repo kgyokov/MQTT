@@ -4,37 +4,15 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 28. Jan 2015 11:54 PM
+%%% Created : 15. Mar 2015 1:40 AM
 %%%-------------------------------------------------------------------
--module(mqtt_connection_sup2).
+-module(mqtt_connection_sup_sup).
 -author("Kalin").
 
 -behaviour(supervisor).
 
--define(SENDER_SPEC(Transport,Socket),
-    {
-        sender,
-        {mqtt_sender, start_link, [Transport,Socket]},
-        permanent,          % cannot recover from a lost connection
-        2000,               % should be more than sufficient
-        worker,             % as opposed to supervisor
-        [mqtt_sender]
-    }
-).
-
--define(CONN_SPEC(ReceiverPid,SenderPid,Options),
-    {
-        connection,                               %% Id
-        {mqtt_connection, start_link, [ReceiverPid,SenderPid,Options]},
-        permanent,                                %% must never stop
-        5000,                                     %% should be more than sufficient for the process to clean up
-        worker,                                   %% as opposed to supervisor
-        [mqtt_connection]
-    }
-).
-
 %% API
--export([start_link/0, create_tree/5]).
+-export([start_link/0, start_monitored_connection/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -51,17 +29,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
-%% -spec(start_link() ->
-%%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+-spec(start_link() ->
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-    {ok,_SupPid} = supervisor:start_link(?MODULE, []).
-
-create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
-    {ok, SenderPid } = supervisor:start_child(SupPid,
-                        ?SENDER_SPEC(Transport,Socket)),
-    {ok, ConnPid} = supervisor:start_child(SupPid,
-                        ?CONN_SPEC(ReceiverPid,SenderPid,Options)),
-    {ok, ConnPid}.
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -85,7 +56,17 @@ create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
     ignore |
     {error, Reason :: term()}).
 init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+    SupFlags = {simple_one_for_one, 0, 1},
+
+    AChild = {conn_sup, {mqtt_connection_sup2, start_link, []},
+        permanent, 2000, supervisor, [mqtt_connection_sup2]},
+
+    {ok, {SupFlags, [AChild]}}.
+
+start_monitored_connection(Transport,Socket,Options) ->
+    {ok,SupPid} = supervisor:start_child(?SERVER, []),
+    mqtt_connection_sup2:create_tree(SupPid,self(),Transport,Socket,Options)
+.
 
 %%%===================================================================
 %%% Internal functions

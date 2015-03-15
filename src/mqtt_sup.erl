@@ -23,5 +23,10 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
+    {ok, { {one_for_one, 0, 1},
+            [
+                ?CHILD(mqtt_connection_sup_sup,supervisor)
+            ]
+        }
+    }.
 

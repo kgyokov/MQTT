@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2,
+-export([start_link/3,
     process_packet/2,
     process_bad_packet/2,
     process_unexpected_disconnect/2,
@@ -39,6 +39,7 @@
     connect_state = connecting, %% CONNECT state: connecting, connected, disconnecting, disconnected
     sender_pid,                 %% The process sending to the actual device
     receiver_pid,               %% The process receiving from the actual device TODO: Do we even need to know this???
+    receiver_ref,
     options,                    %% options such as connection timeouts, etc.
     clean_session,
     session_in,
@@ -59,10 +60,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(SenderPid::pid(),Options::term()) ->
+-spec(start_link(ReceiverPid::pid,SenderPid::pid(),Options::term()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(SenderPid,Options) ->
-    gen_server:start_link(?MODULE, [SenderPid,Options], []).
+start_link(ReceiverPid,SenderPid,Options) ->
+    gen_server:start_link(?MODULE, [ReceiverPid,SenderPid,Options], []).
 
 publish_packet(Pid,Packet) ->
     gen_server:cast(Pid,{publish,Packet}).
@@ -76,6 +77,12 @@ process_bad_packet(Pid,Reason) ->
 process_unexpected_disconnect(Pid,Reason) ->
     gen_server:cast(Pid,{client_disconnected, Reason}).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Closes the connection if we detect two connections from the same ClientId
+%% @end
+%%--------------------------------------------------------------------
 close_duplicate(Pid) ->
     gen_server:cast(Pid, {force_close, duplicate}).
 
@@ -98,20 +105,23 @@ close_duplicate(Pid) ->
 %%  -spec(init(Args :: term()) ->
 %%    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 %%    {stop, Reason :: term()} | ignore).
-init([SenderPid,Options]) ->
+init([ReceiverPid,SenderPid,Options]) ->
     process_flag(trap_exit,true),
-
-    ConnectTimeOut = proplists:get_value(connect_timeout,Options,?CONNECT_DEFAULT_TIMEOUT),
-    set_connect_timer(ConnectTimeOut),
     {Security,SecConf} = proplists:get_value(security,Options,{gen_auth_default,undefined}),
+    ConnectTimeOut = proplists:get_value(connect_timeout,Options,?CONNECT_DEFAULT_TIMEOUT),
+
+    set_connect_timer(ConnectTimeOut),
+
+    self() ! async_init,
 
     {ok, #state{
         connect_state = connecting,
         sender_pid =  SenderPid,
-        receiver_pid = undefined, %% TODO decide how to handle this
+        receiver_pid = ReceiverPid, %% TODO decide how to handle this
         options = Options,
         security = {Security,SecConf}
-    }}.
+    }}
+.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -186,6 +196,14 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_info(async_init, S = #state{receiver_pid = ReceiverPid}) ->
+    Ref = monitor(process,ReceiverPid),
+    {noreply,S#state{receiver_ref = Ref}};
+
+handle_info({'DOWN',_,process,ReceiverPid,Reason}, S = #state{receiver_pid = ReceiverPid,
+                                                              connect_state = connected}) ->
+    receiver_closing(S,Reason);
 
 handle_info(connect_timeout, S = #state{connect_state = connecting}) ->
     prevent_connection(S,timeout);
@@ -515,7 +533,7 @@ send_to_client(SenderPid,Packet) when is_pid(SenderPid) ->
 receiver_closing(S = #state{connect_state = connecting},Reason) ->
     %% We are not even connected, nothing to do here
     {stop, normal,
-        S#state{connect_state = {closing,failed,Reason}}};
+        S#state{connect_state = {closing,receiver,Reason}}};
 
 %% @doc
 %% The receiver terminates an established connection.
@@ -551,7 +569,7 @@ abort_connection(S = #state{connect_state = connected},Reason) ->
 prevent_connection(S,Reason) ->
     disconnect_client(S,Reason),
     {stop, normal,
-        S#state{connect_state = {closing,failed,Reason}}}.
+        S#state{connect_state = {closing,receiver,Reason}}}.
 
 %% @doc
 %% The client tells the server it wants to close the established connection.
