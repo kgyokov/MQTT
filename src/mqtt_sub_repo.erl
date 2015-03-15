@@ -13,7 +13,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 
 %% API
--export([create_tables/2, add_sub/3, remove_sub/2, get_all_matches/1, wait_for_tables/0]).
+-export([create_tables/2, add_sub/3, remove_sub/2, get_matches/1, wait_for_tables/0]).
 
 -ifdef(TEST).
     -export([clear_tables/0,delete_tables/0]).
@@ -120,7 +120,7 @@ remove_sub(ClientId, Topic) ->
 %% per client
 %%
 %% @end
-get_all_matches(Topic) ->
+get_matches(Topic) ->
     Patterns = mqtt_topic:explode(Topic),
     Spec = [{{'_',P},[],['$_']} || P <- Patterns],
     Fun =
@@ -145,7 +145,7 @@ get_all_matches(Topic) ->
 
 
 wait_for_tables()->
-    mnesia:wait_for_tables(?SUB_TABLE,20000).
+    mnesia:wait_for_tables(?SUB_TABLE,5000).
 
 new(Topic) ->
     #mqtt_sub{topic = Topic, subs = orddict:new()}.

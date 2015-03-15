@@ -39,7 +39,6 @@
 %%
 %% @end
 create_tables(Nodes,NFragments)->
-    mnesia:create_schema(Nodes),
     mnesia:create_table(?SESSION_TABLE, [
         {disc_copies, Nodes},
         {frag_properties,
