@@ -448,16 +448,20 @@ handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
 
 publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},
         S = #state{session_in = SessionIn, sender_pid = SenderPid})->
-    case Qos of
+    NewSessionIn = case Qos of
         0 ->
             mqtt_publish:at_most_once(Msg,SessionIn);
         1 ->
-            mqtt_publish:at_least_once(Msg,SessionIn),
-            send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId});
+            Sess1 = mqtt_publish:at_least_once(Msg,SessionIn),
+            send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId}),
+            Sess1;
         2 ->
-            mqtt_publish:exactly_once_phase1(Msg,SessionIn),
-            send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId})
-    end.
+            Sess2 = mqtt_publish:exactly_once_phase1(Msg,SessionIn),
+            send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId}),
+            Sess2
+    end,
+    NewSessionIn
+.
 
 
 %%%===================================================================
