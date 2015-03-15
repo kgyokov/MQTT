@@ -20,11 +20,11 @@ setup()->
     Nodes = [node()],
     mnesia:create_schema(Nodes),
     application:start(mnesia),
-    mqtt_sub_repo:create_tables(Nodes,1),
-    mqtt_sub_repo:wait_for_tables().
+    mqtt_reg_repo:create_tables(Nodes,1),
+    mqtt_reg_repo:wait_for_tables().
 
 teardown()->
-    mqtt_sub_repo:delete_tables().
+    mqtt_reg_repo:delete_tables().
 
 my_test_() ->
         {foreach,
@@ -34,88 +34,47 @@ my_test_() ->
                 [
                     {spawn,
                         fun() ->
-                            ?lists_are_equal([], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
+                            ?assertEqual(undefined, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
-                            ?lists_are_equal([], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
+                            ?assertEqual(ok,mqtt_reg_repo:unregister(self(),<<"Client1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 2),
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            ?lists_are_equal([{<<"Client1">>, 1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
+                            Pid = spawn(fun() -> exit(normal) end),
+                            mqtt_reg_repo:register(Pid,<<"Client1">>),
+                            ?assertEqual({ok,Pid}, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
-                            ?lists_are_equal([], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
+                            Pid = spawn(fun() -> exit(normal) end),
+                            mqtt_reg_repo:register(Pid,<<"Client1">>),
+                            mqtt_reg_repo:unregister(Pid,<<"Client1">>),
+                            ?assertEqual(undefined, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/1">>, 1),
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 2),
-                            ?lists_are_equal([{<<"Client1">>, 2}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
+                            Pid1 = spawn(fun() -> exit(normal) end),
+                            Pid2 = spawn(fun() -> exit(normal) end), %% just a way to generate a Pid
+                            mqtt_reg_repo:register(Pid1,<<"Client1">>),
+                            ?assertEqual({dup_detected,Pid1},
+                                mqtt_reg_repo:register(Pid2,<<"Client1">>)),
+                            ?assertEqual({ok,Pid2}, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:add_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client1">>,1},{<<"Client2">>,2}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
-                        end
-                    },
-                    {spawn,
-                        fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:add_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client1">>,1},{<<"Client2">>,2}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
-                        end
-                    },
-                    {spawn,
-                        fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
-
-                            mqtt_sub_repo:add_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client2">>,2}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
-                        end
-                    },
-                    {spawn,
-                        fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
-                        end
-                    },
-
-                    {spawn,
-                        fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>,  <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
-                        end
-                    },
-                    {spawn,
-                        fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
-                        end
-                    },
-                    {spawn,
-                        fun() ->
-                            mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
+                            Pid1 = spawn(fun() -> exit(normal) end),
+                            Pid2 = spawn(fun() -> exit(normal) end), %% just a way to generate a Pid
+                            mqtt_reg_repo:register(Pid1,<<"Client1">>),
+                            mqtt_reg_repo:unregister(Pid1,<<"Client1">>),
+                            ?assertEqual(ok, mqtt_reg_repo:register(Pid2,<<"Client1">>)),
+                            ?assertEqual({ok,Pid2}, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     }
                 ]
