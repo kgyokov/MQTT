@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2,
+-export([start_link/3,
     process_packet/2,
     process_bad_packet/2,
     process_unexpected_disconnect/2,
@@ -59,10 +59,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(SenderPid::pid(),Options::term()) ->
+-spec(start_link(ReceiverPid::pid,SenderPid::pid(),Options::term()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(SenderPid,Options) ->
-    gen_server:start_link(?MODULE, [SenderPid,Options], []).
+start_link(ReceiverPid,SenderPid,Options) ->
+    gen_server:start_link(?MODULE, [ReceiverPid,SenderPid,Options], []).
 
 publish_packet(Pid,Packet) ->
     gen_server:cast(Pid,{publish,Packet}).
@@ -76,6 +76,12 @@ process_bad_packet(Pid,Reason) ->
 process_unexpected_disconnect(Pid,Reason) ->
     gen_server:cast(Pid,{client_disconnected, Reason}).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Closes the connection if we detect two connections from the same ClientId
+%% @end
+%%--------------------------------------------------------------------
 close_duplicate(Pid) ->
     gen_server:cast(Pid, {force_close, duplicate}).
 
@@ -98,20 +104,23 @@ close_duplicate(Pid) ->
 %%  -spec(init(Args :: term()) ->
 %%    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 %%    {stop, Reason :: term()} | ignore).
-init([SenderPid,Options]) ->
+init([ReceiverPid,SenderPid,Options]) ->
     process_flag(trap_exit,true),
-
-    ConnectTimeOut = proplists:get_value(connect_timeout,Options,?CONNECT_DEFAULT_TIMEOUT),
-    set_connect_timer(ConnectTimeOut),
     {Security,SecConf} = proplists:get_value(security,Options,{gen_auth_default,undefined}),
+    ConnectTimeOut = proplists:get_value(connect_timeout,Options,?CONNECT_DEFAULT_TIMEOUT),
+
+    set_connect_timer(ConnectTimeOut),
+
+    self() ! async_init,
 
     {ok, #state{
         connect_state = connecting,
         sender_pid =  SenderPid,
-        receiver_pid = undefined, %% TODO decide how to handle this
+        receiver_pid = ReceiverPid, %% TODO decide how to handle this
         options = Options,
         security = {Security,SecConf}
-    }}.
+    }}
+.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -186,6 +195,14 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_info(async_init, S = #state{receiver_pid = ReceiverPid}) ->
+    link(ReceiverPid),
+    {noreply,S};
+
+handle_info({'EXIT',ReceiverPid,Reason}, S = #state{receiver_pid = ReceiverPid,
+                                                    connect_state = connected}) ->
+    receiver_closing(S,Reason);
 
 handle_info(connect_timeout, S = #state{connect_state = connecting}) ->
     prevent_connection(S,timeout);
@@ -319,7 +336,7 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
                                  true -> false
                              end,
 
-            S3 = (start_keep_alive(S1, KeepAliveTimeout))
+            S3 = (start_keep_alive(S1, KeepAliveTimeout * 1000))
             #state{session_in = #session_in{client_id = ClientId,will = Will},
             session_out = #session_out{client_id = ClientId,is_persistent = CleanSession}},
 
@@ -427,18 +444,19 @@ handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
         content = Content,dup = Dup,
         qos = Qos,retain = Retain,
         topic = Topic},
-    S#state{session_in = publish(Msg,S#state.session_in)}.
+    S#state{session_in = publish(Msg,S)}.
 
-publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},S)->
+publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},
+        S = #state{session_in = SessionIn, sender_pid = SenderPid})->
     case Qos of
         0 ->
-            mqtt_publish:at_most_once(Msg,S);
+            mqtt_publish:at_most_once(Msg,SessionIn);
         1 ->
-            mqtt_publish:at_least_once(Msg,S),
-            send_to_client(S, #'PUBACK'{packet_id = PacketId});
+            mqtt_publish:at_least_once(Msg,SessionIn),
+            send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId});
         2 ->
-            mqtt_publish:exactly_once_phase1(Msg,S),
-            send_to_client(S, #'PUBREC'{packet_id = PacketId})
+            mqtt_publish:exactly_once_phase1(Msg,SessionIn),
+            send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId})
     end.
 
 
@@ -515,7 +533,7 @@ send_to_client(SenderPid,Packet) when is_pid(SenderPid) ->
 receiver_closing(S = #state{connect_state = connecting},Reason) ->
     %% We are not even connected, nothing to do here
     {stop, normal,
-        S#state{connect_state = {closing,failed,Reason}}};
+        S#state{connect_state = {closing,receiver,Reason}}};
 
 %% @doc
 %% The receiver terminates an established connection.
@@ -551,13 +569,14 @@ abort_connection(S = #state{connect_state = connected},Reason) ->
 prevent_connection(S,Reason) ->
     disconnect_client(S,Reason),
     {stop, normal,
-        S#state{connect_state = {closing,failed,Reason}}}.
+        S#state{connect_state = {closing,receiver,Reason}}}.
 
 %% @doc
 %% The client tells the server it wants to close the established connection.
 %% The server reacts accordingly.
 %% @end
 graceful_disconnect(S = #state{session_in = SessionIn}) ->
+    error_logger:info_msg("SessionIn is ~p",[SessionIn]),
     S1 = S#state{session_in = mqtt_publish:discard_will(SessionIn)},
     session_cleanup(S1),
     disconnect_client(S1, graceful),

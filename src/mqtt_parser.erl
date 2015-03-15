@@ -122,10 +122,10 @@ parse_packet(S)->
     try parse_packet_unsafe(S) of
         {ParsedPacket, NewState} -> {ok,ParsedPacket, NewState}
     catch
-        throw:{error,Reason}->
-            {error,Reason};
-        error:Reason->
+        throw:{error,Reason} ->
             {error,Reason}
+%%         error:Reason->
+%%             {error,Reason}
     end.
 
 parse_packet_unsafe(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
@@ -296,7 +296,7 @@ parse_topic_subscriptions(<<TopicLen:16,Topic:TopicLen/bytes,0:6,QoS:2,Rest/bina
     parse_topic_subscriptions(Rest,[{Topic,QoS}|Subscriptions]).
 
 parse_will_details_maybe(_WillFlag = 0,_,_,Buffer)->
-    {undefined,Buffer};
+    {ok,undefined,Buffer};
 
 parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer)->
     {ok,WillTopic, Rest1} =  parse_string(Buffer),

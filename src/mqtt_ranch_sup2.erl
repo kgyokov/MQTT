@@ -14,7 +14,7 @@
 %% API
 -export([start_link/4]).
 
-start_link(Ref, Socket, Transport, ProtocolOptions) ->
-    mqtt_parser_server:start_link({Transport,Ref,Socket})
+start_link(Ref, Socket, Transport, Opts) ->
+    mqtt_receiver:start_link({Transport,Ref,Socket},Opts)
     %%mqtt_connection_sup:start_link(TRS,ProtocolOptions)
 .

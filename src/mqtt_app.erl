@@ -21,8 +21,8 @@ start(_StartType, _StartArgs) ->
     ],
     ProtOpts = [
         {shutdown,5000},
-        {connection_type, supervisor} %% mqtt_ranch_sup is an adaptor for the mqtt_connection_sup
-        %%{connection_type, worker} %% mqtt_ranch_sup is an adaptor for the mqtt_connection_sup
+        %%{connection_type, supervisor} %% mqtt_ranch_sup is an adaptor for the mqtt_connection_sup
+        {connection_type, worker} %% mqtt_ranch_sup is an adaptor for the mqtt_connection_sup
     ],
     {ok,_} = ranch:start_listener(mqtt, 1000, ranch_tcp, TransOpts, mqtt_ranch_sup, ProtOpts),
     %%{ok,_} = ranch:start_listener(mqtt_ssl, 1000, ranch_ssl, SslTransOpts, mqtt_ranch_sup, ProtOpts),
