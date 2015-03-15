@@ -175,4 +175,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 send_as_binary(Packet, #state{socket = Socket, transport = Transport})  ->
     Binary = mqtt_builder:build_packet(Packet),
+    error_logger:info_msg("Sending packet ~p~n",[Packet]),
+    error_logger:info_msg("Binary ~p~n",[Binary]),
     Transport:send(Socket,Binary).
