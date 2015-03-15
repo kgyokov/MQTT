@@ -207,7 +207,8 @@ handle_info({'EXIT',ReceiverPid,Reason}, S = #state{receiver_pid = ReceiverPid,
 handle_info(connect_timeout, S = #state{connect_state = connecting}) ->
     prevent_connection(S,timeout);
 
-handle_info({keep_alive_timeout,Ref}, S = #state{ keep_alive_ref = Ref}) ->
+handle_info({keep_alive_timeout,MatchRef}, S = #state{ keep_alive_ref = {_,MatchRef}}) ->
+    error_logger:info_msg("Connection timed out ~p",[MatchRef]),
     abort_connection(S,timeout);
 
 handle_info(_Info, State) ->
@@ -447,7 +448,7 @@ handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
     S#state{session_in = publish(Msg,S)}.
 
 publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},
-        S = #state{session_in = SessionIn, sender_pid = SenderPid})->
+        S = #state{session_in = SessionIn, sender_pid = SenderPid}) ->
     NewSessionIn = case Qos of
         0 ->
             mqtt_publish:at_most_once(Msg,SessionIn);
@@ -468,12 +469,12 @@ publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},
 %% SESSION interaction
 %%%===================================================================
 
-register_self(_ClientId,_CleanSession) ->
-    %%mqtt_registration_repo:register(self(),ClientId)
+register_self(ClientId,_CleanSession) ->
+    mqtt_reg_repo:register(ClientId),
     ok.
 
-unregister_self(_ClientId,_CleanSession) ->
-    %%mqtt_registration_repo:unregister(self(),ClientId).
+unregister_self(ClientId,_CleanSession) ->
+    mqtt_reg_repo:unregister(self(),ClientId),
     ok.
 
 %% =================================================
@@ -487,8 +488,22 @@ start_keep_alive(S,TimeOut) ->
     Ref = set_keep_alive_timer(TimeOut),
     S#state {keep_alive_ref = Ref,keep_alive_timeout = TimeOut}.
 
+%% We use MatchRef to ensure we only receive current timeouts.
+%% Thus we avoid some weird behavior if we happen to receive old timeout messages
+%% that we have already canceled. Example:
+%%
+%% 1. We set the timeout to 5000 ms
+%% 2. At 4999 ms we receive a new packet
+%% 3. At 5000 ms the timeout message fires
+%% 4. At 5001 ms We receive the packet:
+%%         - RESET the timeout
+%%         -Send back an ACK
+%% 5. At 5002 ms we receive the OLD timeout
+%% 5. At 5003 ms we close the connection, even though we just acked a packet 1ms ago!
 set_keep_alive_timer(Timeout) ->
-    timer:send_after(Timeout, keep_alive_timeout).
+    MatchRef = make_ref(),
+    TRef = timer:send_after(Timeout, {keep_alive_timeout,MatchRef}),
+    {TRef,MatchRef}.
 
 reset_keep_alive(S = #state{keep_alive_ref = Ref,keep_alive_timeout = TimeOut}) ->
 
@@ -497,12 +512,11 @@ reset_keep_alive(S = #state{keep_alive_ref = Ref,keep_alive_timeout = TimeOut}) 
             -> S;
         _
             -> S#state{keep_alive_ref = reset_timer(TimeOut,Ref)}
-    end
-.
+    end.
 
-reset_timer(Ref,TimeOut) ->
-    if Ref =/= undefned ->
-        timer:cancel(Ref);
+reset_timer({TRef,_},TimeOut) ->
+    if TRef =/= undefned ->
+        timer:cancel(TRef);
         true -> ok
     end,
     set_keep_alive_timer(TimeOut).
