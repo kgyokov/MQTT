@@ -13,7 +13,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 
 %% API
--export([create_tables/2, add_sub/3, remove_sub/2, get_all/1, wait_for_tables/0]).
+-export([create_tables/2, add_sub/3, remove_sub/2, get_all_matches/1, wait_for_tables/0]).
 
 -ifdef(TEST).
     -export([clear_tables/0,delete_tables/0]).
@@ -59,7 +59,11 @@ create_tables(Nodes,NFragments) ->
                true ->
                    [?DISTRIBUTED_DEF(NFragments,Nodes) | DefaultProps]
             end,
-    {atomic, ok} = mnesia:create_table(?SUB_TABLE, Props).
+
+    case mnesia:create_table(?SUB_TABLE, Props) of
+        {atomic, ok}                            -> ok;
+        {aborted, {already_exists, ?SUB_TABLE}} -> ok
+    end.
 
 %% @doc
 %% Appends a new subscription OR replaces an existing one with a new QoS
@@ -116,7 +120,7 @@ remove_sub(ClientId, Topic) ->
 %% per client
 %%
 %% @end
-get_all(Topic) ->
+get_all_matches(Topic) ->
     Patterns = mqtt_topic:explode(Topic),
     Spec = [{{'_',P},[],['$_']} || P <- Patterns],
     Fun =
@@ -150,8 +154,7 @@ new(Topic) ->
 -ifdef(TEST).
 
 clear_tables() ->
-    {atomic,ok} = mnesia:clear_table(?SUB_TABLE)
-.
+    {atomic,ok} = mnesia:clear_table(?SUB_TABLE).
 
 delete_tables() ->
     {atomic,ok} = mnesia:delete_table(?SUB_TABLE).

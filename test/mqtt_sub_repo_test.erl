@@ -34,21 +34,21 @@ my_test_() ->
                 [
                     {spawn,
                         fun() ->
-                            ?lists_are_equal([], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
                             mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
-                            ?lists_are_equal([], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 2),
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            ?lists_are_equal([{<<"Client1">>, 1}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client1">>, 1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
@@ -56,28 +56,28 @@ my_test_() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
                             mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
-                            ?lists_are_equal([], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/1">>, 1),
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 2),
-                            ?lists_are_equal([{<<"Client1">>, 2}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client1">>, 2}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
                             mqtt_sub_repo:add_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client1">>,1},{<<"Client2">>,2}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client1">>,1},{<<"Client2">>,2}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
                             mqtt_sub_repo:add_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client1">>,1},{<<"Client2">>,2}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client1">>,1},{<<"Client2">>,2}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
@@ -86,14 +86,14 @@ my_test_() ->
                             mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
 
                             mqtt_sub_repo:add_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client2">>,2}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client2">>,2}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
                             mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
 
@@ -101,21 +101,21 @@ my_test_() ->
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>,  <<"/A/+">>, 1),
                             mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
                             mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1),
                             mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all(<<"/A/1">>))
+                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_all_matches(<<"/A/1">>))
                         end
                     }
                 ]

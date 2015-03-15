@@ -30,8 +30,8 @@ at_least_once(Msg,Session) ->
 %% --------------------------------------------------------------------------------------
 %% Storing Packet Identifier and Forwarding the message need to be atomic operations
 %% --------------------------------------------------------------------------------------
-exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId},
-    Session = #session_in{packet_seq = Seq, qos2_rec = Qos2Rec})  ->
+exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = 2},
+                    Session = #session_in{packet_seq = Seq, qos2_rec = Qos2Rec})  ->
     case gb_sets:is_element(PacketId,Qos2Rec) of
         true ->
 

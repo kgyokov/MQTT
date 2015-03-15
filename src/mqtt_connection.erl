@@ -278,10 +278,10 @@ handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = true}, S) ->
 
 %% Valid complete packet!
 handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
-    clean_session = CleanSession,will = Will,
-    password = Password,username = Username},
-    S = #state{connect_state = connecting,
-        security = {Security,SecConf}}) ->
+                         clean_session = CleanSession,will = Will,
+                         password = Password,username = Username},
+              S = #state{connect_state = connecting,
+                         security = {Security,SecConf}}) ->
 
     %%=======================================================================
     %% @todo: validate connect packet
@@ -321,10 +321,11 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
 
             S3 = (start_keep_alive(S1, KeepAliveTimeout))
             #state{session_in = #session_in{client_id = ClientId,will = Will},
-                session_out = #session_out{client_id = ClientId, is_persistent = CleanSession}},
+            session_out = #session_out{client_id = ClientId,is_persistent = CleanSession}},
 
             %% @todo:  Determine session present
-            send_to_client(S, #'CONNACK'{return_code = ?CONECTION_ACCEPTED, session_present = SessionPresent}),
+            send_to_client(S, #'CONNACK'{return_code = ?CONECTION_ACCEPTED,
+                                         session_present = SessionPresent}),
             S4 = S3#state{client_id = ClientId,connect_state = connected},
             {noreply,S4}
     end;
@@ -367,8 +368,8 @@ handle_packet(#'SUBSCRIBE'{subscriptions = []}, S) ->
     abort_connection(S,protocol_violation);
 
 handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
-    S = #state{client_id = ClientId,security = {Security,_},
-        session_in = SessionIn, auth_ctx = AuthCtx }) ->
+                S = #state{client_id = ClientId,security = {Security,_},
+                           session_in = SessionIn, auth_ctx = AuthCtx }) ->
 
     %%=======================================================================
     %% TODO: Use CleanSession to determine what to do
