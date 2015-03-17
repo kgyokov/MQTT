@@ -159,15 +159,29 @@ handle_cast({packet, Packet}, S) ->
     S1 = reset_keep_alive(S),
     handle_packet(Packet, S1);
 
-handle_cast({publish, {Message,Topic,QoS,PacketId,Retain}}, S)->
-    send_to_client(S,#'PUBLISH'{
-        content = Message,
+handle_cast({publish, {Topic,Content,Retain,QoS,Ref}}, S = #state{session_out = SessionOut}) ->
+    Packet = #'PUBLISH'{
         topic = Topic,
         qos = QoS,
-        dup = error(not_implemented),
-        packet_id = PacketId,
+        content = Content,
+        dup = false,
         retain = Retain
-    });
+    },
+    if QoS =:= 0 ->
+        send_to_client( S#state.sender_pid,Packet),
+        {noreply, S};
+        true ->
+            case mqtt_session:append_msg(SessionOut,{Topic,Content,Retain,QoS},Ref) of
+                duplicate ->
+                    {noreply, S};
+                mismatched_sub ->
+                    {noreply, S};
+                {ok,NewSessionOut,_Dup} ->
+                    send_to_client(S#state.sender_pid,Packet),
+                    %% @todo: Persist session
+                    {noreply, S#state{session_out = NewSessionOut}}
+            end
+    end;
 
 handle_cast({malformed_packet,_Reason}, S) ->
     abort_connection(S, malformed_packet);
@@ -403,7 +417,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
                         QoS
                 end;
             {error,_}->
-                ?SUBSCRIPTION_FAILURE
+                ?SUBSCRIPTION_FAILURE %% In 3.1.1 there is no distinction between a sub failure and auth failure
         end
         || Sub  <- Subs],
     Ack = #'SUBACK'{packet_id = PacketId,return_codes = Results},
@@ -476,6 +490,20 @@ map_publish_to_msg(#'PUBLISH'{packet_id = PacketId,
                   retain = Retain,
                   topic = Topic}.
 
+map_msg_to_publish(#mqtt_message{packet_id = PacketId,
+                                 client_id = ClientId,
+                                 content = Content,
+                                 dup = Dup,
+                                 qos = Qos,
+                                 retain = Retain,
+                                 topic = Topic}) ->
+    #'PUBLISH'{packet_id = PacketId,
+               retain = Retain,
+               qos = Qos,
+               content = Content,
+               dup = Dup,
+               topic = Topic}.
+
 
 
 %%%===================================================================
@@ -489,6 +517,10 @@ register_self(ClientId,_CleanSession) ->
 unregister_self(ClientId,_CleanSession) ->
     mqtt_reg_repo:unregister(self(),ClientId),
     ok.
+
+subscribe(S = #state{session_out = SessionOut}, NewSubs) ->
+    NewSession = mqtt_session:subscribe(SessionOut,NewSubs),
+    {ok,}
 
 %% =================================================
 %% Timer

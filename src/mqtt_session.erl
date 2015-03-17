@@ -12,7 +12,7 @@
 %%-include("mqtt_packets.hrl").
 -include("mqtt_session.hrl").
 %% API
--export([append_msg/4,
+-export([append_msg/3,
     append_message_comp/2,
     message_ack/2,
     message_pub_rec/2,
@@ -22,60 +22,75 @@
     unsubscribe/2]).
 
 
-subscribe(Session = #session_out{subscriptions = Subs},NewSubs) ->
-    DistinctSubs = mqtt_topic:min_cover(NewSubs),
-    [ {add_or_replace(NewSub,Subs),NewSub} || NewSub <- DistinctSubs ],
-    Session#session_out{subscriptions = []}.
+subscribe(S = #session_out{subscriptions = Subs,client_id = ClientId},NewSubs) ->
+%%     DistinctSubs = mqtt_topic:min_cover(NewSubs),
+%%     [ {add_or_replace_sub(ClientId,NewSub,Subs),NewSub} || NewSub <- DistinctSubs ],
+%%     Session#session_out{subscriptions = []}.
+    [
+        mqtt_sub_repo:add_sub(ClientId,Topic,QoS)
+        || {Topic,QoS} <- NewSubs
+    ],
+    S#session_out{subscriptions =
+                  lists:foldr(fun({Topic,QoS},Acc) ->
+                                orddict:store(Topic,QoS,Acc)
+                              end,
+                              Subs, NewSubs)}
+    %% @todo: Deduplicate, persist
+.
 
-unsubscribe(Session = #session_out{subscriptions = Subs},Subs) ->
-    ok.
+unsubscribe(S = #session_out{subscriptions = Subs, client_id = ClientId},OldSubs) ->
+    [
+        mqtt_sub_repo:remove_sub(ClientId,Topic)
+        || Topic <- Subs
+    ],
+    S#session_out{subscriptions =
+                  lists:foldr(fun(Topic,Acc) ->
+                                orddict:erase(Topic,Acc)
+                              end,
+                              Subs, OldSubs)}
+    %% @todo: Deduplicate, persist
+    .
 
 
-add_or_replace({Topic,QoS},Subs)->
-    State = case dict:find(Topic,Subs) of
-                error ->
-                    new;
-                {ok,CurrentQoS} when CurrentQoS =/= QoS ->
-                    replaced;
-                {ok,CurrentQoS} when CurrentQoS =:= QoS ->
-                    exists
-            end,
-    {State,dict:store(Topic,QoS,Subs)}.
+%%add_or_replace_sub(ClientId,{Topic,QoS},Subs)->
+%%     State = case orddict:find(Topic,Subs) of
+%%                 error ->
+%%                     new;
+%%                 {ok,CurrentQoS} when CurrentQoS =/= QoS ->
+%%                     replaced;
+%%                 {ok,CurrentQoS} when CurrentQoS =:= QoS ->
+%%                     exists
+%%             end,
+%%     mqtt_sub_repo:add_sub(ClientId,Topic,QoS),
+%%     {State,orddict:store(Topic,QoS,Subs)}.
 
-%%
 %% @doc
-%% Appends message
-%%
-%%
-%%
+%% Appends message for delivery
 %% @end
-append_msg(Session,
-    CTRPacket = {_Content,Topic,_Retain},
-    OriginalQoS,
-    Ref) ->
-    #session_out{packet_seq = PacketSeq,
-        refs = Refs,
-        subscriptions = Subs} = Session,
+
+append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_QoS},Ref) ->
+    #session_out{refs = Refs, subscriptions = _Subs} = Session,
 
     case gb_sets:is_member(Ref,Refs) of
         false ->
-            MatchingSub = dict:find(Topic,Subs),
-            case MatchingSub of
-                error ->
-                    ok;
-                SubQoS ->
-                    QoS = min(OriginalQoS,SubQoS),
-                    forward_msg(Session,CTRPacket,QoS,Ref)
-            end;
+%%             MatchingSub = orddict:find(Topic,Subs),
+%%             case MatchingSub of
+%%                 error ->
+%%                     mismatched_sub;
+%%                 SubQoS ->
+%%                     QoS = min(QoS,SubQoS),
+%%                     forward_msg(Session,CTRPacket,Ref)
+%%             end;
+            forward_msg(Session,CTRPacket,Ref);
         true ->
             duplicate
     end.
 
-forward_msg(Session,CTRPacket,QoS,Ref)->
+forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,QoS},Ref)->
     #session_out{packet_seq = PacketSeq, refs = Refs} = Session,
 
-    PacketId = if QoS =:= ?QOS_AT_LEAST_ONCE;
-                  QoS =:= ?QOS_EXACTLY_ONCE ->
+    PacketId = if QoS =:= ?QOS_AT_MOST_ONCE;
+                  QoS =:= ?QOS_AT_LEAST_ONCE ->
                         (PacketSeq+1) band 16#ffff;
                   true ->
                         undefined
@@ -84,17 +99,17 @@ forward_msg(Session,CTRPacket,QoS,Ref)->
     NewSession = (case QoS of
                       ?QOS_AT_LEAST_ONCE ->
                           #session_out{qos1 = QosQueue} = Session1,
-                          Session1#session_out{qos1 = dict:store(PacketId ,CTRPacket,QosQueue),
+                          Session1#session_out{qos1 = orddict:store(PacketId,CTRPacket,QosQueue),
                               packet_seq = PacketId};
                       ?QOS_EXACTLY_ONCE ->
                           #session_out{qos2 = QosQueue} = Session1,
-                          Session1#session_out{qos2 = dict:store(PacketId ,CTRPacket,QosQueue),
+                          Session1#session_out{qos2 = orddict:store(PacketId,CTRPacket,QosQueue),
                               packet_seq = PacketId};
                       ?QOS_AT_MOST_ONCE ->
                           Session
                   end),
 %%       #session_out{refs = gb_sets:add(Ref,Refs)},
-    {ok, NewSession,to_publish(QoS,{PacketId,CTRPacket},false)}
+    {ok,NewSession,false}
 .
 
 append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
@@ -102,14 +117,14 @@ append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
 
 message_ack(Session,PacketId) ->
     #session_out{qos1 = Messages} = Session,
-    Session#session_out{qos1 = dict:erase(PacketId,Messages)}.
+    Session#session_out{qos1 = orddict:erase(PacketId,Messages)}.
 
 
 message_pub_rec(Session,PacketId) ->
     #session_out{qos2 = Msgs, qos2_rec = Ack} = Session,
-    case dict:find(PacketId,Msgs) of
+    case orddict:find(PacketId,Msgs) of
         {ok,_} ->
-            Session#session_out{qos2 = dict:erase(PacketId,Msgs),
+            Session#session_out{qos2 = orddict:erase(PacketId,Msgs),
                 qos2_rec = gb_sets:add(PacketId,Ack)};
         error ->
             Session
@@ -129,12 +144,12 @@ recover(Session) ->
 recover_in_flight(#session_out{qos1 = UnAck1, qos2 = UnAck2,
     qos2_rec = Rec, packet_seq = PacketSeq}) ->
     NewPackets =
-        [ to_publish(?QOS_AT_LEAST_ONCE,Packet,true) || Packet  <- dict:to_list(UnAck1)] ++
-        [ to_publish(?QOS_AT_MOST_ONCE,Packet,true)  || Packet  <- dict:to_list(UnAck2)] ++
+        [ to_publish(?QOS_AT_LEAST_ONCE,Packet,true) || Packet  <- orddict:to_list(UnAck1)] ++
+        [ to_publish(?QOS_AT_MOST_ONCE,Packet,true)  || Packet  <- orddict:to_list(UnAck2)] ++
         [ to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)],
     {PacketSeq,NewPackets}.
 
-recover_queued(Session)->
+recover_queued(Session) ->
     ok.
 
 get_retained(Session) ->
@@ -156,9 +171,9 @@ new(ClientId)->
     #session_out{
         client_id = ClientId,
         packet_seq = 0,
-        qos1 = dict:new(),
-        qos2 = dict:new(),
+        qos1 = orddict:new(),
+        qos2 = orddict:new(),
         qos2_rec = gb_sets:new(),
         refs = gb_sets:new(),
-        subscriptions = []
+        subscriptions = orddict:new()
     }.
