@@ -412,7 +412,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
 
 
 handle_packet(#'UNSUBSCRIBE'{packet_id = PacketId,topic_filters = Filters},
-    S = #state{session_in = SessionIn}) ->
+              S = #state{session_in = SessionIn}) ->
     [ ok = mqtt_session:unsubscribe(SessionIn,Filter) || Filter <- Filters],
     Ack = #'UNSUBACK'{packet_id = PacketId},
     send_to_client(S,Ack),
@@ -436,33 +436,46 @@ handle_packet(_, S) ->
 %% Publish
 %% =================================================
 
-handle_publish(#'PUBLISH'{packet_id = PacketId,retain = Retain,
-    qos = Qos,content = Content,
-    dup = Dup,topic = Topic},
-    S = #state{client_id = ClientId}) ->
-    %% Map packet ot internal representation
-    Msg = #mqtt_message{packet_id = PacketId,client_id = ClientId,
-        content = Content,dup = Dup,
-        qos = Qos,retain = Retain,
-        topic = Topic},
-    S#state{session_in = publish(Msg,S)}.
+handle_publish(Packet,S) ->
+    S#state{session_in = publish(Packet,S)}.
 
-publish(Msg = #mqtt_message{packet_id = PacketId, qos = Qos},
-        S = #state{session_in = SessionIn, sender_pid = SenderPid}) ->
-    NewSessionIn = case Qos of
-        0 ->
-            mqtt_publish:at_most_once(Msg,SessionIn);
-        1 ->
-            Sess1 = mqtt_publish:at_least_once(Msg,SessionIn),
-            send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId}),
-            Sess1;
-        2 ->
-            Sess2 = mqtt_publish:exactly_once_phase1(Msg,SessionIn),
-            send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId}),
-            Sess2
-    end,
-    NewSessionIn
-.
+publish(Packet = #'PUBLISH'{packet_id = PacketId,
+                            qos       = QoS},
+        #state{client_id     = ClientId,
+               session_in    = SessionIn,
+               sender_pid    = SenderPid}) ->
+
+    Msg = map_publish_to_msg(Packet,ClientId),
+    NewSessionIn = case QoS of
+                       0 ->
+                           mqtt_publish:at_most_once(Msg,SessionIn);
+                       1 ->
+                           Sess1 = mqtt_publish:at_least_once(Msg,SessionIn),
+                           send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId}),
+                           Sess1;
+                       2 ->
+                           Sess2 = mqtt_publish:exactly_once_phase1(Msg,SessionIn),
+                           send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId}),
+                           Sess2
+                   end,
+    NewSessionIn.
+
+map_publish_to_msg(#'PUBLISH'{packet_id = PacketId,
+                              retain = Retain,
+                              qos = Qos,
+                              content = Content,
+                              dup = Dup,
+                              topic = Topic},
+                   ClientId) ->
+
+    #mqtt_message{packet_id = PacketId,
+                  client_id = ClientId,
+                  content = Content,
+                  dup = Dup,
+                  qos = Qos,
+                  retain = Retain,
+                  topic = Topic}.
+
 
 
 %%%===================================================================
@@ -486,7 +499,8 @@ set_connect_timer(Timeout) ->
 
 start_keep_alive(S,TimeOut) ->
     Ref = set_keep_alive_timer(TimeOut),
-    S#state {keep_alive_ref = Ref,keep_alive_timeout = TimeOut}.
+    S#state {keep_alive_ref = Ref,
+             keep_alive_timeout = TimeOut}.
 
 %% We use MatchRef to ensure we only receive current timeouts.
 %% Thus we avoid some weird behavior if we happen to receive old timeout messages
@@ -505,7 +519,8 @@ set_keep_alive_timer(Timeout) ->
     TRef = timer:send_after(Timeout, {keep_alive_timeout,MatchRef}),
     {TRef,MatchRef}.
 
-reset_keep_alive(S = #state{keep_alive_ref = Ref,keep_alive_timeout = TimeOut}) ->
+reset_keep_alive(S = #state{keep_alive_ref = Ref,
+                            keep_alive_timeout = TimeOut}) ->
 
     case TimeOut of
         undefined
