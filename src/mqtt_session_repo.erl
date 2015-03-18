@@ -95,32 +95,34 @@ append_message(Session = #session_out{},{Content,Topic,Retain,{QoS,Ref}}) ->
     #session_out{packet_seq = NewPacketId, refs = dict:store(Ref,Ref,Refs)},
     {NewSession,PacketId}.
 
-message_ack(ClientId,PacketId)  ->
-    message_ack(undefined,PacketId);
-
 message_ack(Session = #session_out{},PacketId) ->
     #session_out{qos1 = Messages} = Session,
-    Session#session_out{ qos1 = dict:erase(PacketId,Messages)}.
+    Session#session_out{ qos1 = dict:erase(PacketId,Messages)};
 
-message_pub_rec(ClientId,PacketId)->
-    message_pub_rec(undefined,PacketId);
+message_ack(ClientId,PacketId)  ->
+    message_ack(undefined,PacketId).
+
 
 message_pub_rec(Session = #session_out{},PacketId) ->
     #session_out{qos2 = Messages, qos2_rec = Ack} = Session,
     case dict:find(PacketId,Messages) of
         {ok,_} ->
             Session#session_out{qos2 = dict:erase(PacketId,Messages),
-                qos2_rec = dict:store(PacketId,PacketId,Ack)};
+                                qos2_rec = dict:store(PacketId,PacketId,Ack)};
         error ->
             Session
-    end.
+    end;
 
-message_pub_comp(ClientId,PacketId) ->
-    message_pub_comp(undefined,PacketId);
+message_pub_rec(ClientId,PacketId)->
+    message_pub_rec(undefined,PacketId).
 
 message_pub_comp(Session = #session_out{},PacketId)  ->
     #session_out{qos2_rec = Ack} = Session,
-    Session#session_out{qos2 = dict:erase(PacketId,Ack)}.
+    Session#session_out{qos2 = dict:erase(PacketId,Ack)};
+
+message_pub_comp(ClientId,PacketId) ->
+    message_pub_comp(undefined,PacketId).
+
 
 clear(ClientId)->
     Fun = fun() ->
@@ -133,6 +135,16 @@ clear(ClientId)->
     end,
     mnesia:activity(transaction,Fun).
 
+
+
+recover(#session_out{qos1 = UnAck1, qos2 = UnAck2,
+                     qos2_rec = Rec, packet_seq = PacketSeq}) ->
+    NewPackets =
+    [ to_publish(?QOS_AT_LEAST_ONCE,Packet) || Packet  <- dict:to_list(UnAck1)] ++
+    [ to_publish(?QOS_AT_MOST_ONCE,Packet)  || Packet  <- dict:to_list(UnAck2)] ++
+    [ to_pubrel(PacketId) || {PacketId,PacketId}  <- dict:to_list(Rec)],
+    {PacketSeq,NewPackets};
+
 recover(ClientId)->
     Fun = fun() ->
         case mnesia:read(?SESSION_TABLE,ClientId, read) of
@@ -141,18 +153,7 @@ recover(ClientId)->
             [Session] ->
                 recover(Session)
         end
-    end;
-
-
-
-recover(#session_out{qos1 = UnAck1, qos2 = UnAck2,
-    qos2_rec = Rec, packet_seq = PacketSeq}) ->
-    NewPackets =
-        [ to_publish(?QOS_AT_LEAST_ONCE,Packet) || Packet  <- dict:to_list(UnAck1)] ++
-        [ to_publish(?QOS_AT_MOST_ONCE,Packet)  || Packet  <- dict:to_list(UnAck2)] ++
-        [ to_pubrel(PacketId) || {PacketId,PacketId}  <- dict:to_list(Rec)],
-    {PacketSeq,NewPackets}.
-
+    end.
 
 to_publish(QoS,{PacketId,{Content,Topic,Retain}})->
     #'PUBLISH'{content = Content,packet_id = PacketId,
@@ -173,7 +174,4 @@ new(ClientId)->
         refs = dict:new()
     }.
 
-client_do(ClientId,Action)  ->
-    ok
-.
 

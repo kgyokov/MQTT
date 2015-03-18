@@ -88,10 +88,10 @@ register(Pid, ClientId)->
         case mnesia:read(?REG_TABLE, ClientId, write) of
             [] ->
                 %error_logger:info_msg("empty result"),
-                P = mnesia:write(?REG_TABLE,NewReg,write),
+                mnesia:write(?REG_TABLE,NewReg,write),
                 %error_logger:info_msg(P),
                 ok;
-            [E = #client_reg{connection_pid = EPid}] ->
+            [#client_reg{connection_pid = EPid}] ->
                 case EPid of
                     Pid ->
                         ok;

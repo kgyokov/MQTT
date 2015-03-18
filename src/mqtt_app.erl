@@ -15,7 +15,7 @@ start(_StartType, _StartArgs) ->
     TransOpts = [
         {port,1883}
     ],
-    SslTransOpts = [
+    _SslTransOpts = [
         {port,5556},
         {certfile, ""},
         {cacertfile, ""},
@@ -42,7 +42,7 @@ init() ->
     ok = mnesia:start(),
     wait_for_tables(Nodes).
 
-wait_for_tables(Nodes) ->
+wait_for_tables(_Nodes) ->
     mqtt_sub_repo:wait_for_tables(),
     mqtt_reg_repo:wait_for_tables().
 

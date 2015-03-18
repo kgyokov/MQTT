@@ -181,7 +181,7 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, State = #state{transport = Transport, socket = Socket}) ->
+terminate(_Reason, _State = #state{transport = Transport, socket = Socket}) ->
     error_logger:info_msg("Receiver shutting down ~p~n", [_Reason]),
     Transport:close(Socket),
     ok.

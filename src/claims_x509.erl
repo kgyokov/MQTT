@@ -10,10 +10,10 @@
 -author("Kalin").
 
 %% API
--export([]).
+-export([get_claims/4]).
 
-get_claims(Options,ClientId,Username,Password)->
-    IssuerID = socket_to_claims(undefined).
+get_claims(_Options,_ClientId,_Username,_Password)->
+    ok.%%IssuerID = socket_to_claims(undefined).
 
 socket_to_claims(Socket) ->
     case ssl:peercert(Socket) of

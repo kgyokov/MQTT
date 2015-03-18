@@ -149,10 +149,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
+send_to_server(SenderPid,Packet)  ->
+    mqtt_sender:send_packet(SenderPid,Packet);
 
 send_to_server(S,Packet)  ->
-    send_to_server(S#state.sender_pid,Packet);
+    send_to_server(S#state.sender_pid,Packet).
 
-send_to_server(SenderPid,Packet)  ->
-    mqtt_sender:send_packet(SenderPid,Packet).

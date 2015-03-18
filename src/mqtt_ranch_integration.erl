@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, start_connection/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -44,12 +44,12 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 start_connection(ReceiverPid,{Transport,Socket,Opts},S = #state{pairs = Pairs}) ->
-    {ok,ConnPid} = mqtt_connection_sup_sup:start_monitored_connection(Transport,Socket,Opts),
+    {ok,ConnPid} = mqtt_connection_sup_sup:start_link_tree(Transport,Socket,Opts),
     ConnRef = monitor(process,ConnPid),
     RecRef = monitor(process,ReceiverPid),
     Pairs1 = gb_sets:add({ConnRef,RecRef},Pairs),
 
-    {reply,{ok,ConnPid}, S#state{pairs = Pairs1}}
+    {reply,{ok,ConnPid}, S#state{pairs = Pairs1}}.
 
 
 %%%===================================================================
@@ -70,7 +70,7 @@ start_connection(ReceiverPid,{Transport,Socket,Opts},S = #state{pairs = Pairs}) 
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([]) ->
+init(_Args = []) ->
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------

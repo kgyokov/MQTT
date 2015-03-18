@@ -58,8 +58,8 @@ exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = 2},
 
 %%  Completes message send
 exactly_once_phase2(PacketId,Session = #session_in{qos2_rec = Qos2Rec}) ->
-    Session#session_in{qos2_rec = gb_sets:delete(PacketId,Qos2Rec)},
-    maybe_persist(Session).
+    NewSession = Session#session_in{qos2_rec = gb_sets:delete(PacketId,Qos2Rec)},
+    maybe_persist(NewSession).
 
 
 recover(Session =  #session_in{msg_in_flight = undefined}) ->
@@ -69,9 +69,10 @@ recover(Session =  #session_in{packet_seq = Seq, msg_in_flight = Msg}) ->
     fwd_message(Msg,Seq),
     maybe_persist(Session#session_in{msg_in_flight = undefined}).
 
-fwd_message(Msg = #mqtt_message{ topic = Topic},Seq) ->
-    error_logger:info_msg("Processing message ~p~n",[Msg]).
+fwd_message(Msg = #mqtt_message{ topic = _Topic},_Seq) ->
+    error_logger:info_msg("Processing message ~p~n",[Msg]),
+    mqtt_router:global_route(Msg).
 
-maybe_persist(Session = #session_in{is_persistent = IsPersistent}) ->
+maybe_persist(Session = #session_in{is_persistent = _IsPersistent}) ->
     %% @todo: handle persistence
     Session.
