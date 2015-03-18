@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -22,9 +22,22 @@
     terminate/2,
     code_change/3]).
 
+-export([append_msg/3,
+         append_message_comp/2,
+         message_ack/2,
+         message_pub_rec/2,
+         message_pub_comp/2,
+         subscribe/2,
+         unsubscribe/2
+         %%cleanup/1
+]).
+
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {
+    conn_pid,
+    session_out
+}).
 
 %%%===================================================================
 %%% API
@@ -36,10 +49,34 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link() ->
+-spec(start_link(ConnPid::pid()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(ConnPid) ->
+    gen_server:start_link(?MODULE, [ConnPid], []).
+
+append_msg(Pid,CTRPacket = {_Topic,_Content,_Retain,_QoS},Ref) ->
+    gen_server:call(Pid,{append, CTRPacket,Ref}).
+
+append_message_comp(Pid,Ref) ->
+    gen_server:call(Pid,{append_comp,Ref}).
+
+message_ack(Pid,PacketId) ->
+    gen_server:call(Pid,{ack,PacketId}).
+
+message_pub_rec(Pid,PacketId) ->
+    gen_server:call(Pid,{pub_rec,PacketId}).
+
+message_pub_comp(Pid,PacketId) ->
+    gen_server:call(Pid,{pub_comp,PacketId}).
+
+subscribe(Pid,NewSubs) ->
+    gen_server:call(Pid,{sub,NewSubs}).
+
+unsubscribe(Pid,OldSubs) ->
+    gen_server:call(Pid,{unsub,OldSubs}).
+
+%% cleanup(Pid) ->
+%%     gen_server:call(Pid,cleanup).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -59,8 +96,8 @@ start_link() ->
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([]) ->
-    {ok, #state{}}.
+init([ConnPid,_CleanSession]) ->
+    {ok, #state{conn_pid = ConnPid}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -77,6 +114,43 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_call({append, CTRPacket,Ref}, _From, S = #state{session_out = SO}) ->
+    case mqtt_session:append_msg(SO,CTRPacket,Ref) of
+          duplicate ->
+              {reply,duplicate,S#state{session_out = SO}};
+           SO1 ->
+               {reply,ok,SO1}
+     end;
+
+handle_call({append_comp,Ref}, _From,  S = #state{session_out = SO}) ->
+    SO1 = mqtt_session:append_message_comp(SO,Ref),
+    {reply,ok,S#state{session_out = SO1}};
+
+handle_call({ack,PacketId}, _From,  S = #state{session_out = SO}) ->
+    SO1 = mqtt_session:message_ack(SO,PacketId),
+    {reply,ok,S#state{session_out = SO1}};
+
+handle_call({pub_rec,PacketId}, _From,  S = #state{session_out = SO}) ->
+    SO1 = mqtt_session:message_pub_rec(SO,PacketId),
+    {reply,ok,S#state{session_out = SO1}};
+
+handle_call({pub_comp,PacketId}, _From,  S = #state{session_out = SO}) ->
+    SO1 = mqtt_session:message_pub_comp(SO,PacketId),
+    {reply,ok,S#state{session_out = SO1}};
+
+handle_call({sub,NewSub = {_,Qos}}, _From,  S = #state{session_out = SO}) ->
+    SO1 = mqtt_session:subscribe(SO,[NewSub]),
+    {reply,{ok,Qos},S#state{session_out = SO1}};
+
+handle_call({unsub,OldSubs}, _From,  S = #state{session_out = SO}) ->
+    SO1 = mqtt_session:unsubscribe(SO,OldSubs),
+    {reply,ok,S#state{session_out = SO1}};
+
+%% handle_call(cleanup, _From, S = #state{session_out = SO}) ->
+%%     SO1 = mqtt_session:cleanup(SO),
+%%     {reply,ok,S#state{session_out = SO1}};
+
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -125,8 +199,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, #state{session_out = SO}) ->
+    mqtt_session:cleanup(SO).
 
 %%--------------------------------------------------------------------
 %% @private

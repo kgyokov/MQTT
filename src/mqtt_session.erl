@@ -13,19 +13,23 @@
 -include("mqtt_session.hrl").
 %% API
 -export([append_msg/3,
-    append_message_comp/2,
-    message_ack/2,
-    message_pub_rec/2,
-    message_pub_comp/2,
-    recover/1,
-    subscribe/2,
-    unsubscribe/2]).
+         append_message_comp/2,
+         message_ack/2,
+         message_pub_rec/2,
+         message_pub_comp/2,
+         recover/1,
+         subscribe/2,
+         unsubscribe/2,
+         cleanup/1,
+         new/1]).
 
 
 subscribe(S = #session_out{subscriptions = Subs,client_id = ClientId},NewSubs) ->
 %%     DistinctSubs = mqtt_topic:min_cover(NewSubs),
 %%     [ {add_or_replace_sub(ClientId,NewSub,Subs),NewSub} || NewSub <- DistinctSubs ],
 %%     Session#session_out{subscriptions = []}.
+    %% @todo: Deduplicate subscription, optimize overlapping subs
+    _MinCover = mqtt_topic:min_cover(NewSubs),
     [
         mqtt_sub_repo:add_sub(ClientId,Topic,QoS)
         || {Topic,QoS} <- NewSubs
@@ -50,6 +54,14 @@ unsubscribe(S = #session_out{subscriptions = Subs, client_id = ClientId},OldSubs
                               Subs, OldSubs)}
     %% @todo: Deduplicate, persist
     .
+
+
+%% e.g. at shutdown with ClearSession = false
+cleanup(#session_out{subscriptions = Subs, client_id = ClientId, is_persistent = false}) ->
+    [ mqtt_sub_repo:remove_sub(ClientId,Topic) || {Topic,_QoS}  <- Subs ];
+
+cleanup(_S) ->
+    ok.
 
 
 %%add_or_replace_sub(ClientId,{Topic,QoS},Subs)->
@@ -149,10 +161,10 @@ recover_in_flight(#session_out{qos1 = UnAck1, qos2 = UnAck2,
         [ to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)],
     {PacketSeq,NewPackets}.
 
-recover_queued(Session) ->
+recover_queued(_Session) ->
     ok.
 
-get_retained(Session) ->
+get_retained(_Session) ->
     ok.
 
 %% to_publish(QoS,Packet) ->

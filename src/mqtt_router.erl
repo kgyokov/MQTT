@@ -15,7 +15,7 @@
 -export([global_route/1]).
 
 
-global_route(Msg = #mqtt_message{topic = Topic,
+global_route(#mqtt_message{topic = Topic,
                                  retain = Retain,dup = Dup,qos = MsgQoS,content = Content}) ->
     Ref = make_ref(),
     [
@@ -30,5 +30,5 @@ global_route(Msg = #mqtt_message{topic = Topic,
     || {ClientId,SubQoS} <- mqtt_sub_repo:get_matches(Topic)
 ].
 
-fwd_msg(ConnPid,TCRPacket) ->
-    mqtt_connection:publish_packet(ConnPid,TCRPacket).
+fwd_msg(SessPid,{_Topic,_Content,_Retain,_QoS,Ref}) ->
+    mqtt_session_out:append_msg(SessPid,{_Topic,_Content,_Retain,_QoS},Ref).

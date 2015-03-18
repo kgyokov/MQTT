@@ -22,10 +22,10 @@
     }
 ).
 
--define(CONN_SPEC(ReceiverPid,SenderPid,Options),
+-define(CONN_SPEC(ReceiverPid,SenderPid,SupPid,Options),
     {
         connection,                               %% Id
-        {mqtt_connection, start_link, [ReceiverPid,SenderPid,Options]},
+        {mqtt_connection, start_link, [ReceiverPid,SenderPid,SupPid,Options]},
         permanent,                                %% must never stop
         5000,                                     %% should be more than sufficient for the process to clean up
         worker,                                   %% as opposed to supervisor
@@ -33,8 +33,19 @@
     }
 ).
 
+-define(SESSION_SPEC(ConnPid,CleanSession),
+    {
+        session,                               %% Id
+        {mqtt_session_out, start_link, [ConnPid,CleanSession]},
+        permanent,                                %% must never stop
+        5000,                                     %% should be more than sufficient for the process to clean up
+        worker,                                   %% as opposed to supervisor
+        [mqtt_session_out]
+    }
+).
+
 %% API
--export([start_link/0, create_tree/5]).
+-export([start_link/0, create_tree/5, create_session/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -60,8 +71,11 @@ create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
     {ok, SenderPid } = supervisor:start_child(SupPid,
                         ?SENDER_SPEC(Transport,Socket)),
     {ok, ConnPid} = supervisor:start_child(SupPid,
-                        ?CONN_SPEC(ReceiverPid,SenderPid,Options)),
+                        ?CONN_SPEC(ReceiverPid,SenderPid,SupPid,Options)),
     {ok, ConnPid}.
+
+create_session(SupPid,ConnPid,CleanSession) ->
+    supervisor:start_child(SupPid,?SESSION_SPEC(ConnPid,CleanSession)).
 
 %%%===================================================================
 %%% Supervisor callbacks

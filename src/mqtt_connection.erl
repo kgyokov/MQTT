@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3,
+-export([start_link/4,
     process_packet/2,
     process_bad_packet/2,
     process_unexpected_disconnect/2,
@@ -39,6 +39,7 @@
     connect_state = connecting, %% CONNECT state: connecting, connected, disconnecting, disconnected
     sender_pid,                 %% The process sending to the actual device
     receiver_pid,               %% The process receiving from the actual device TODO: Do we even need to know this???
+    sup_pid,
     options,                    %% options such as connection timeouts, etc.
     clean_session,
     session_in,
@@ -59,10 +60,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(ReceiverPid::pid,SenderPid::pid(),Options::term()) ->
+-spec(start_link(ReceiverPid::pid,SenderPid::pid(),SupPid::pid(),Options::term()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(ReceiverPid,SenderPid,Options) ->
-    gen_server:start_link(?MODULE, [ReceiverPid,SenderPid,Options], []).
+start_link(ReceiverPid,SenderPid,SupPid,Options) ->
+    gen_server:start_link(?MODULE, [ReceiverPid,SenderPid,SupPid,Options], []).
 
 publish_packet(Pid,Packet) ->
     gen_server:cast(Pid,{publish,Packet}).
@@ -104,7 +105,7 @@ close_duplicate(Pid) ->
 %%  -spec(init(Args :: term()) ->
 %%    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 %%    {stop, Reason :: term()} | ignore).
-init([ReceiverPid,SenderPid,Options]) ->
+init([ReceiverPid,SenderPid,SupPid,Options]) ->
     process_flag(trap_exit,true),
     {Security,SecConf} = proplists:get_value(security,Options,{gen_auth_default,undefined}),
     ConnectTimeOut = proplists:get_value(connect_timeout,Options,?CONNECT_DEFAULT_TIMEOUT),
@@ -117,6 +118,7 @@ init([ReceiverPid,SenderPid,Options]) ->
         connect_state = connecting,
         sender_pid =  SenderPid,
         receiver_pid = ReceiverPid, %% TODO decide how to handle this
+        sup_pid = SupPid,
         options = Options,
         security = {Security,SecConf}
     }}
@@ -171,15 +173,15 @@ handle_cast({publish, {Topic,Content,Retain,QoS,Ref}}, S = #state{session_out = 
         send_to_client( S#state.sender_pid,Packet),
         {noreply, S};
         true ->
-            case mqtt_session:append_msg(SessionOut,{Topic,Content,Retain,QoS},Ref) of
+            case  mqtt_session_out:append_msg(SessionOut,{Topic,Content,Retain,QoS},Ref) of
                 duplicate ->
                     {noreply, S};
                 mismatched_sub ->
                     {noreply, S};
-                {ok,NewSessionOut,_Dup} ->
+                ok ->
                     send_to_client(S#state.sender_pid,Packet),
                     %% @todo: Persist session
-                    {noreply, S#state{session_out = NewSessionOut}}
+                    {noreply, S}
             end
     end;
 
@@ -353,7 +355,7 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
 
             S3 = (start_keep_alive(S1, KeepAliveTimeout * 1000))
             #state{session_in = #session_in{client_id = ClientId,will = Will},
-            session_out = #session_out{client_id = ClientId,is_persistent = CleanSession}},
+                   session_out = new_session(S)},
 
             %% @todo:  Determine session present
             send_to_client(S, #'CONNACK'{return_code = ?CONECTION_ACCEPTED,
@@ -380,15 +382,16 @@ handle_packet(Packet = #'PUBLISH'{topic = Topic},
 
 
 handle_packet(#'PUBACK'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-    mqtt_session:message_ack(SessionOut,PacketId),
+    mqtt_session_out:message_ack(SessionOut,PacketId),
     {noreply,S};
 
-handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-    mqtt_session:message_pub_rec(SessionOut,PacketId),
+handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{session_out = SessionOut,sender_pid = SenderPid}) ->
+    mqtt_session_out:message_pub_rec(SessionOut,PacketId),
+    send_to_client(SenderPid,#'PUBREC'{packet_id = PacketId}),
     {noreply,S};
 
 handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-    mqtt_session:message_pub_comp(SessionOut,PacketId),
+    mqtt_session_out:message_pub_comp(SessionOut,PacketId),
     {noreply,S};
 
 handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn}) ->
@@ -410,7 +413,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
     Results = [
         case Security:authorize(AuthCtx,subscribe,Sub) of
             ok ->
-                case mqtt_session:subscribe(SessionIn,Sub) of
+                case mqtt_session_out:subscribe(SessionIn,Sub) of
                     {error,_} ->
                         ?SUBSCRIPTION_FAILURE;
                     {ok,QoS} ->
@@ -420,6 +423,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
                 ?SUBSCRIPTION_FAILURE %% In 3.1.1 there is no distinction between a sub failure and auth failure
         end
         || Sub  <- Subs],
+
     Ack = #'SUBACK'{packet_id = PacketId,return_codes = Results},
     send_to_client(S,Ack),
     {noreply,S};
@@ -427,7 +431,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
 
 handle_packet(#'UNSUBSCRIBE'{packet_id = PacketId,topic_filters = Filters},
               S = #state{session_in = SessionIn}) ->
-    [ ok = mqtt_session:unsubscribe(SessionIn,Filter) || Filter <- Filters],
+    [ mqtt_session_out:unsubscribe(SessionIn,Filter) || Filter <- Filters],
     Ack = #'UNSUBACK'{packet_id = PacketId},
     send_to_client(S,Ack),
     {noreply,S};
@@ -518,9 +522,9 @@ unregister_self(ClientId,_CleanSession) ->
     mqtt_reg_repo:unregister(self(),ClientId),
     ok.
 
-subscribe(S = #state{session_out = SessionOut}, NewSubs) ->
-    NewSession = mqtt_session:subscribe(SessionOut,NewSubs),
-    {ok,}
+new_session(#state{sup_pid = SupPid, client_id = ClientId, clean_session = CleanSession}) ->
+    {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),CleanSession),
+    SessionPid.
 
 %% =================================================
 %% Timer
