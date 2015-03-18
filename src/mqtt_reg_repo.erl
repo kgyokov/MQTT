@@ -96,10 +96,10 @@ register(Pid, ClientId)->
                     Pid ->
                         ok;
                     undefined ->
-                        ok = mnesia:write(?REG_TABLE,NewReg,write),
+                        mnesia:write(?REG_TABLE,NewReg,write),
                         ok;
                     _ ->
-                        ok = mnesia:write(?REG_TABLE,NewReg,write),
+                        mnesia:write(?REG_TABLE,NewReg,write),
                         {dup_detected, EPid}
                 end
         end

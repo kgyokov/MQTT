@@ -41,8 +41,6 @@
 
 
 
-
-
 %% @doc
 %%
 %% Creates the mnesia tables. To be called only once.
@@ -88,7 +86,7 @@ add_sub(ClientId, Topic, QoS) ->
                     append_sub(R,ClientId,QoS)
             end
         end,
-    ok = mnesia:activity(transaction,Fun,[],mnesia_frag).
+    mnesia:activity(transaction,Fun,[],mnesia_frag).
 
 append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
     mnesia:write(R#mqtt_sub{subs = orddict:store(ClientId,QoS,Subs)}).
@@ -112,7 +110,7 @@ remove_sub(ClientId, Topic) ->
                     end
             end
         end,
-    ok = mnesia:activity(transaction,Fun,[],mnesia_frag).
+    mnesia:activity(transaction,Fun,[],mnesia_frag).
 
 
 %% @doc
@@ -144,7 +142,7 @@ get_matches(Topic) ->
     %%mnesia:async_dirty(Fun).
 
 
-wait_for_tables()->
+wait_for_tables() ->
     mnesia:wait_for_tables(?SUB_TABLE,5000).
 
 new(Topic) ->
