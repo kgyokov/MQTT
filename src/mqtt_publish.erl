@@ -34,22 +34,22 @@ exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = 2},
                     Session = #session_in{packet_seq = Seq, qos2_rec = Qos2Rec})  ->
     case gb_sets:is_element(PacketId,Qos2Rec) of
         true ->
-
             %% Remember PacketId
             NewRec = gb_sets:add(PacketId,Qos2Rec),
 
             %% Write-Ahead the message to forward, assigning an unique incremental seq number
             %% so it can be easily de-duplicated at the receiver
             NewSeq = Seq + 1,
+            MsgToSend = Msg#mqtt_message{seq = NewSeq},
             NewSession = Session#session_in{
                 packet_seq = NewSeq,
-                msg_in_flight = Msg,
+                msg_in_flight = MsgToSend,
                 qos2_rec = NewRec},
             maybe_persist(NewSession),
 
             %% Actually Forward the  message. Because the message has a unique incremental seq number,
             %% this can be performed multiple times during recovery
-            fwd_message(Msg,NewSeq),
+            fwd_message(MsgToSend,NewSeq),
             maybe_persist(Session#session_in{msg_in_flight = undefined});
 
         false ->
@@ -62,7 +62,7 @@ exactly_once_phase2(PacketId,Session = #session_in{qos2_rec = Qos2Rec}) ->
     maybe_persist(NewSession).
 
 
-recover(Session =  #session_in{msg_in_flight = undefined}) ->
+recover(Session = #session_in{msg_in_flight = undefined}) ->
     Session;
 
 recover(Session =  #session_in{packet_seq = Seq, msg_in_flight = Msg}) ->

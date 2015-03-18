@@ -19,7 +19,7 @@
     process_bad_packet/2,
     process_unexpected_disconnect/2,
     close_duplicate/1,
-    publish_packet/2]).
+    publish_packet/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -65,8 +65,8 @@
 start_link(ReceiverPid,SenderPid,SupPid,Options) ->
     gen_server:start_link(?MODULE, [ReceiverPid,SenderPid,SupPid,Options], []).
 
-publish_packet(Pid,Packet) ->
-    gen_server:cast(Pid,{publish,Packet}).
+publish_packet(Pid,Packet,QoS) ->
+    gen_server:cast(Pid,{publish,Packet,QoS}).
 
 process_packet(Pid,Packet) ->
     gen_server:cast(Pid,{packet, Packet}).
@@ -161,7 +161,7 @@ handle_cast({packet, Packet}, S) ->
     S1 = reset_keep_alive(S),
     handle_packet(Packet, S1);
 
-handle_cast({publish, {Topic,Content,Retain,QoS,Ref}}, S = #state{session_out = SessionOut}) ->
+handle_cast({publish, {Topic,Content,Retain,_Dup,_Ref},QoS}, S = #state{sender_pid = SenderPid}) ->
     Packet = #'PUBLISH'{
         topic = Topic,
         qos = QoS,
@@ -169,21 +169,8 @@ handle_cast({publish, {Topic,Content,Retain,QoS,Ref}}, S = #state{session_out = 
         dup = false,
         retain = Retain
     },
-    if QoS =:= 0 ->
-        send_to_client( S#state.sender_pid,Packet),
-        {noreply, S};
-        true ->
-            case  mqtt_session_out:append_msg(SessionOut,{Topic,Content,Retain,QoS},Ref) of
-                duplicate ->
-                    {noreply, S};
-                mismatched_sub ->
-                    {noreply, S};
-                ok ->
-                    send_to_client(S#state.sender_pid,Packet),
-                    %% @todo: Persist session
-                    {noreply, S}
-            end
-    end;
+    send_to_client(SenderPid,Packet),
+    {noreply,S};
 
 handle_cast({malformed_packet,_Reason}, S) ->
     abort_connection(S, malformed_packet);

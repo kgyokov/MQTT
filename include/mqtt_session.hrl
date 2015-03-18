@@ -18,7 +18,8 @@
 	qos = 0,
 	dup = false,
 	retain = false,
-	packet_id = undefined
+	packet_id = undefined,
+    seq = 0
 }).
 
 -record(session_out,{

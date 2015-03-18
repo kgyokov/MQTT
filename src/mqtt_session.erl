@@ -80,7 +80,7 @@ cleanup(_S) ->
 %% Appends message for delivery
 %% @end
 
-append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_QoS},Ref) ->
+append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_Dup,Ref},_QoS) ->
     #session_out{refs = Refs, subscriptions = _Subs} = Session,
 
     case gb_sets:is_member(Ref,Refs) of

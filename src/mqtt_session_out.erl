@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1]).
+-export([start_link/1, push_qos0/2, push_reliable/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -22,8 +22,7 @@
     terminate/2,
     code_change/3]).
 
--export([append_msg/3,
-         append_message_comp/2,
+-export([
          message_ack/2,
          message_pub_rec/2,
          message_pub_comp/2,
@@ -54,11 +53,17 @@
 start_link(ConnPid) ->
     gen_server:start_link(?MODULE, [ConnPid], []).
 
-append_msg(Pid,CTRPacket = {_Topic,_Content,_Retain,_QoS},Ref) ->
-    gen_server:call(Pid,{append, CTRPacket,Ref}).
+push_qos0(Pid, CTRPacket) ->
+    gen_server:cast(Pid,{push_0, CTRPacket}).
 
-append_message_comp(Pid,Ref) ->
-    gen_server:call(Pid,{append_comp,Ref}).
+push_reliable(Pid, CTRPacket,QoS) ->
+    gen_server:call(Pid,{push_reliable,CTRPacket,QoS}).
+
+%% append_msg(Pid,CTRPacket = {_Topic,_Content,_Retain,_QoS},Ref) ->
+%%     gen_server:call(Pid,{append, CTRPacket,Ref}).
+
+%% append_message_comp(Pid,Ref) ->
+%%     gen_server:call(Pid,{append_comp,Ref}).
 
 message_ack(Pid,PacketId) ->
     gen_server:call(Pid,{ack,PacketId}).
@@ -115,8 +120,8 @@ init([ConnPid,_CleanSession]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call({append, CTRPacket,Ref}, _From, S = #state{session_out = SO}) ->
-    case mqtt_session:append_msg(SO,CTRPacket,Ref) of
+handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO}) ->
+    case mqtt_session:append_msg(SO,CTRPacket,QoS) of
           duplicate ->
               {reply,duplicate,S#state{session_out = SO}};
            SO1 ->
@@ -165,6 +170,11 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_cast({push_qos0,CTRPacket}, S = #state{conn_pid = ConnPid}) ->
+    mqtt_connection:publish_packet(ConnPid,CTRPacket,0),
+    {noreply,S};
+
 handle_cast(_Request, State) ->
     {noreply, State}.
 
