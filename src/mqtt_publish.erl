@@ -13,7 +13,7 @@
 -include("mqtt_session.hrl").
 
 %% API
--export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2, recover/1, discard_will/1]).
+-export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2, recover/1, discard_will/1, new/2]).
 
 discard_will(Session) ->
     NewSession = Session#session_in{will = undefined},
@@ -33,7 +33,7 @@ at_least_once(Msg,Session) ->
 exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = 2},
                     Session = #session_in{packet_seq = Seq, qos2_rec = Qos2Rec})  ->
     case gb_sets:is_element(PacketId,Qos2Rec) of
-        true ->
+        false ->
             %% Remember PacketId
             NewRec = gb_sets:add(PacketId,Qos2Rec),
 
@@ -52,13 +52,13 @@ exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = 2},
             fwd_message(MsgToSend,NewSeq),
             maybe_persist(Session#session_in{msg_in_flight = undefined});
 
-        false ->
+        true ->
             Session %% packet already processed, do nothing
     end.
 
 %%  Completes message send
 exactly_once_phase2(PacketId,Session = #session_in{qos2_rec = Qos2Rec}) ->
-    NewSession = Session#session_in{qos2_rec = gb_sets:delete(PacketId,Qos2Rec)},
+    NewSession = Session#session_in{qos2_rec = gb_sets:del_element(PacketId,Qos2Rec)},
     maybe_persist(NewSession).
 
 
@@ -76,3 +76,6 @@ fwd_message(Msg = #mqtt_message{ topic = _Topic},_Seq) ->
 maybe_persist(Session = #session_in{is_persistent = _IsPersistent}) ->
     %% @todo: handle persistence
     Session.
+
+new(ClientId,Will) ->
+    #session_in{client_id = ClientId,will = Will}.

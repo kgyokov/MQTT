@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, push_qos0/2, push_reliable/3]).
+-export([start_link/2, push_qos0/2, push_reliable/3, new/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -42,22 +42,29 @@
 %%% API
 %%%===================================================================
 
+
+new(SupPid,CleanSession) ->
+    {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),CleanSession),
+    SessionPid.
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the server
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(ConnPid::pid()) ->
+-spec(start_link(ConnPid::pid(),CleanSession::boolean()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(ConnPid) ->
-    gen_server:start_link(?MODULE, [ConnPid], []).
+start_link(ConnPid,CleanSession) ->
+    gen_server:start_link(?MODULE, [ConnPid,undefined,CleanSession], []).
 
 push_qos0(Pid, CTRPacket) ->
     gen_server:cast(Pid,{push_0, CTRPacket}).
 
 push_reliable(Pid, CTRPacket,QoS) ->
     gen_server:call(Pid,{push_reliable,CTRPacket,QoS}).
+
+push_reliable_comp(Pid, CTRPacket,QoS) ->
+    gen_server:call(Pid,{push_reliable_comp,CTRPacket,QoS}).
 
 %% append_msg(Pid,CTRPacket = {_Topic,_Content,_Retain,_QoS},Ref) ->
 %%     gen_server:call(Pid,{append, CTRPacket,Ref}).
@@ -101,8 +108,9 @@ unsubscribe(Pid,OldSubs) ->
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([ConnPid,_CleanSession]) ->
-    {ok, #state{conn_pid = ConnPid}}.
+init([ConnPid,ClientId,CleanSession]) ->
+    self() ! async_init,
+    {ok, #state{conn_pid = ConnPid, session_out = mqtt_session:new(ClientId,CleanSession)}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -120,12 +128,15 @@ init([ConnPid,_CleanSession]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO}) ->
+handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO,conn_pid = ConnPid})
+    when QoS =:= 1; QoS =:= 2 ->
+    error_logger:info_msg("Received packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
     case mqtt_session:append_msg(SO,CTRPacket,QoS) of
           duplicate ->
               {reply,duplicate,S#state{session_out = SO}};
-           SO1 ->
-               {reply,ok,SO1}
+        {ok, SO1} ->
+            mqtt_connection:publish_packet(ConnPid,CTRPacket,QoS),
+            {reply,ok,SO1}
      end;
 
 handle_call({append_comp,Ref}, _From,  S = #state{session_out = SO}) ->
@@ -192,6 +203,11 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+
+
+handle_info({async_init,ClientId}, #state{}) ->
+    mqtt_reg_repo:register(ClientId);
+
 handle_info(_Info, State) ->
 
     {noreply, State}.

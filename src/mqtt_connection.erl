@@ -158,7 +158,7 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_cast({packet, Packet}, S) ->
-    S1 = reset_keep_alive(S),
+    S1 = maybe_reset_keep_alive(S),
     handle_packet(Packet, S1);
 
 handle_cast({publish, {Topic,Content,Retain,_Dup,_Ref},QoS}, S = #state{sender_pid = SenderPid}) ->
@@ -334,15 +334,16 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
 %% 					                 true  %% @todo: determine session state
 %% 			                 end,
 
-            register_self(ClientId,CleanSession),
+            %register_self(ClientId,CleanSession),
+
             SessionPresent = case CleanSession of
                                  false -> error({not_supported,persistent_session});
                                  true -> false
                              end,
-
-            S3 = (start_keep_alive(S1, KeepAliveTimeout * 1000))
-            #state{session_in = #session_in{client_id = ClientId,will = Will},
-                   session_out = new_session(S)},
+            S2 = S1#state{clean_session = CleanSession},
+            S3 = (maybe_start_keep_alive(S1, KeepAliveTimeout * 1000))
+            #state{session_in = mqtt_publish:new(ClientId,Will),
+                   session_out = new_session(S2)},
 
             %% @todo:  Determine session present
             send_to_client(S, #'CONNACK'{return_code = ?CONECTION_ACCEPTED,
@@ -391,7 +392,7 @@ handle_packet(#'SUBSCRIBE'{subscriptions = []}, S) ->
 
 handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
                 S = #state{client_id = ClientId,security = {Security,_},
-                           session_in = SessionIn, auth_ctx = AuthCtx }) ->
+                           session_out = SessionOut, auth_ctx = AuthCtx }) ->
 
     %%=======================================================================
     %% TODO: Use CleanSession to determine what to do
@@ -400,7 +401,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
     Results = [
         case Security:authorize(AuthCtx,subscribe,Sub) of
             ok ->
-                case mqtt_session_out:subscribe(SessionIn,Sub) of
+                case mqtt_session_out:subscribe(SessionOut,Sub) of
                     {error,_} ->
                         ?SUBSCRIPTION_FAILURE;
                     {ok,QoS} ->
@@ -501,17 +502,18 @@ map_msg_to_publish(#mqtt_message{packet_id = PacketId,
 %% SESSION interaction
 %%%===================================================================
 
-register_self(ClientId,_CleanSession) ->
-    mqtt_reg_repo:register(ClientId),
-    ok.
-
-unregister_self(ClientId,_CleanSession) ->
-    mqtt_reg_repo:unregister(self(),ClientId),
-    ok.
+%% register_self(ClientId,_CleanSession) ->
+%%     mqtt_reg_repo:register(ClientId),
+%%     ok.
+%%
+%% unregister_self(ClientId,_CleanSession) ->
+%%     mqtt_reg_repo:unregister(self(),ClientId),
+%%     ok.
 
 new_session(#state{sup_pid = SupPid, client_id = ClientId, clean_session = CleanSession}) ->
-    {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),CleanSession),
-    SessionPid.
+    mqtt_session_out:new(SupPid,CleanSession).
+%%     {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),CleanSession),
+%%     SessionPid.
 
 %% =================================================
 %% Timer
@@ -520,10 +522,13 @@ new_session(#state{sup_pid = SupPid, client_id = ClientId, clean_session = Clean
 set_connect_timer(Timeout) ->
     timer:send_after(Timeout, connect_timeout).
 
-start_keep_alive(S,TimeOut) ->
+
+maybe_start_keep_alive(S,0) -> S;
+maybe_start_keep_alive(S,TimeOut) ->
     Ref = set_keep_alive_timer(TimeOut),
     S#state {keep_alive_ref = Ref,
              keep_alive_timeout = TimeOut}.
+
 
 %% We use MatchRef to ensure we only receive current timeouts.
 %% Thus we avoid some weird behavior if we happen to receive old timeout messages
@@ -542,15 +547,11 @@ set_keep_alive_timer(Timeout) ->
     TRef = timer:send_after(Timeout, {keep_alive_timeout,MatchRef}),
     {TRef,MatchRef}.
 
-reset_keep_alive(S = #state{keep_alive_ref = Ref,
-                            keep_alive_timeout = TimeOut}) ->
 
-    case TimeOut of
-        undefined
-            -> S;
-        _
-            -> S#state{keep_alive_ref = reset_timer(TimeOut,Ref)}
-    end.
+maybe_reset_keep_alive(S = #state{keep_alive_timeout = undefined}) -> S;
+maybe_reset_keep_alive(S = #state{keep_alive_ref = Ref,
+                                  keep_alive_timeout = TimeOut}) ->
+    S#state{keep_alive_ref = reset_timer(Ref,TimeOut)}.
 
 reset_timer({TRef,_},TimeOut) ->
     if TRef =/= undefned ->
@@ -643,7 +644,9 @@ bad_disconnect(S) ->
     session_cleanup(S).
 
 session_cleanup(#state{client_id = ClientId, clean_session = CleanSession}) ->
-    unregister_self(ClientId,CleanSession).
+    %% mqtt_session_out:cleanup()
+    %%TODO: tell the session process
+ok.
 
 disconnect_client(_S,_Reason) ->
     ok. %% @todo: Do we even need this?

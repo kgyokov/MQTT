@@ -21,7 +21,7 @@
          subscribe/2,
          unsubscribe/2,
          cleanup/1,
-         new/1]).
+         new/2]).
 
 
 subscribe(S = #session_out{subscriptions = Subs,client_id = ClientId},NewSubs) ->
@@ -58,6 +58,7 @@ unsubscribe(S = #session_out{subscriptions = Subs, client_id = ClientId},OldSubs
 
 %% e.g. at shutdown with ClearSession = false
 cleanup(#session_out{subscriptions = Subs, client_id = ClientId, is_persistent = false}) ->
+    mqtt_reg_repo:unregister(self(),ClientId),
     [ mqtt_sub_repo:remove_sub(ClientId,Topic) || {Topic,_QoS}  <- Subs ];
 
 cleanup(_S) ->
@@ -121,11 +122,11 @@ forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,QoS},Ref)->
                           Session
                   end),
 %%       #session_out{refs = gb_sets:add(Ref,Refs)},
-    {ok,NewSession,false}
+    {ok,NewSession}
 .
 
 append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
-    Session#session_out{refs = gb_sets:delete(Ref,Refs)}.
+    Session#session_out{refs = gb_sets:delete_element(Ref,Refs)}.
 
 message_ack(Session,PacketId) ->
     #session_out{qos1 = Messages} = Session,
@@ -145,7 +146,7 @@ message_pub_rec(Session,PacketId) ->
 
 message_pub_comp(Session = #session_out{},PacketId)  ->
     #session_out{qos2_rec = Ack} = Session,
-    Session#session_out{qos2_rec = gb_sets:delete(PacketId,Ack)}.
+    Session#session_out{qos2_rec = gb_sets:delete_element(PacketId,Ack)}.
 
 recover(Session) ->
     recover_in_flight(Session),
@@ -179,9 +180,10 @@ to_pubrel(PacketId) ->
     #'PUBREL'{packet_id = PacketId}.
 
 
-new(ClientId)->
+new(ClientId,CleanSession)->
     #session_out{
         client_id = ClientId,
+        is_persistent = not CleanSession,
         packet_seq = 0,
         qos1 = orddict:new(),
         qos2 = orddict:new(),
@@ -189,3 +191,4 @@ new(ClientId)->
         refs = gb_sets:new(),
         subscriptions = orddict:new()
     }.
+

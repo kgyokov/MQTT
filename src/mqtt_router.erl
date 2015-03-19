@@ -19,20 +19,29 @@ global_route(#mqtt_message{topic = Topic,retain = Retain,
                            dup = Dup,qos = MsgQoS,
                            content = Content, seq = Ref}) ->
     CTRPacket = {Topic,Content,Retain,Dup,Ref},
-    List =
-    [
-%%         begin
-%%             case mqtt_reg_repo:get_registration(ClientId) of
-%%                 {ok,ConnPid} ->
-%%                     QoS = min(MsgQoS,SubQoS),
-%%                     fwd_msg(ConnPid,{Topic,Content,Retain,QoS,Ref});
-%%                 _            -> ok
-%%             end
-%%         end
-        {ConnPid,min(MsgQoS,SubQoS)}
-        || {ClientId,SubQoS} <- mqtt_sub_repo:get_matches(Topic),
-           {ok,ConnPid} = mqtt_reg_repo:get_registration(ClientId)
-    ],
+%%     List =
+%%     [
+%% %%         begin
+%% %%             case mqtt_reg_repo:get_registration(ClientId) of
+%% %%                 {ok,ConnPid} ->
+%% %%                     QoS = min(MsgQoS,SubQoS),
+%% %%                     fwd_msg(ConnPid,{Topic,Content,Retain,QoS,Ref});
+%% %%                 _            -> ok
+%% %%             end
+%% %%         end
+%%         mqtt_reg_repo:get_registration(ClientId)
+%%
+%%         || {ClientId,SubQoS} <- mqtt_sub_repo:get_matches(Topic)
+%%     ],
+
+    List = lists:filtermap(fun({ClientId,SubQoS}) ->
+                                case mqtt_reg_repo:get_registration(ClientId) of
+                                    {ok,Pid} -> {true,{Pid,min(MsgQoS,SubQoS)}};
+                                    undefined -> false
+                                end
+                           end,
+                           mqtt_sub_repo:get_matches(Topic)),
+
     {QoS_0,QoS_Reliable} = lists:partition(fun({_,QoS}) -> QoS =:= 0 end,List),
     [ mqtt_session_out:push_qos0(ConnPid,CTRPacket) || {ConnPid,_} <- QoS_0 ],
     rpc:pmap({?MODULE,fwd_message},[CTRPacket],QoS_Reliable).
