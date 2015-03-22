@@ -109,7 +109,7 @@ seg_is_covered_by([PH|PT],[CH|CT])->
 %% This ensures quick matching to high fan-in subscriptions, e.g. /user/#
 %% @end
 
--spec explode(binary()) -> [binary()].
+-spec explode(binary()|list(binary())) -> [binary()].
 explode(<<TopicLevels/binary>>)->
     explode(split(TopicLevels));
 
@@ -158,12 +158,12 @@ split(Split,<<Rest/binary>>) ->
 consume_level(Binary) ->
     consume_level(<<>>,Binary).
 
-consume_level(<<>>,<<"#"/utf8>>) ->                   {"#",<<>>};
-consume_level(_,<<"#"/utf8,_/binary>>) ->             throw({error,unexpected_wildcard});
-consume_level(<<>>,<<"+"/utf8,Rest/binary>>) ->       {"+",Rest};
-consume_level(Level,Rest = <<"/"/utf8,_/binary>>) ->  {Level,Rest};
-consume_level(Level,<<>>) ->                          {Level,<<>>};
-consume_level(Level,<<NextCh/utf8,Rest/binary>>) ->   consume_level(<<Level/binary,NextCh/utf8>>,Rest).
+consume_level(<<>>,     <<"#"/utf8>>)                   ->  {"#",<<>>};
+consume_level(_,        <<"#"/utf8,_/binary>>)          ->  throw({error,unexpected_wildcard});
+consume_level(<<>>,     <<"+"/utf8,Rest/binary>>)       ->  {"+",Rest};
+consume_level(Level,    Rest = <<"/"/utf8,_/binary>>)   ->  {Level,Rest};
+consume_level(Level,    <<>>)                           ->  {Level,<<>>};
+consume_level(Level,    <<NextCh/utf8,Rest/binary>>)    ->  consume_level(<<Level/binary,NextCh/utf8>>,Rest).
 
 
 
