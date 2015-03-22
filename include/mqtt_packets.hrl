@@ -10,15 +10,28 @@
 
 -type packet_id() :: 0..16#ffff.
 -type client_id() :: binary().
+-type qos()       ::0..2.
+-type topic()     ::binary().
+
+
+%%%%%%%%%%%%%%%%%%%%%%%
+%% Special Values
+%%%%%%%%%%%%%%%%%%%%%%%
+-define(SUBSCRIPTION_FAILURE,16#80).
+-define(QOS_AT_MOST_ONCE, 0).
+-define(QOS_AT_LEAST_ONCE, 1).
+-define(QOS_EXACTLY_ONCE, 3).
+-define(QOS_RESERVED, 4).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%
 %% Connections
 %%%%%%%%%%%%%%%%%%%%%%%
 
 -record(will_details,{
-  topic           ::binary(),
+  topic           ::topic(),
   message         ::binary(),
-  qos             ::byte(),
+  qos             ::qos(),
   retain          ::boolean()
 }).
 
@@ -48,28 +61,43 @@
 %%%%%%%%%%%%%%%%%%%%%%%
 %% Publication
 %%%%%%%%%%%%%%%%%%%%%%%
--record('PUBLISH', {dup,qos,retain,topic,packet_id,content}).
+-record('PUBLISH', {
+    dup         ::boolean(),
+    qos         ::qos(),
+    retain      ::boolean(),
+    topic       ::topic(),
+    packet_id   ::packet_id(),
+    content     ::binary()
+}).
 
--record('PUBACK', {packet_id}).
+-record('PUBACK', {packet_id::packet_id()}).
 
--record('PUBREC', {packet_id}).
+-record('PUBREC', {packet_id::packet_id()}).
 
--record('PUBREL', {packet_id}).
+-record('PUBREL', {packet_id::packet_id()}).
 
--record('PUBCOMP', {packet_id}).
+-record('PUBCOMP', {packet_id::packet_id()}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%
 %% Subscriptions
 %%%%%%%%%%%%%%%%%%%%%%%
--record('SUBSCRIBE', {packet_id,subscriptions}).
--record(subscription, {topic_filter,qos}).
+-record('SUBSCRIBE', {
+    packet_id       ::packet_id(),
+    subscriptions   ::[{TopicFilter::binary(),QoS::qos()}]
+}).
+%%-record(subscription, {topic_filter,qos}).
 
--record('SUBACK', {packet_id,return_codes=[]}).
--define(SUBSCRIPTION_FAILURE,16#80).
+-record('SUBACK', {
+    packet_id           ::packet_id(),
+    return_codes=[]     ::[qos | ?SUBSCRIPTION_FAILURE]
+}).
 
--record('UNSUBSCRIBE', {packet_id,topic_filters}).
--record('UNSUBACK', {packet_id}).
+-record('UNSUBSCRIBE', {
+    packet_id           ::packet_id(),
+    topic_filters       ::[binary()]
+}).
+-record('UNSUBACK', {packet_id::packet_id()}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%
@@ -78,10 +106,3 @@
 -record('PINGREQ', {}).
 -record('PINGRESP', {}).
 
-%%%%%%%%%%%%%%%%%%%%%%%
-%% QoS
-%%%%%%%%%%%%%%%%%%%%%%%
--define(QOS_AT_MOST_ONCE, 0).
--define(QOS_AT_LEAST_ONCE, 1).
--define(QOS_EXACTLY_ONCE, 3).
--define(QOS_RESERVED, 4).
