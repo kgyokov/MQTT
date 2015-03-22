@@ -9,6 +9,8 @@
 -module(mqtt_builder).
 -author("Kalin").
 
+-define(FLAG(Flag), (case Flag of true -> 1; false -> 0 end):1).
+
 -include("mqtt_packets.hrl").
 -include("mqtt_parsing.hrl").
 %% API
@@ -20,14 +22,16 @@ build_packet(Packet) ->
     (build_var_length(byte_size(Rest)))/binary,
     Rest/binary>>.
 
-build_flags(Packet)->
+build_flags(Packet) ->
     case Packet of
         #'SUBSCRIBE'{} ->   <<2#0010:4>>;
         #'UNSUBSCRIBE'{} -> <<2#0010:4>>;
+        #'PUBREL'{} -> <<2#0010:4>>;
         #'PUBLISH' { qos = QoS } when QoS =:= 2#11 ->
-            throw(invalid_qos);
+            throw({build_error,invalid_qos});
         #'PUBLISH' { qos = QoS, dup = Dup, retain = Retain } ->
-            <<Dup:1,QoS:2,Retain:1>>;
+            %%<<?FLAG(Dup),QoS:2,?FLAG(Retain)>>;
+            <<(case Dup of true -> 1; false -> 0 end):1,QoS:2,(case Retain of true -> 1; false -> 0 end):1>>;
         _ -> <<0:4>>
     end.
 
@@ -102,7 +106,14 @@ build_rest(#'CONNECT'{
 build_rest(#'CONNACK'{ session_present = SessionPresent, return_code = ReturnCode})->
     <<
     0:7,
-    (case SessionPresent of true -> 1; false -> 0 end):1,
+    (case ReturnCode of
+         ?CONECTION_ACCEPTED  ->
+             case SessionPresent of
+                 true -> 1;
+                 false -> 0
+             end;
+         _ -> 0
+    end):1,
     ReturnCode:8
     >>;
 
