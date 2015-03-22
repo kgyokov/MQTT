@@ -31,7 +31,10 @@ subscribe(S = #session_out{subscriptions = Subs,client_id = ClientId},NewSubs) -
     %% @todo: Deduplicate subscription, optimize overlapping subs
     _MinCover = mqtt_topic:min_cover(NewSubs),
     [
-        mqtt_sub_repo:add_sub(ClientId,Topic,QoS)
+        begin
+            error_logger:info_msg("Subscribing: ~p,~p,~p,~n",[ClientId,Topic,QoS]),
+            mqtt_sub_repo:add_sub(ClientId,Topic,QoS)
+        end
         || {Topic,QoS} <- NewSubs
     ],
     S#session_out{subscriptions =
@@ -81,7 +84,7 @@ cleanup(_S) ->
 %% Appends message for delivery
 %% @end
 
-append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_Dup,Ref},_QoS) ->
+append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_Dup,Ref},QoS) ->
     #session_out{refs = Refs, subscriptions = _Subs} = Session,
 
     case gb_sets:is_member(Ref,Refs) of
@@ -94,12 +97,12 @@ append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_Dup,Ref},_QoS) ->
 %%                     QoS = min(QoS,SubQoS),
 %%                     forward_msg(Session,CTRPacket,Ref)
 %%             end;
-            forward_msg(Session,CTRPacket,Ref);
+            forward_msg(Session,CTRPacket,QoS);
         true ->
             duplicate
     end.
 
-forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,QoS},Ref)->
+forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,_Dup,Ref},QoS) ->
     #session_out{packet_seq = PacketSeq, refs = Refs} = Session,
 
     PacketId = if QoS =:= ?QOS_AT_MOST_ONCE;
@@ -122,11 +125,11 @@ forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,QoS},Ref)->
                           Session
                   end),
 %%       #session_out{refs = gb_sets:add(Ref,Refs)},
-    {ok,NewSession}
+    {proceed,PacketId,NewSession}
 .
 
 append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
-    Session#session_out{refs = gb_sets:delete_element(Ref,Refs)}.
+    Session#session_out{refs = gb_sets:del_element(Ref,Refs)}.
 
 message_ack(Session,PacketId) ->
     #session_out{qos1 = Messages} = Session,
@@ -180,7 +183,7 @@ to_pubrel(PacketId) ->
     #'PUBREL'{packet_id = PacketId}.
 
 
-new(ClientId,CleanSession)->
+new(ClientId,CleanSession) ->
     #session_out{
         client_id = ClientId,
         is_persistent = not CleanSession,

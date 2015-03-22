@@ -19,7 +19,7 @@
     process_bad_packet/2,
     process_unexpected_disconnect/2,
     close_duplicate/1,
-    publish_packet/3]).
+    publish_packet/4]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -65,8 +65,8 @@
 start_link(ReceiverPid,SenderPid,SupPid,Options) ->
     gen_server:start_link(?MODULE, [ReceiverPid,SenderPid,SupPid,Options], []).
 
-publish_packet(Pid,Packet,QoS) ->
-    gen_server:cast(Pid,{publish,Packet,QoS}).
+publish_packet(Pid,Packet,QoS,PacketId) ->
+    gen_server:cast(Pid,{publish,Packet,QoS,PacketId}).
 
 process_packet(Pid,Packet) ->
     gen_server:cast(Pid,{packet, Packet}).
@@ -161,13 +161,15 @@ handle_cast({packet, Packet}, S) ->
     S1 = maybe_reset_keep_alive(S),
     handle_packet(Packet, S1);
 
-handle_cast({publish, {Topic,Content,Retain,_Dup,_Ref},QoS}, S = #state{sender_pid = SenderPid}) ->
+handle_cast({publish, TCRPAcket,QoS,PacketId}, S = #state{sender_pid = SenderPid}) ->
+    {Topic,Content,Retain,_Dup,_Ref} = TCRPAcket,
     Packet = #'PUBLISH'{
         topic = Topic,
         qos = QoS,
         content = Content,
         dup = false,
-        retain = Retain
+        retain = Retain,
+        packet_id = PacketId
     },
     send_to_client(SenderPid,Packet),
     {noreply,S};
@@ -340,16 +342,18 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
                                  false -> error({not_supported,persistent_session});
                                  true -> false
                              end,
-            S2 = S1#state{clean_session = CleanSession},
-            S3 = (maybe_start_keep_alive(S1, KeepAliveTimeout * 1000))
-            #state{session_in = mqtt_publish:new(ClientId,Will),
-                   session_out = new_session(S2)},
+            S2 = S1#state{clean_session = CleanSession,
+                          client_id = ClientId},
+            S3 = S2#state{session_in = mqtt_publish:new(ClientId,Will),
+                          session_out = new_session(S2,ClientId,CleanSession)},
 
             %% @todo:  Determine session present
-            send_to_client(S, #'CONNACK'{return_code = ?CONECTION_ACCEPTED,
+            send_to_client(S2, #'CONNACK'{return_code = ?CONECTION_ACCEPTED,
                                          session_present = SessionPresent}),
-            S4 = S3#state{client_id = ClientId,connect_state = connected},
-            {noreply,S4}
+
+            S4 = maybe_start_keep_alive(S3, KeepAliveTimeout * 1000),
+            S5 = S4#state{connect_state = connected},
+            {noreply,S5}
     end;
 
 %% Catch- all case
@@ -375,7 +379,7 @@ handle_packet(#'PUBACK'{packet_id = PacketId}, S = #state{session_out = SessionO
 
 handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{session_out = SessionOut,sender_pid = SenderPid}) ->
     mqtt_session_out:message_pub_rec(SessionOut,PacketId),
-    send_to_client(SenderPid,#'PUBREC'{packet_id = PacketId}),
+    send_to_client(SenderPid,#'PUBREL'{packet_id = PacketId}),
     {noreply,S};
 
 handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
@@ -467,20 +471,20 @@ publish(Packet = #'PUBLISH'{packet_id = PacketId,
     NewSessionIn.
 
 map_publish_to_msg(#'PUBLISH'{packet_id = PacketId,
-                              retain = Retain,
-                              qos = Qos,
-                              content = Content,
-                              dup = Dup,
-                              topic = Topic},
+                              retain    = Retain,
+                              qos       = Qos,
+                              content   = Content,
+                              dup       = Dup,
+                              topic     = Topic},
                    ClientId) ->
 
     #mqtt_message{packet_id = PacketId,
                   client_id = ClientId,
-                  content = Content,
-                  dup = Dup,
-                  qos = Qos,
-                  retain = Retain,
-                  topic = Topic}.
+                  content   = Content,
+                  dup       = Dup,
+                  qos       = Qos,
+                  retain    = Retain,
+                  topic     = Topic}.
 
 map_msg_to_publish(#mqtt_message{packet_id = PacketId,
                                  client_id = ClientId,
@@ -510,8 +514,8 @@ map_msg_to_publish(#mqtt_message{packet_id = PacketId,
 %%     mqtt_reg_repo:unregister(self(),ClientId),
 %%     ok.
 
-new_session(#state{sup_pid = SupPid, client_id = ClientId, clean_session = CleanSession}) ->
-    mqtt_session_out:new(SupPid,CleanSession).
+new_session(#state{sup_pid = SupPid},ClientId,CleanSession) ->
+    mqtt_session_out:new(SupPid,ClientId,CleanSession).
 %%     {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),CleanSession),
 %%     SessionPid.
 
@@ -657,4 +661,4 @@ disconnect_client(_S,_Reason) ->
 %% ==========================================================
 
 auto_generate_client_id() ->
-    base64:encode_to_string("__" ++ crypto:rand_bytes(24)).
+    base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>).

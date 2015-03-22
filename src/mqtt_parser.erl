@@ -217,8 +217,8 @@ parse_specific_type(?PUBLISH,Flags,S) ->
 
     #'PUBLISH'{
         qos = QoS,
-        dup = Dup,
-        retain = Retain,
+        dup = Dup =:= 1,
+        retain = Retain =:= 1,
         topic = Topic,
         content = Content,
         packet_id = PacketId

@@ -33,10 +33,10 @@
     }
 ).
 
--define(SESSION_SPEC(ConnPid,CleanSession),
+-define(SESSION_SPEC(ConnPid,ClientId,CleanSession),
     {
         session,                               %% Id
-        {mqtt_session_out, start_link, [ConnPid,CleanSession]},
+        {mqtt_session_out, start_link, [ConnPid,ClientId,CleanSession]},
         permanent,                                %% must never stop
         5000,                                     %% should be more than sufficient for the process to clean up
         worker,                                   %% as opposed to supervisor
@@ -45,7 +45,7 @@
 ).
 
 %% API
--export([start_link/0, create_tree/5, create_session/3]).
+-export([start_link/0, create_tree/5, create_session/4]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -74,8 +74,8 @@ create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
                         ?CONN_SPEC(ReceiverPid,SenderPid,SupPid,Options)),
     {ok, ConnPid}.
 
-create_session(SupPid,ConnPid,CleanSession) ->
-    supervisor:start_child(SupPid,?SESSION_SPEC(ConnPid,CleanSession)).
+create_session(SupPid,ConnPid,ClientId,CleanSession) ->
+    supervisor:start_child(SupPid,?SESSION_SPEC(ConnPid,ClientId,CleanSession)).
 
 %%%===================================================================
 %%% Supervisor callbacks

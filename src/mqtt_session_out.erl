@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, push_qos0/2, push_reliable/3, new/2]).
+-export([start_link/3, push_qos0/2, push_reliable/3, new/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -43,8 +43,8 @@
 %%%===================================================================
 
 
-new(SupPid,CleanSession) ->
-    {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),CleanSession),
+new(SupPid,ClientId,CleanSession) ->
+    {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),ClientId,CleanSession),
     SessionPid.
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,10 +52,10 @@ new(SupPid,CleanSession) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(ConnPid::pid(),CleanSession::boolean()) ->
+-spec(start_link(ConnPid::pid(),ClientId::binary(),CleanSession::boolean()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(ConnPid,CleanSession) ->
-    gen_server:start_link(?MODULE, [ConnPid,undefined,CleanSession], []).
+start_link(ConnPid,ClientId,CleanSession) ->
+    gen_server:start_link(?MODULE, [ConnPid,ClientId,CleanSession], []).
 
 push_qos0(Pid, CTRPacket) ->
     gen_server:cast(Pid,{push_0, CTRPacket}).
@@ -109,7 +109,7 @@ unsubscribe(Pid,OldSubs) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([ConnPid,ClientId,CleanSession]) ->
-    self() ! async_init,
+    self() ! {async_init,ClientId},
     {ok, #state{conn_pid = ConnPid, session_out = mqtt_session:new(ClientId,CleanSession)}}.
 
 %%--------------------------------------------------------------------
@@ -130,13 +130,13 @@ init([ConnPid,ClientId,CleanSession]) ->
 
 handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO,conn_pid = ConnPid})
     when QoS =:= 1; QoS =:= 2 ->
-    error_logger:info_msg("Received packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
+    error_logger:info_msg("Pushing packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
     case mqtt_session:append_msg(SO,CTRPacket,QoS) of
           duplicate ->
               {reply,duplicate,S#state{session_out = SO}};
-        {ok, SO1} ->
-            mqtt_connection:publish_packet(ConnPid,CTRPacket,QoS),
-            {reply,ok,SO1}
+        {proceed,PacketId,SO1} ->
+            mqtt_connection:publish_packet(ConnPid,CTRPacket,QoS,PacketId),
+            {reply,ok,S#state{session_out = SO1}}
      end;
 
 handle_call({append_comp,Ref}, _From,  S = #state{session_out = SO}) ->
@@ -155,9 +155,9 @@ handle_call({pub_comp,PacketId}, _From,  S = #state{session_out = SO}) ->
     SO1 = mqtt_session:message_pub_comp(SO,PacketId),
     {reply,ok,S#state{session_out = SO1}};
 
-handle_call({sub,NewSub = {_,Qos}}, _From,  S = #state{session_out = SO}) ->
+handle_call({sub,NewSub = {_,QoS}}, _From,  S = #state{session_out = SO}) ->
     SO1 = mqtt_session:subscribe(SO,[NewSub]),
-    {reply,{ok,Qos},S#state{session_out = SO1}};
+    {reply,{ok,QoS},S#state{session_out = SO1}};
 
 handle_call({unsub,OldSubs}, _From,  S = #state{session_out = SO}) ->
     SO1 = mqtt_session:unsubscribe(SO,OldSubs),
@@ -167,8 +167,9 @@ handle_call({unsub,OldSubs}, _From,  S = #state{session_out = SO}) ->
 %%     SO1 = mqtt_session:cleanup(SO),
 %%     {reply,ok,S#state{session_out = SO1}};
 
-handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
+handle_call(Request, _From, State) ->
+    error_logger:info_msg("Unmatched call ~p,~p~n",[Request,State]),
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -183,7 +184,7 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_cast({push_qos0,CTRPacket}, S = #state{conn_pid = ConnPid}) ->
-    mqtt_connection:publish_packet(ConnPid,CTRPacket,0),
+    mqtt_connection:publish_packet(ConnPid,CTRPacket,0,undefined),
     {noreply,S};
 
 handle_cast(_Request, State) ->
@@ -205,11 +206,12 @@ handle_cast(_Request, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_info({async_init,ClientId}, #state{}) ->
-    mqtt_reg_repo:register(ClientId);
+handle_info({async_init,ClientId}, S) ->
+    error_logger:info_msg("Registerin as ~p", [ClientId]),
+    mqtt_reg_repo:register(ClientId),
+    {noreply, S};
 
 handle_info(_Info, State) ->
-
     {noreply, State}.
 
 %%--------------------------------------------------------------------

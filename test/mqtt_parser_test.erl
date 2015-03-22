@@ -151,8 +151,8 @@ parse_PUBLISH_QoS_0_test()->
   OriginalPacket = #'PUBLISH'{
     packet_id = undefined,
     qos = 0,
-    dup = 0,
-    retain = 1,
+    dup = false,
+    retain = true,
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
@@ -163,8 +163,8 @@ parse_PUBLISH_QoS_0_invalid_test()->
   OriginalPacket = #'PUBLISH'{
     packet_id = undefined,
     qos = 0,
-    dup = 1,
-    retain = 1,
+    dup = true,
+    retain = true,
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
@@ -175,8 +175,8 @@ parse_PUBLISH_QoS_1_test()->
   OriginalPacket = #'PUBLISH'{
     packet_id = 1234,
     qos = 1,
-    dup = 1,
-    retain = 1,
+    dup = true,
+    retain = true,
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
@@ -187,8 +187,8 @@ parse_PUBLISH_QoS_1_1_test()->
   OriginalPacket = #'PUBLISH'{
     packet_id = 1234,
     qos = 1,
-    dup = 0,
-    retain = 1,
+    dup = false,
+    retain = true,
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
@@ -199,8 +199,8 @@ parse_PUBLISH_QoS_2_test()->
   OriginalPacket = #'PUBLISH'{
     packet_id = 1234,
     qos = 1,
-    dup = 1,
-    retain = 1,
+    dup = true,
+    retain = true,
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
@@ -211,8 +211,8 @@ parse_PUBLISH_QoS_2_1_test()->
   OriginalPacket = #'PUBLISH'{
     packet_id = 1234,
     qos = 1,
-    dup = 0,
-    retain = 1,
+    dup = false,
+    retain = true,
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
@@ -223,8 +223,8 @@ parse_PUBLISH_QoS_1_invalid_packet_id_test()->
   OriginalPacket = #'PUBLISH'{
     packet_id = undefined,
     qos = 1,
-    dup = 0,
-    retain = 1,
+    dup = false,
+    retain = true,
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },
@@ -304,8 +304,8 @@ parse_2_consecutive_packets_test()->
   OriginalPacket2 = #'PUBLISH'{
     packet_id = undefined,
     qos = 0,
-    dup = 0,
-    retain = 1,
+    dup = false,
+    retain = true,
     topic = <<"TOPIC1">>,
     content = <<"CONTENT">>
   },

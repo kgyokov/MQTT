@@ -114,7 +114,7 @@ register(Pid, ClientId)->
     end.
 
 register(ClientId) ->
-    ?MODULE:register(ClientId,self()).
+    ?MODULE:register(self(),ClientId).
 
 %%
 %% @doc
@@ -122,7 +122,7 @@ register(ClientId) ->
 %% Unregisters a Process responsible for the connection to a given <b>ClientId</b>. Sets the <b>Pid</b> to <i>undefined</i>
 %%
 %% @end
-unregister(Pid,ClientId)->
+unregister(Pid,ClientId) ->
     F = fun()->
         %% take write lock
         case mnesia:read(?REG_TABLE, ClientId, write) of
