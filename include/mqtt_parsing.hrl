@@ -9,9 +9,9 @@
 -author("Kalin").
 
 -record(parse_state, {
-  readfun,
-  buffer,
-  max_buffer_size
+  readfun           ::fun(),
+  buffer            ::binary(),
+  max_buffer_size   ::integer()
 }).
 
 

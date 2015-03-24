@@ -73,7 +73,7 @@ parse_string(S = #parse_state{})-> %
     parse_string(read(S)); %% fallthrough case: not enough data in the buffer
 
 parse_string(<<0:16,Rest/binary>>) ->
-    {ok, <<"">>,Rest}; %% empty string
+    {ok, <<>>,Rest}; %% empty string
 
 parse_string(<<StrLen:16,Str:StrLen/bytes,Rest/binary>>) ->
     {ok,Str,Rest};
@@ -82,7 +82,7 @@ parse_string(_PartialString) ->
     {error,incomplete}
 .
 
-parse_string_maybe(Flag, Buffer)->
+parse_string_maybe(Flag, Buffer) ->
     case Flag of
         0 ->
             {undefined,Buffer};
@@ -124,8 +124,6 @@ parse_packet(S)->
     catch
         throw:{error,Reason} ->
             {error,Reason}
-%%         error:Reason->
-%%             {error,Reason}
     end.
 
 parse_packet_unsafe(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
@@ -175,19 +173,20 @@ parse_specific_type(?CONNECT,
     };
 
 
-parse_specific_type(?CONNACK,_Flags, #parse_state{buffer = <<0:7,SessionPresent:1,Code:8>>}) ->
+parse_specific_type(?CONNACK, <<0:4>>, #parse_state{buffer = <<0:7,SessionPresent:1,Code:8>>})
+    when Code =:= ?CONNACK_ACCEPTED orelse SessionPresent =:= 0 ->
     #'CONNACK'{session_present = SessionPresent =:= 1,return_code = Code};
 
-parse_specific_type(?DISCONNECT,_Flags,_S) ->
+parse_specific_type(?DISCONNECT,<<0:4>>,_S) ->
     #'DISCONNECT'{};
 
 %% ========================================================
 %% PING -- COMPLETE!!!
 %% ========================================================
-parse_specific_type(?PINGREQ,_Flags,_S) ->
+parse_specific_type(?PINGREQ,<<0:4>>,_S) ->
     #'PINGREQ'{};
 
-parse_specific_type(?PINGRESP,_Flags,_S) ->
+parse_specific_type(?PINGRESP,<<0:4>>,_S) ->
     #'PINGRESP'{};
 
 %% ========================================================
@@ -224,48 +223,53 @@ parse_specific_type(?PUBLISH,Flags,S) ->
         packet_id = PacketId
     };
 
-parse_specific_type(?PUBACK,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+parse_specific_type(?PUBACK, <<0:4>>,#parse_state{buffer = <<PacketId:16>>}) ->
     #'PUBACK'{packet_id = PacketId};
 
-parse_specific_type(?PUBREC,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+parse_specific_type(?PUBREC, <<0:4>>,#parse_state{buffer = <<PacketId:16>>}) ->
     #'PUBREC'{packet_id = PacketId};
 
-parse_specific_type(?PUBREL,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+parse_specific_type(?PUBREL, <<2:4>>,#parse_state{buffer = <<PacketId:16>>}) ->
     #'PUBREL'{packet_id = PacketId};
 
-parse_specific_type(?PUBCOMP,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+parse_specific_type(?PUBCOMP, <<0:4>>,#parse_state{buffer = <<PacketId:16>>}) ->
     #'PUBCOMP'{packet_id = PacketId};
 
 %% ========================================================
 %% SUBSCRIPTIONS - COMPLETE!!!
 %% ========================================================
 
-parse_specific_type(?SUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
+parse_specific_type(?SUBSCRIBE, <<2:4>>, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
     Subscriptions = lists:reverse(parse_topic_subscriptions(Rest)),
     #'SUBSCRIBE'{
         packet_id = PacketId,
         subscriptions = Subscriptions
     };
 
-parse_specific_type(?SUBACK,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
+parse_specific_type(?SUBACK, <<0:4>>, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
     ReturnCodes = lists:reverse(parse_codes(Rest)),
     #'SUBACK'{
         packet_id = PacketId,
         return_codes = ReturnCodes
     };
 
-parse_specific_type(?UNSUBSCRIBE,_Flags, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
+parse_specific_type(?UNSUBSCRIBE, <<2:4>>, #parse_state{buffer = <<PacketId:16, Rest/binary>>}) ->
     Topics = lists:reverse(parse_topics(Rest)),
     #'UNSUBSCRIBE'{
         packet_id = PacketId,
         topic_filters = Topics
     };
 
-parse_specific_type(?UNSUBACK,_Flags,#parse_state{buffer = <<PacketId:16>>}) ->
+parse_specific_type(?UNSUBACK, <<0:4>>, #parse_state{buffer = <<PacketId:16>>}) ->
     #'UNSUBACK'{packet_id = PacketId};
 
 parse_specific_type(_Type,_Flags,_State) ->
     throw({error,malformed_packet}).
+
+
+%% ========================================================
+%% Parse helpers
+%% ========================================================
 
 parse_codes(Buffer)->
     parse_codes(Buffer,[]).

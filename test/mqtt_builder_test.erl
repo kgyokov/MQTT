@@ -53,6 +53,38 @@ build_variable_length_overflow_test() ->
 %% http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/mqtt-v3.1.1.html
 %%-------------------------------------------------------
 
+bild_CONNECT_test() ->
+    ?assertEqual(<<1:4,0:4,
+                   118:8,
+                   4:16,
+                   <<"MQTT">>/binary,
+                   4:8,
+                   2#11001110:8,
+                   10:16,
+                   62:16,
+                   <<"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ">>/binary,
+                   9:16,
+                   <<"WillTopic">>/binary,
+                   11:16,
+                   <<"WillMessage">>/binary,
+                   8:16,
+                   <<"Username">>/binary,
+                   8:16,
+                   <<"Password">>/binary
+                 >>,
+                 mqtt_builder:build_packet(#'CONNECT'{client_id = <<"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ">>,
+                                                      clean_session = true,
+                                                      keep_alive = 10,
+                                                      username = <<"Username">>,
+                                                      password = <<"Password">>,
+                                                      protocol_name = <<"MQTT">>,
+                                                      protocol_version = 4,
+                                                      will = #will_details{message = <<"WillMessage">>,
+                                                                           topic = <<"WillTopic">>,
+                                                                           qos = 1,
+                                                                           retain = false}})).
+
+
 build_CONNACK_test() ->
     ?assertEqual(<<2:4,0:4,
                    2:8,
