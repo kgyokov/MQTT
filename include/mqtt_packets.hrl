@@ -49,12 +49,12 @@
 %%-record(connack_flags, {session_present}).
 -record('CONNACK', {return_code, session_present}).
 %% Return codes
--define(CONECTION_ACCEPTED, 0).
--define(UNACCEPTABLE_PROTOCOL, 1).
--define(IDENTIFIER_REJECTED, 2).
--define(SERVER_UNAVAILABLE, 3).
--define(BAD_USERNAME_OR_PASSWORD, 4).
--define(UNAUTHORIZED, 5).
+-define(CONNACK_ACCEPTED, 0).
+-define(CONNACK_UNACCEPTABLE_PROTOCOL, 1).
+-define(CONNACK_IDENTIFIER_REJECTED, 2).
+-define(CONNACK_SERVER_UNAVAILABLE, 3).
+-define(CONNACK_BAD_USERNAME_OR_PASSWORD, 4).
+-define(CONNACK_UNAUTHORIZED, 5).
 -record('DISCONNECT', {}).
 
 

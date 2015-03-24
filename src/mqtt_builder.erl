@@ -107,7 +107,7 @@ build_rest(#'CONNACK'{ session_present = SessionPresent, return_code = ReturnCod
     <<
     0:7,
     (case ReturnCode of
-         ?CONECTION_ACCEPTED  ->
+         ?CONNACK_ACCEPTED ->
              case SessionPresent of
                  true -> 1;
                  false -> 0

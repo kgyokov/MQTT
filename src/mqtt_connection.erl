@@ -285,11 +285,11 @@ handle_packet(#'CONNECT'{protocol_name = ProtocolName}, S)
 %% Only accept version 4
 handle_packet(#'CONNECT'{protocol_version = ProtocolVersion}, S)
     when ProtocolVersion =/= 4 ->
-    send_to_client(S,#'CONNACK'{return_code = ?UNACCEPTABLE_PROTOCOL}),
+    send_to_client(S,#'CONNACK'{return_code = ?CONNACK_UNACCEPTABLE_PROTOCOL}),
     prevent_connection(S, unknown_protocol_version);
 
 handle_packet(#'CONNECT'{client_id = <<>>,clean_session = false}, S) ->
-    send_to_client(S, #'CONNACK'{return_code = ?IDENTIFIER_REJECTED}),
+    send_to_client(S, #'CONNACK'{return_code = ?CONNACK_IDENTIFIER_REJECTED}),
     prevent_connection(S,invalid_client_id);
 
 
@@ -318,9 +318,9 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
         {error,Reason} ->
             Code = case Reason of
                        bad_credentials ->
-                           ?BAD_USERNAME_OR_PASSWORD;
+                           ?CONNACK_BAD_USERNAME_OR_PASSWORD;
                        _ ->
-                           ?UNAUTHORIZED
+                           ?CONNACK_UNAUTHORIZED
                    end,
             send_to_client(S,#'CONNACK'{session_present = false,return_code = Code}),
             prevent_connection(S,bad_auth);
@@ -348,7 +348,7 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
                           session_out = new_session(S2,ClientId,CleanSession)},
 
             %% @todo:  Determine session present
-            send_to_client(S2, #'CONNACK'{return_code = ?CONECTION_ACCEPTED,
+            send_to_client(S2, #'CONNACK'{return_code = ?CONNACK_ACCEPTED,
                                          session_present = SessionPresent}),
 
             S4 = maybe_start_keep_alive(S3, KeepAliveTimeout * 1000),

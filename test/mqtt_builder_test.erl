@@ -58,7 +58,7 @@ build_CONNACK_test() ->
                    2:8,
                    1:8,0:8
                  >>,
-                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?CONECTION_ACCEPTED,
+                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?CONNACK_ACCEPTED,
                                                       session_present = true})).
 
 build_CONNACK_Unacceptable_Protocol_test() ->
@@ -66,7 +66,7 @@ build_CONNACK_Unacceptable_Protocol_test() ->
                    2:8,
                    0:8,1:8
                  >>,
-                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?UNACCEPTABLE_PROTOCOL,
+                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?CONNACK_UNACCEPTABLE_PROTOCOL,
                                                       session_present = true})).
 
 build_CONNACK_Identifier_Rejected_test() ->
@@ -74,7 +74,7 @@ build_CONNACK_Identifier_Rejected_test() ->
                    2:8,
                    0:8,2:8
                  >>,
-                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?IDENTIFIER_REJECTED,
+                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?CONNACK_IDENTIFIER_REJECTED,
                                                       session_present = true})).
 
 build_CONNACK_Server_Unavailable_test() ->
@@ -82,7 +82,7 @@ build_CONNACK_Server_Unavailable_test() ->
                    2:8,
                    0:8,3:8
                  >>,
-                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?SERVER_UNAVAILABLE,
+                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?CONNACK_SERVER_UNAVAILABLE,
                                                       session_present = true})).
 
 build_CONNACK_BAD_USERNAME_PASSWORD_test() ->
@@ -90,7 +90,7 @@ build_CONNACK_BAD_USERNAME_PASSWORD_test() ->
                    2:8,
                    0:8,4:8
                  >>,
-                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?BAD_USERNAME_OR_PASSWORD,
+                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?CONNACK_BAD_USERNAME_OR_PASSWORD,
                                                       session_present = true})).
 
 
@@ -99,7 +99,7 @@ build_CONNACK_UNAUTHORIZED_test() ->
                    2:8,
                    0:8,5:8
                  >>,
-                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?UNAUTHORIZED,
+                 mqtt_builder:build_packet(#'CONNACK'{return_code = ?CONNACK_UNAUTHORIZED,
                                                       session_present = true})).
 
 
