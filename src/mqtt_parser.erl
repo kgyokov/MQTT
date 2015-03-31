@@ -148,7 +148,7 @@ parse_packet_unsafe(S)->
 %% MQTT 3.1.2.1 - "The Protocol Name is a UTF-8 encoded string that represents the protocol name “MQTT”, capitalized as shown.
 %% The string, its offset and length will not be changed by future versions of the MQTT specification."
 parse_specific_type(?CONNECT,
-    _Flags,
+    <<0:4>>,
     S = #parse_state{buffer=
     <<ProtocolNameLen:16,                      %% should be 4 / "MQTT", but according to 3.1.2.1 we may want to give the server
     ProtocolName:ProtocolNameLen/bytes,     %% the option to proceed anyway
@@ -193,8 +193,7 @@ parse_specific_type(?PINGRESP,<<0:4>>,_S) ->
 %% PUBLISH -- COMPLETE!!!
 %% ========================================================
 
-parse_specific_type(?PUBLISH,Flags,S) ->
-    <<Dup:1,QoS:2,Retain:1>> = Flags,
+parse_specific_type(?PUBLISH,<<Dup:1,QoS:2,Retain:1>>,S) when QoS =< 2 ->
 
     %% validate flags - should we do that here? or in the connection process???
     case {Dup,QoS,Retain} of
@@ -271,38 +270,42 @@ parse_specific_type(_Type,_Flags,_State) ->
 %% Parse helpers
 %% ========================================================
 
-parse_codes(Buffer)->
+parse_codes(Buffer) ->
     parse_codes(Buffer,[]).
 
-parse_codes(<<>>, Codes)->
+parse_codes(<<>>, Codes) ->
     Codes;
 
-parse_codes(<<Code:8,Rest/binary>>,Codes)->
+parse_codes(<<Code:8,Rest/binary>>,Codes) ->
     parse_codes(Rest,[Code|Codes]).
 
-parse_topics(Buffer)->
+parse_topics(Buffer) ->
     parse_topics(Buffer,[]).
 
-parse_topics(_Buffer = <<>>,Topics)->
+parse_topics(_Buffer = <<>>,Topics) ->
     Topics;
 
-parse_topics(<<TopicLen:16,Topic:TopicLen/bytes,Rest/binary>>,Topics)->
+parse_topics(<<TopicLen:16,Topic:TopicLen/bytes,Rest/binary>>,Topics) ->
     parse_topics(Rest,[Topic|Topics]).
 
-parse_topic_subscriptions(Buffer)->
+parse_topic_subscriptions(Buffer) ->
     parse_topic_subscriptions(Buffer,[]).
 
-parse_topic_subscriptions(_Buffer = <<>>,Subscriptions)->
+parse_topic_subscriptions(_Buffer = <<>>,Subscriptions) ->
     Subscriptions;
 
 parse_topic_subscriptions(<<TopicLen:16,Topic:TopicLen/bytes,0:6,QoS:2,Rest/binary>>,
-    Subscriptions)->
-    parse_topic_subscriptions(Rest,[{Topic,QoS}|Subscriptions]).
+    Subscriptions) when QoS =<2 ->
+    parse_topic_subscriptions(Rest,[{Topic,QoS}|Subscriptions]);
 
-parse_will_details_maybe(_WillFlag = 0,_,_,Buffer)->
+parse_topic_subscriptions(_Buffer, _Subscriptions) ->
+    throw({error,malformed_packet}).
+
+%% If the Will Flag is set to 0, then the Will QoS MUST be set to 0 (0x00) [MQTT-3.1.2-13]
+parse_will_details_maybe(_WillFlag = 0,_WillRetain,_WillQoS = 0,Buffer) ->
     {ok,undefined,Buffer};
 
-parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer)->
+parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer) when WillQoS =< 2 ->
     {ok,WillTopic, Rest1} =  parse_string(Buffer),
     {ok,WillMessage, Rest2} =  parse_string(Rest1),
     {
@@ -315,4 +318,5 @@ parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer)->
         },
         Rest2
     }.
+
 

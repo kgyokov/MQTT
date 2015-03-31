@@ -418,40 +418,41 @@ parse_2_consecutive_packets_test()->
 
 
 parse_incomplete_packet_test() ->
-    IncompletePacket = <<3:4,1:1,2:2,1:1,
-                         11:8,
+    IncompletePacket = <<8:4,2:4,
+                         13:8,   %% we actually need 16 bytes
                          10:16,
-                         16#61:8,16#2f:8,16#62:8,
-                         10:16,
-                         1:16,2:16>>,
+                         3:16,    16#61:8,16#2f:8,16#62:8,    1:8,
+                         5:16,    16#63:8,16#2f:8,16#64:8    %% 3 bytes missing
+                        >>,
 
     test_binary_packet_for_error(IncompletePacket).
+
 
 %%-----------------------------------------------------------
 %% Test Utilities
 %%-----------------------------------------------------------
 
-test_packet(OriginalPacket)->
+test_packet(OriginalPacket) ->
     Binary = mqtt_builder:build_packet(OriginalPacket),
     S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
     ?assertMatch({ok, OriginalPacket,_S1}, mqtt_parser:parse_packet(S)).
 
-test_binary_packet_for_error(Binary)->
+test_binary_packet_for_error(Binary) ->
     S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
     ?assertMatch({error, _}, mqtt_parser:parse_packet(S)).
 
-test_packetfor_error(OriginalPacket,Reason)->
+test_packetfor_error(OriginalPacket,Reason) ->
     Binary = mqtt_builder:build_packet(OriginalPacket),
     S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
     ?assertMatch({error, Reason}, mqtt_parser:parse_packet(S)).
 
-initialize_parse_process(StartBuffer, Fun)->
+initialize_parse_process(StartBuffer, Fun) ->
     ReadFun = fun(_) -> receive Fragment -> {ok, Fragment } after 1000 -> {error, timeout} end end,
     State = #parse_state { buffer = StartBuffer, readfun = ReadFun, max_buffer_size = 1000000 },
     Self = self(),
     spawn(fun() -> Self! { self(), Fun(State)} end).
 
-push_fragment(ParseProcess,NewFragment)->
+push_fragment(ParseProcess,NewFragment) ->
     ParseProcess! NewFragment.
 
 
