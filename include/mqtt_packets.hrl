@@ -18,9 +18,9 @@
 %% Special Values
 %%%%%%%%%%%%%%%%%%%%%%%
 -define(SUBSCRIPTION_FAILURE,16#80).
--define(QOS_AT_MOST_ONCE, 0).
--define(QOS_AT_LEAST_ONCE, 1).
--define(QOS_EXACTLY_ONCE, 3).
+-define(QOS_0, 0).
+-define(QOS_1, 1).
+-define(QOS_2, 3).
 -define(QOS_RESERVED, 4).
 
 
@@ -90,7 +90,7 @@
 
 -record('SUBACK', {
     packet_id           ::packet_id(),
-    return_codes=[]     ::[qos | ?SUBSCRIPTION_FAILURE]
+    return_codes=[]     ::[qos() | ?SUBSCRIPTION_FAILURE]
 }).
 
 -record('UNSUBSCRIBE', {

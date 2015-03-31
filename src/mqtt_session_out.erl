@@ -134,7 +134,7 @@ handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO,c
     case mqtt_session:append_msg(SO,CTRPacket,QoS) of
           duplicate ->
               {reply,duplicate,S#state{session_out = SO}};
-        {proceed,PacketId,SO1} ->
+        {proceed,SO1,PacketId} ->
             mqtt_connection:publish_packet(ConnPid,CTRPacket,QoS,PacketId),
             {reply,ok,S#state{session_out = SO1}}
      end;
