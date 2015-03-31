@@ -22,7 +22,7 @@
     -define(PERSISTENCE, disc_copies).
 -endif.
 
--record(mqtt_sub, {topic, subs}).
+-record(mqtt_sub, {filter, subs}).
 
 
 -define(SUB_TABLE, mqtt_sub).
@@ -81,12 +81,13 @@ add_sub(ClientId, Topic, QoS) ->
             #mqtt_sub{subs = Subs} = R,
             case orddict:find(ClientId,Subs) of
                 {ok, QoS} ->
-                    ok;
+                    {ok,new};
                 T  ->
-                    append_sub(R,ClientId,QoS)
+                    append_sub(R,ClientId,QoS),
+                    {ok,existing}
             end
         end,
-    mnesia:activity(transaction,Fun,[],mnesia_frag).
+    mnesia_transaction(Fun).
 
 append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
     mnesia:write(R#mqtt_sub{subs = orddict:store(ClientId,QoS,Subs)}).
@@ -110,7 +111,7 @@ remove_sub(ClientId, Topic) ->
                     end
             end
         end,
-    mnesia:activity(transaction,Fun,[],mnesia_frag).
+    mnesia_transaction(Fun).
 
 
 %% @doc
@@ -138,15 +139,18 @@ get_matches(Topic) ->
                 orddict:new(), AllSubs),
             orddict:to_list(Merged)
         end,
-    mnesia:activity(transaction,Fun,[],mnesia_frag).
+    mnesia_transaction(Fun).
     %%mnesia:async_dirty(Fun).
 
+
+mnesia_transaction(Fun) ->
+    mnesia:activity(transaction,Fun,[],mnesia_frag).
 
 wait_for_tables() ->
     mnesia:wait_for_tables(?SUB_TABLE,5000).
 
 new(Topic) ->
-    #mqtt_sub{topic = Topic, subs = orddict:new()}.
+    #mqtt_sub{filter = Topic, subs = orddict:new()}.
 
 
 -ifdef(TEST).

@@ -13,8 +13,7 @@
 
 %% API
 -export([start_link/2,
-    send_packet/2,
-    send_packet_async/2
+    send_packet/2
 ]).
 
 %% gen_server callbacks
@@ -46,9 +45,6 @@ start_link(Transport,Socket) ->
 
 
 send_packet(Pid,Packet) ->
-    gen_server:call(Pid, {packet,Packet}).
-
-send_packet_async(Pid,Packet) ->
     gen_server:cast(Pid, {packet,Packet}).
 
 %%%===================================================================
@@ -87,15 +83,6 @@ init([Transport,Socket]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-
-handle_call({packet,Packet},_From, S) ->
-    case send_as_binary(Packet,S)  of
-        ok ->
-            {reply, ok, S};
-        {error, Reason} ->
-            {stop, normal, {error,Reason}, S}
-    end;
-
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.

@@ -26,7 +26,7 @@ setup()->
 teardown()->
     mqtt_reg_repo:delete_tables().
 
-my_test_() ->
+reg_repo_test_() ->
         {foreach,
             fun() -> setup() end,
             fun(_) -> teardown() end,
