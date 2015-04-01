@@ -178,11 +178,11 @@ message_pub_rec(Session,PacketId) ->
 
 message_pub_comp(Session,PacketId)  ->
     #session_out{qos2_rec = Ack} = Session,
-    case orddict:find(PacketId,Ack) of
-        {ok,_} ->
+    case gb_sets:is_member(PacketId,Ack) of
+        true ->
             {ok,
             Session#session_out{qos2_rec = gb_sets:delete(PacketId,Ack)}};
-        error ->
+        false ->
             duplicate
     end.
 
