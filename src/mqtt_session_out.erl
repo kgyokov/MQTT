@@ -134,8 +134,8 @@ handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO,c
     case mqtt_session:append_msg(SO,CTRPacket,QoS) of
           duplicate ->
               {reply,duplicate,S#state{session_out = SO}};
-        {proceed,SO1,PacketId} ->
-            mqtt_connection:publish_packet(ConnPid,CTRPacket,QoS,PacketId),
+        {ok,SO1,Packet} ->
+            mqtt_connection:publish_packet(ConnPid,Packet),
             {reply,ok,S#state{session_out = SO1}}
      end;
 
@@ -144,16 +144,34 @@ handle_call({append_comp,Ref}, _From,  S = #state{session_out = SO}) ->
     {reply,ok,S#state{session_out = SO1}};
 
 handle_call({ack,PacketId}, _From,  S = #state{session_out = SO}) ->
-    SO1 = mqtt_session:message_ack(SO,PacketId),
-    {reply,ok,S#state{session_out = SO1}};
+    NewSession =
+    case mqtt_session:message_ack(SO,PacketId) of
+        {ok,SO1} ->
+            SO1;
+        duplicate ->
+            SO
+    end,
+    {reply,ok,S#state{session_out = NewSession}};
 
 handle_call({pub_rec,PacketId}, _From,  S = #state{session_out = SO}) ->
-    SO1 = mqtt_session:message_pub_rec(SO,PacketId),
-    {reply,ok,S#state{session_out = SO1}};
+    {NewSession,Response} =
+    case mqtt_session:message_pub_rec(SO,PacketId) of
+        {ok,S01,Resp} ->
+            {S01,Resp};
+        {duplicate,Resp} ->
+            {SO,Resp}
+    end,
+    {reply,ok,S#state{session_out = NewSession}};
 
 handle_call({pub_comp,PacketId}, _From,  S = #state{session_out = SO}) ->
-    SO1 = mqtt_session:message_pub_comp(SO,PacketId),
-    {reply,ok,S#state{session_out = SO1}};
+    NewSession =
+    case mqtt_session:message_pub_comp(SO,PacketId) of
+        {ok,SO1} ->
+            SO1;
+        duplicate ->
+            SO
+    end,
+    {reply,ok,S#state{session_out = NewSession}};
 
 handle_call({sub,NewSub = {_,QoS}}, _From,  S = #state{session_out = SO}) ->
     SO1 = mqtt_session:subscribe(SO,[NewSub]),
@@ -184,7 +202,7 @@ handle_call(Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_cast({push_qos0,CTRPacket}, S = #state{conn_pid = ConnPid}) ->
-    mqtt_connection:publish_packet(ConnPid,CTRPacket,0,undefined),
+    mqtt_connection:publish_packet(ConnPid,CTRPacket),
     {noreply,S};
 
 handle_cast(_Request, State) ->

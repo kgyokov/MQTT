@@ -17,7 +17,7 @@
          message_ack/2,
          message_pub_rec/2,
          message_pub_comp/2,
-         recover/1,
+         %%recover/1,
          subscribe/2,
          unsubscribe/2,
          cleanup/1,
@@ -145,31 +145,46 @@ forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,_Dup,Ref},QoS) ->
                           Session
                   end),
 %%       #session_out{refs = gb_sets:add(Ref,Refs)},
-    {proceed,NewSession,PacketId}.
+    {ok,NewSession,to_publish(CTRPacket,QoS,PacketId,false)}.
 
 append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
     Session#session_out{refs = gb_sets:del_element(Ref,Refs)}.
 
 
 message_ack(Session,PacketId) ->
-    #session_out{qos1 = Messages} = Session,
-    Session#session_out{qos1 = orddict:erase(PacketId,Messages)}.
+    #session_out{qos1 = Msgs} = Session,
+    case orddict:find(PacketId,Msgs) of
+        {ok,_} ->
+            {ok,
+             Session#session_out{qos1 = orddict:erase(PacketId,Msgs)}};
+        error ->
+            duplicate
+    end.
 
 
 message_pub_rec(Session,PacketId) ->
     #session_out{qos2 = Msgs, qos2_rec = Ack} = Session,
+    Response = to_pubrel(PacketId),
     case orddict:find(PacketId,Msgs) of
         {ok,_} ->
-            Session#session_out{qos2 = orddict:erase(PacketId,Msgs),
-                                qos2_rec = gb_sets:add(PacketId,Ack)};
+            {ok,
+             Session#session_out{qos2 = orddict:erase(PacketId,Msgs),
+                                 qos2_rec = gb_sets:add(PacketId,Ack)},
+             Response};
         error ->
-            Session
+            {duplicate,Response}
     end.
 
 
 message_pub_comp(Session,PacketId)  ->
     #session_out{qos2_rec = Ack} = Session,
-    Session#session_out{qos2_rec = gb_sets:delete(PacketId,Ack)}.
+    case orddict:find(PacketId,Ack) of
+        {ok,_} ->
+            {ok,
+            Session#session_out{qos2_rec = gb_sets:delete(PacketId,Ack)}};
+        error ->
+            duplicate
+    end.
 
 
 
@@ -179,15 +194,14 @@ message_pub_comp(Session,PacketId)  ->
 
 recover(Session) ->
     recover_in_flight(Session),
-    get_retained(Session),
     recover_queued(Session).
 
 recover_in_flight(#session_out{qos1 = UnAck1, qos2 = UnAck2,
-    qos2_rec = Rec, packet_seq = PacketSeq}) ->
+                               qos2_rec = Rec, packet_seq = PacketSeq}) ->
     NewPackets =
-        [ to_publish(?QOS_1,Packet,true) || Packet  <- orddict:to_list(UnAck1)] ++
-        [ to_publish(?QOS_0,Packet,true)  || Packet  <- orddict:to_list(UnAck2)] ++
-        [ to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)],
+    [ to_publish(CTRPacket,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
+    [ to_publish(CTRPacket,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
+    [ to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)],
     {PacketSeq,NewPackets}.
 
 recover_queued(_Session) ->
@@ -199,10 +213,10 @@ get_retained(_Session) ->
 %% to_publish(QoS,Packet) ->
 %%   to_publish(QoS,Packet,true).
 
-to_publish(QoS,{PacketId,{Content,Topic,Retain}},Dup) ->
+to_publish({Topic,Content,Retain,_Dup,_Ref}, QoS, PacketId, Dup) ->
     #'PUBLISH'{content = Content,packet_id = PacketId,
-        qos = QoS,topic = Topic,
-        dup = Dup,retain = Retain}.
+               qos = QoS,topic = Topic,
+               dup = Dup,retain = Retain}.
 
 to_pubrel(PacketId) ->
     #'PUBREL'{packet_id = PacketId}.

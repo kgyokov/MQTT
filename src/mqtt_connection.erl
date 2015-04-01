@@ -19,7 +19,7 @@
     process_bad_packet/2,
     process_unexpected_disconnect/2,
     close_duplicate/1,
-    publish_packet/4]).
+    publish_packet/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -65,8 +65,8 @@
 start_link(ReceiverPid,SenderPid,SupPid,Options) ->
     gen_server:start_link(?MODULE, [ReceiverPid,SenderPid,SupPid,Options], []).
 
-publish_packet(Pid,Packet,QoS,PacketId) ->
-    gen_server:cast(Pid,{publish,Packet,QoS,PacketId}).
+publish_packet(Pid,Packet) ->
+    gen_server:cast(Pid,{publish,Packet}).
 
 process_packet(Pid,Packet) ->
     gen_server:cast(Pid,{packet, Packet}).
@@ -161,16 +161,7 @@ handle_cast({packet, Packet}, S) ->
     S1 = maybe_reset_keep_alive(S),
     handle_packet(Packet, S1);
 
-handle_cast({publish, TCRPAcket,QoS,PacketId}, S = #state{sender_pid = SenderPid}) ->
-    {Topic,Content,Retain,_Dup,_Ref} = TCRPAcket,
-    Packet = #'PUBLISH'{
-        topic = Topic,
-        qos = QoS,
-        content = Content,
-        dup = false,
-        retain = Retain,
-        packet_id = PacketId
-    },
+handle_cast({publish, Packet}, S = #state{sender_pid = SenderPid}) ->
     send_to_client(SenderPid,Packet),
     {noreply,S};
 
