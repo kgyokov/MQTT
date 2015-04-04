@@ -99,8 +99,8 @@ parse_variable_length(S) ->
     parse_variable_length(S, 0, 1).
 
 parse_variable_length(S = #parse_state{buffer = <<HasMore:1,Length:7, Rest/binary>>},
-    Sum,
-    Multiplier)->
+                      Sum,
+                      Multiplier)->
 
     NewSum = Sum + Length * Multiplier,
     if HasMore =:= 1 ->

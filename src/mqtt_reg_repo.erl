@@ -71,8 +71,6 @@ wait_for_tables()->
     mnesia:wait_for_tables(?REG_TABLE,5000).
 
 
-
-
 %%
 %% @doc
 %%
@@ -83,7 +81,7 @@ wait_for_tables()->
 
 register(Pid, ClientId)->
     NewReg = #client_reg{client_id = ClientId,connection_pid = Pid,timestamp = time()},
-    F = fun()->
+    Fun = fun() ->
         %% take write lock
         case mnesia:read(?REG_TABLE, ClientId, write) of
             [] ->
@@ -105,7 +103,7 @@ register(Pid, ClientId)->
         end
     end,
 
-    case mnesia:activity(transaction,F,[],mnesia_frag) of
+    case mnesia_transaction(Fun) of
         ok ->
             ok;
         {dup_detected,EPid} ->
@@ -123,7 +121,7 @@ register(ClientId) ->
 %%
 %% @end
 unregister(Pid,ClientId) ->
-    F = fun()->
+    Fun = fun()->
         %% take write lock
         case mnesia:read(?REG_TABLE, ClientId, write) of
             [] ->
@@ -135,7 +133,7 @@ unregister(Pid,ClientId) ->
                 ok
         end
     end,
-    mnesia:activity(transaction,F,[],mnesia_frag).
+    mnesia_transaction(Fun).
 
 get_registration(ClientId)->
     Fun = fun() ->
@@ -145,16 +143,19 @@ get_registration(ClientId)->
             [#client_reg{client_id = ClientId,connection_pid = ConnPid}] ->
                 case ConnPid of
                     undefined -> undefined;
-                    _ ->        {ok,ConnPid}
+                    _         -> {ok,ConnPid}
                 end
         end
     end,
-    mnesia:activity(transaction,Fun,[],mnesia_frag).
+    mnesia_transaction(Fun).
 
 
 handle_duplicate(Pid)->
     mqtt_connection:close_duplicate(Pid).
 
+
+mnesia_transaction(Fun) ->
+    mnesia:activity(transaction,Fun,[],mnesia_frag).
 
 %% ------------------------------------------------------------
 %% Mnesia Tests

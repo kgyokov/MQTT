@@ -24,10 +24,10 @@ build_packet(Packet) ->
 
 build_flags(Packet) ->
     case Packet of
-        #'SUBSCRIBE'{} ->   <<2#0010:4>>;
-        #'UNSUBSCRIBE'{} -> <<2#0010:4>>;
-        #'PUBREL'{} -> <<2#0010:4>>;
-        #'PUBLISH' { qos = QoS } when QoS =:= 2#11 ->
+        #'SUBSCRIBE'{}      ->  <<2#0010:4>>;
+        #'UNSUBSCRIBE'{}    ->  <<2#0010:4>>;
+        #'PUBREL'{}         ->  <<2#0010:4>>;
+        #'PUBLISH'{ qos = QoS } when QoS =:= 2#11 ->
             throw({build_error,invalid_qos});
         #'PUBLISH' { qos = QoS, dup = Dup, retain = Retain } ->
             %%<<?FLAG(Dup),QoS:2,?FLAG(Retain)>>;
@@ -37,20 +37,20 @@ build_flags(Packet) ->
 
 build_packet_type(Packet)->
     case Packet of
-        #'CONNECT'{} -> ?CONNECT;
-        #'CONNACK'{}  -> ?CONNACK;
-        #'PUBLISH'{}  -> ?PUBLISH;
-        #'PUBACK'{}  -> ?PUBACK;
-        #'PUBREC'{}  -> ?PUBREC;
-        #'PUBREL'{}  -> ?PUBREL;
-        #'PUBCOMP'{}  -> ?PUBCOMP;
+        #'CONNECT'{}    -> ?CONNECT;
+        #'CONNACK'{}    -> ?CONNACK;
+        #'PUBLISH'{}    -> ?PUBLISH;
+        #'PUBACK'{}     -> ?PUBACK;
+        #'PUBREC'{}     -> ?PUBREC;
+        #'PUBREL'{}     -> ?PUBREL;
+        #'PUBCOMP'{}    -> ?PUBCOMP;
         #'SUBSCRIBE'{}  -> ?SUBSCRIBE;
-        #'SUBACK'{}  -> ?SUBACK;
-        #'UNSUBSCRIBE'{}  -> ?UNSUBSCRIBE;
-        #'UNSUBACK'{}  -> ?UNSUBACK;
-        #'PINGREQ'{}  -> ?PINGREQ;
-        #'PINGRESP'{}  ->?PINGRESP;
-        #'DISCONNECT'{}  -> ?DISCONNECT
+        #'SUBACK'{}     -> ?SUBACK;
+        #'UNSUBSCRIBE'{}-> ?UNSUBSCRIBE;
+        #'UNSUBACK'{}   -> ?UNSUBACK;
+        #'PINGREQ'{}    -> ?PINGREQ;
+        #'PINGRESP'{}   ->?PINGRESP;
+        #'DISCONNECT'{} -> ?DISCONNECT
     end.
 
 
@@ -109,8 +109,8 @@ build_rest(#'CONNACK'{ session_present = SessionPresent, return_code = ReturnCod
     (case ReturnCode of
          ?CONNACK_ACCEPTED ->
              case SessionPresent of
-                 true -> 1;
-                 false -> 0
+                 true   -> 1;
+                 false  -> 0
              end;
          _ -> 0
     end):1,
@@ -126,22 +126,18 @@ build_rest(#'PUBLISH'{
     qos = QoS,
     topic = Topic,
     content = Content}) when (QoS =:= 1 orelse
-    QoS =:= 2)
-    andalso is_integer(PacketId) ->
-    <<
-    (build_string(Topic))/binary,
+                              QoS =:= 2)
+                             andalso is_integer(PacketId) ->
+    <<(build_string(Topic))/binary,
     PacketId:16,
-    Content/binary
-    >>;
+    Content/binary>>;
 
 build_rest(#'PUBLISH'{
     qos = QoS,
     topic = Topic,
     content = Content}) when QoS =:= 0 ->
-    <<
-    (build_string(Topic))/binary,
-    Content/binary
-    >>;
+    <<(build_string(Topic))/binary,
+    Content/binary>>;
 
 
 build_rest(#'PUBACK'{packet_id = PacketId})->
@@ -204,15 +200,11 @@ build_rest(#'DISCONNECT'{}) ->
 %% HELPERS
 %%
 %%=========================================================
-maybe_build_string(undefined)->
-    <<>>;
-maybe_build_string(S)->
-    build_string(S).
+maybe_build_string(undefined)   ->   <<>>;
+maybe_build_string(S)           ->  build_string(S).
 
-build_string(S) when is_list(S) ->
-    build_string(list_to_binary(S));
-build_string(<<S/binary>>) ->
-    <<(byte_size(S)):16,S/binary>>.
+build_string(S) when is_list(S) ->  build_string(list_to_binary(S));
+build_string(<<S/binary>>)      ->  <<(byte_size(S)):16,S/binary>>.
 
 build_var_length(Length) ->
     build_var_length(Length,<<>>).
@@ -227,7 +219,5 @@ build_var_length(Length,Acc)->
         _ -> build_var_length(NextLength, <<Acc/binary,1:1,Length:7>>)
     end.
 
-maybe_flag(undefined)->
-    <<0:1>>;
-maybe_flag(_)->
-    <<1:1>>.
+maybe_flag(undefined)   ->    <<0:1>>;
+maybe_flag(_)           ->    <<1:1>>.

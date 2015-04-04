@@ -146,30 +146,24 @@ handle_call({append_comp,Ref}, _From,  S = #state{session_out = SO}) ->
 handle_call({ack,PacketId}, _From,  S = #state{session_out = SO}) ->
     NewSession =
     case mqtt_session:message_ack(SO,PacketId) of
-        {ok,SO1} ->
-            SO1;
-        duplicate ->
-            SO
+        {ok,SO1}    ->  SO1;
+        duplicate   ->  SO
     end,
     {reply,ok,S#state{session_out = NewSession}};
 
 handle_call({pub_rec,PacketId}, _From,  S = #state{session_out = SO}) ->
     {NewSession,Response} =
     case mqtt_session:message_pub_rec(SO,PacketId) of
-        {ok,S01,Resp} ->
-            {S01,Resp};
-        {duplicate,Resp} ->
-            {SO,Resp}
+        {ok,S01,Resp}    -> {S01,Resp};
+        {duplicate,Resp} -> {SO,Resp}
     end,
     {reply,ok,S#state{session_out = NewSession}};
 
 handle_call({pub_comp,PacketId}, _From,  S = #state{session_out = SO}) ->
     NewSession =
     case mqtt_session:message_pub_comp(SO,PacketId) of
-        {ok,SO1} ->
-            SO1;
-        duplicate ->
-            SO
+        {ok,SO1}    ->  SO1;
+        duplicate   ->  SO
     end,
     {reply,ok,S#state{session_out = NewSession}};
 

@@ -40,28 +40,10 @@
 )).
 
 
+%% ======================================================================
+%% API
+%% ======================================================================
 
-%% @doc
-%%
-%% Creates the mnesia tables. To be called only once.
-%%
-%% @end
-
-create_tables([],NFragments) ->
-    create_tables([node()],NFragments);
-
-create_tables(Nodes,NFragments) ->
-    DefaultProps = ?BASIC_TABLE_DEF(Nodes),
-    Props = if NFragments < 2 ->
-                    DefaultProps;
-               true ->
-                   [?DISTRIBUTED_DEF(NFragments,Nodes) | DefaultProps]
-            end,
-
-    case mnesia:create_table(?SUB_TABLE, Props) of
-        {atomic, ok}                            -> ok;
-        {aborted, {already_exists, ?SUB_TABLE}} -> ok
-    end.
 
 %% @doc
 %% Appends a new subscription OR replaces an existing one with a new QoS
@@ -100,7 +82,7 @@ append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
 remove_sub(ClientId, Topic) ->
     Fun =
         fun() ->
-            case mnesia:read({?SUB_TABLE, Topic}) of
+            case mnesia:read(?SUB_TABLE,Topic,write) of
                 [] ->
                     ok;
                 [S = #mqtt_sub{subs = Subs}] ->
@@ -119,8 +101,8 @@ remove_sub(ClientId, Topic) ->
 %% per client
 %%
 %% @end
-get_matches(Topic) ->
-    Patterns = mqtt_topic:explode(Topic),
+get_matches(Filter) ->
+    Patterns = mqtt_topic:explode(Filter),
     Spec = [{{'_',P},[],['$_']} || P <- Patterns],
     Fun =
         fun() ->
@@ -146,12 +128,13 @@ get_matches(Topic) ->
 mnesia_transaction(Fun) ->
     mnesia:activity(transaction,Fun,[],mnesia_frag).
 
-wait_for_tables() ->
-    mnesia:wait_for_tables(?SUB_TABLE,5000).
-
 new(Topic) ->
     #mqtt_sub{filter = Topic, subs = orddict:new()}.
 
+
+%% ======================================================================
+%% Table creation, cleanup, etc.
+%% ======================================================================
 
 -ifdef(TEST).
 
@@ -162,3 +145,28 @@ delete_tables() ->
     {atomic,ok} = mnesia:delete_table(?SUB_TABLE).
 
 -endif.
+
+wait_for_tables() ->
+    mnesia:wait_for_tables(?SUB_TABLE,5000).
+
+%% @doc
+%%
+%% Creates the mnesia tables. To be called only once.
+%%
+%% @end
+
+create_tables([],NFragments) ->
+    create_tables([node()],NFragments);
+
+create_tables(Nodes,NFragments) ->
+    DefaultProps = ?BASIC_TABLE_DEF(Nodes),
+    Props = if NFragments < 2 ->
+        DefaultProps;
+                true ->
+                    [?DISTRIBUTED_DEF(NFragments,Nodes) | DefaultProps]
+            end,
+
+    case mnesia:create_table(?SUB_TABLE, Props) of
+        {atomic, ok}                            -> ok;
+        {aborted, {already_exists, ?SUB_TABLE}} -> ok
+    end.
