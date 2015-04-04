@@ -21,7 +21,7 @@
          subscribe/2,
          unsubscribe/2,
          cleanup/1,
-         new/2]).
+         new/2, to_publish/4, to_pubrel/1]).
 
 
 -record(session_out,{
@@ -145,7 +145,7 @@ forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,_Dup,Ref},QoS) ->
                           Session
                   end),
 %%       #session_out{refs = gb_sets:add(Ref,Refs)},
-    {ok,NewSession,to_publish(CTRPacket,QoS,PacketId,false)}.
+    {ok,NewSession,PacketId}.
 
 append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
     Session#session_out{refs = gb_sets:del_element(Ref,Refs)}.
@@ -164,15 +164,14 @@ message_ack(Session,PacketId) ->
 
 message_pub_rec(Session,PacketId) ->
     #session_out{qos2 = Msgs, qos2_rec = Ack} = Session,
-    Response = to_pubrel(PacketId),
     case orddict:find(PacketId,Msgs) of
         {ok,_} ->
             {ok,
              Session#session_out{qos2 = orddict:erase(PacketId,Msgs),
                                  qos2_rec = gb_sets:add(PacketId,Ack)},
-             Response};
+             PacketId};
         error ->
-            {duplicate,Response}
+            {duplicate,PacketId}
     end.
 
 
@@ -209,9 +208,6 @@ recover_queued(_Session) ->
 
 get_retained(_Session) ->
     ok.
-
-%% to_publish(QoS,Packet) ->
-%%   to_publish(QoS,Packet,true).
 
 to_publish({Topic,Content,Retain,_Dup,_Ref}, QoS, PacketId, Dup) ->
     #'PUBLISH'{content = Content,packet_id = PacketId,

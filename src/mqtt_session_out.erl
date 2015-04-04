@@ -128,14 +128,16 @@ init([ConnPid,ClientId,CleanSession]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO,conn_pid = ConnPid})
+handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO})
     when QoS =:= 1; QoS =:= 2 ->
     error_logger:info_msg("Pushing packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
     case mqtt_session:append_msg(SO,CTRPacket,QoS) of
           duplicate ->
               {reply,duplicate,S#state{session_out = SO}};
-        {ok,SO1,Packet} ->
-            mqtt_connection:publish_packet(ConnPid,Packet),
+        {ok,SO1,PacketId} ->
+            persist(SO1),
+            Packet = mqtt_session:to_publish(CTRPacket,QoS,PacketId,false),
+            send_to_client(S,Packet),
             {reply,ok,S#state{session_out = SO1}}
      end;
 
@@ -146,17 +148,25 @@ handle_call({append_comp,Ref}, _From,  S = #state{session_out = SO}) ->
 handle_call({ack,PacketId}, _From,  S = #state{session_out = SO}) ->
     NewSession =
     case mqtt_session:message_ack(SO,PacketId) of
-        {ok,SO1}    ->  SO1;
-        duplicate   ->  SO
+        {ok,SO1} ->
+            persist(SO1),
+            SO1;
+        duplicate ->
+            SO
     end,
     {reply,ok,S#state{session_out = NewSession}};
 
 handle_call({pub_rec,PacketId}, _From,  S = #state{session_out = SO}) ->
-    {NewSession,Response} =
-    case mqtt_session:message_pub_rec(SO,PacketId) of
-        {ok,S01,Resp}    -> {S01,Resp};
-        {duplicate,Resp} -> {SO,Resp}
-    end,
+    {NewSession,PacketId} =
+        case mqtt_session:message_pub_rec(SO,PacketId) of
+            {ok,S01,PacketId} ->
+                persist(SO),
+                {S01,PacketId};
+            {duplicate,PacketId} ->
+                {SO,PacketId}
+        end,
+    Packet = mqtt_session:to_pubrel(PacketId),
+    send_to_client(S,Packet),
     {reply,ok,S#state{session_out = NewSession}};
 
 handle_call({pub_comp,PacketId}, _From,  S = #state{session_out = SO}) ->
@@ -195,8 +205,9 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_cast({push_qos0,CTRPacket}, S = #state{conn_pid = ConnPid}) ->
-    mqtt_connection:publish_packet(ConnPid,CTRPacket),
+handle_cast({push_qos0,CTRPacket}, S) ->
+    Packet = mqtt_session:to_publish(CTRPacket,0,undefined,false),
+    send_to_client(S,Packet),
     {noreply,S};
 
 handle_cast(_Request, State) ->
@@ -259,3 +270,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+persist(S) ->
+    ok.
+
+send_to_client(#state{conn_pid = ConnPid}, Packet) ->
+    mqtt_connection:publish_packet(ConnPid,Packet).

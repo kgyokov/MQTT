@@ -37,13 +37,24 @@ message_test_() ->
     }.
 
 ok_on_qos0([Session,Packet]) ->
-    ?_assertMatch({ok,_, #'PUBLISH'{packet_id = undefined}}, mqtt_session:append_msg(Session,Packet,?QOS_0)).
+    ?_assertMatch({ok,_, undefined}, mqtt_session:append_msg(Session,Packet,?QOS_0)).
 
 ok_on_qos1([Session,Packet]) ->
-    ?_assertMatch({ok,_, _}, mqtt_session:append_msg(Session,Packet,?QOS_1)).
+    %%?_assertMatch(({ok,_, PacketId} when is_integer(PacketId)), mqtt_session:append_msg(Session,Packet,?QOS_1)
+    ?_test(
+    begin
+        {ok,_, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
+        ?assert(is_integer(PacketId))
+    end
+    ).
 
 ok_on_qos2([Session,Packet]) ->
-    ?_assertMatch({ok,_, _}, mqtt_session:append_msg(Session,Packet,?QOS_2)).
+    ?_test(
+        begin
+            {ok,_, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
+            ?assert(is_integer(PacketId))
+        end
+    ).
 
 deduplicate_qos1([Session,Packet]) ->
     {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
@@ -54,17 +65,17 @@ deduplicate_qos2([Session,Packet]) ->
     ?_assertMatch(duplicate, mqtt_session:append_msg(NewSession,Packet,?QOS_2)).
 
 qos1_flow_double_ack([Session,Packet]) ->
-    {ok, S1, #'PUBLISH'{packet_id = PacketId}} = mqtt_session:append_msg(Session,Packet,?QOS_1),
+    {ok, S1, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
     {ok, S2} = mqtt_session:message_ack(S1,PacketId),
     ?_assertMatch(duplicate, mqtt_session:message_ack(S2,PacketId)).
 
 qos2_flow([S0,Packet]) ->
     ?_test(
     begin
-        {ok, S1, #'PUBLISH'{packet_id = PacketId}} = mqtt_session:append_msg(S0,Packet,?QOS_2),
-        {ok, S2, PubRel = #'PUBREL'{packet_id = PacketId}} = mqtt_session:message_pub_rec(S1,PacketId),
+        {ok, S1, PacketId} = mqtt_session:append_msg(S0,Packet,?QOS_2),
+        {ok, S2, PacketId} = mqtt_session:message_pub_rec(S1,PacketId),
         %% Test duplicate PUBREC packets
-        ?assertMatch({duplicate, PubRel}, mqtt_session:message_pub_rec(S2,PacketId)),
+        ?assertMatch({duplicate, PacketId}, mqtt_session:message_pub_rec(S2,PacketId)),
         %% Test duplicate PUBCOMP packets
         {ok,S3} = mqtt_session:message_pub_comp(S2,PacketId),
         ?assertMatch(duplicate,mqtt_session:message_pub_comp(S3 ,PacketId))
