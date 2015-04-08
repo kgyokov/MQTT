@@ -73,9 +73,9 @@ qos2_flow([S0,Packet]) ->
     ?_test(
     begin
         {ok, S1, PacketId} = mqtt_session:append_msg(S0,Packet,?QOS_2),
-        {ok, S2, PacketId} = mqtt_session:message_pub_rec(S1,PacketId),
+        {ok, S2} = mqtt_session:message_pub_rec(S1,PacketId),
         %% Test duplicate PUBREC packets
-        ?assertMatch({duplicate, PacketId}, mqtt_session:message_pub_rec(S2,PacketId)),
+        ?assertMatch(duplicate, mqtt_session:message_pub_rec(S2,PacketId)),
         %% Test duplicate PUBCOMP packets
         {ok,S3} = mqtt_session:message_pub_comp(S2,PacketId),
         ?assertMatch(duplicate,mqtt_session:message_pub_comp(S3 ,PacketId))

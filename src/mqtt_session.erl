@@ -32,7 +32,8 @@
     qos2 = dict:new()         ,
     qos2_rec = gb_sets:new()  ,
     refs = gb_sets:new()      ,
-    subscriptions = []        ::[subscription()]
+    subs = orddict:new()      ,
+    min_subs = orddict:new()
 }).
 
 
@@ -40,12 +41,15 @@
 %% SUBSCRIPTIONS
 %% ================================================================================
 
-subscribe(S = #session_out{subscriptions = Subs,client_id = ClientId},NewSubs) ->
-%%     DistinctSubs = mqtt_topic:min_cover(NewSubs),
-%%     [ {add_or_replace_sub(ClientId,NewSub,Subs),NewSub} || NewSub <- DistinctSubs ],
-%%     Session#session_out{subscriptions = []}.
-    %% @todo: Deduplicate subscription, optimize overlapping subs
-    _MinCover = mqtt_topic:min_cover(NewSubs),
+subscribe(S = #session_out{subs = Subs, min_subs = MinSubs, client_id = ClientId},NewSubs) ->
+
+    %% Maintain a flat list of subscriptions
+    Subs1 = lists:foldr(fun({Topic,QoS},Acc) ->
+                                orddict:store(Topic,QoS,Acc)
+                              end,
+                             Subs, NewSubs),
+    MinCover = mqtt_topic:min_cover(orddict:to_list(Subs1)),
+    _MinCover =
     [
         begin
             error_logger:info_msg("Subscribing: ~p,~p,~p,~n",[ClientId,Topic,QoS]),
@@ -53,20 +57,16 @@ subscribe(S = #session_out{subscriptions = Subs,client_id = ClientId},NewSubs) -
         end
         || {Topic,QoS} <- NewSubs
     ],
-    S#session_out{subscriptions =
-                  lists:foldr(fun({Topic,QoS},Acc) ->
-                                orddict:store(Topic,QoS,Acc)
-                              end,
-                              Subs, NewSubs)}
+    S#session_out{subs = Subs1, min_subs = MinCover}
     %% @todo: Deduplicate, persist
 .
 
-unsubscribe(S = #session_out{subscriptions = Subs, client_id = ClientId},OldSubs) ->
+unsubscribe(S = #session_out{subs = Subs, client_id = ClientId},OldSubs) ->
     [
         mqtt_sub_repo:remove_sub(ClientId,Topic)
         || Topic <- Subs
     ],
-    S#session_out{subscriptions =
+    S#session_out{subs =
                   lists:foldr(fun(Topic,Acc) ->
                                 orddict:erase(Topic,Acc)
                               end,
@@ -74,9 +74,18 @@ unsubscribe(S = #session_out{subscriptions = Subs, client_id = ClientId},OldSubs
     %% @todo: Deduplicate, persist
     .
 
+%% get_sub_diff(Subs,NewSubs) ->
+%%     orddict:update().
+
+%% check_sub_exists(Subs,NewSub = {Filter,QoS}) ->
+%%     case lists:dropwhile(fun(Sub) -> not mqtt_topic:is_covered_by(Sub, NewSub) end, Subs) of
+%%         [] -> error;
+%%         [Sub| _] = Sub
+%%     end
+
 
 %% e.g. at shutdown with ClearSession = false
-cleanup(#session_out{subscriptions = Subs, client_id = ClientId, is_persistent = false}) ->
+cleanup(#session_out{subs = Subs, client_id = ClientId, is_persistent = false}) ->
     mqtt_reg_repo:unregister(self(),ClientId),
     [ mqtt_sub_repo:remove_sub(ClientId,Topic) || {Topic,_QoS}  <- Subs ];
 
@@ -105,21 +114,11 @@ cleanup(_S) ->
 %% Appends message for delivery
 %% @end
 append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_Dup,Ref},QoS) ->
-    #session_out{refs = Refs, subscriptions = _Subs} = Session,
+    #session_out{refs = Refs, subs = _Subs} = Session,
 
     case gb_sets:is_member(Ref,Refs) of
-        false ->
-%%             MatchingSub = orddict:find(Topic,Subs),
-%%             case MatchingSub of
-%%                 error ->
-%%                     mismatched_sub;
-%%                 SubQoS ->
-%%                     QoS = min(QoS,SubQoS),
-%%                     forward_msg(Session,CTRPacket,Ref)
-%%             end;
-            forward_msg(Session,CTRPacket,QoS);
-        true ->
-            duplicate
+        false -> forward_msg(Session,CTRPacket,QoS);
+        true  -> duplicate
     end.
 
 forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,_Dup,Ref},QoS) ->
@@ -168,10 +167,9 @@ message_pub_rec(Session,PacketId) ->
         {ok,_} ->
             {ok,
              Session#session_out{qos2 = orddict:erase(PacketId,Msgs),
-                                 qos2_rec = gb_sets:add(PacketId,Ack)},
-             PacketId};
+                                 qos2_rec = gb_sets:add(PacketId,Ack)}};
         error ->
-            {duplicate,PacketId}
+            duplicate
     end.
 
 
@@ -227,6 +225,6 @@ new(ClientId,CleanSession) ->
         qos2 = orddict:new(),
         qos2_rec = gb_sets:new(),
         refs = gb_sets:new(),
-        subscriptions = orddict:new()
+        subs = orddict:new()
     }.
 

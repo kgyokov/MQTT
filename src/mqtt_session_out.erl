@@ -132,7 +132,7 @@ handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO})
     when QoS =:= 1; QoS =:= 2 ->
     error_logger:info_msg("Pushing packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
     case mqtt_session:append_msg(SO,CTRPacket,QoS) of
-          duplicate ->
+        duplicate ->
               {reply,duplicate,S#state{session_out = SO}};
         {ok,SO1,PacketId} ->
             persist(SO1),
@@ -157,13 +157,13 @@ handle_call({ack,PacketId}, _From,  S = #state{session_out = SO}) ->
     {reply,ok,S#state{session_out = NewSession}};
 
 handle_call({pub_rec,PacketId}, _From,  S = #state{session_out = SO}) ->
-    {NewSession,PacketId} =
+    NewSession =
         case mqtt_session:message_pub_rec(SO,PacketId) of
-            {ok,S01,PacketId} ->
+            {ok,S01} ->
                 persist(SO),
-                {S01,PacketId};
-            {duplicate,PacketId} ->
-                {SO,PacketId}
+                S01;
+            duplicate ->
+                SO
         end,
     Packet = mqtt_session:to_pubrel(PacketId),
     send_to_client(S,Packet),
@@ -172,7 +172,7 @@ handle_call({pub_rec,PacketId}, _From,  S = #state{session_out = SO}) ->
 handle_call({pub_comp,PacketId}, _From,  S = #state{session_out = SO}) ->
     NewSession =
     case mqtt_session:message_pub_comp(SO,PacketId) of
-        {ok,SO1}    ->  SO1;
+        {ok,SO1}    ->  persist(SO1);
         duplicate   ->  SO
     end,
     {reply,ok,S#state{session_out = NewSession}};
