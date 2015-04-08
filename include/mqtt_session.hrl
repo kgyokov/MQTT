@@ -22,11 +22,3 @@
     seq = 0
 }).
 
--record(session_in,{
-	client_id                 ::binary(),
-    is_persistent  = false    ::boolean(),         %% whether the session needs to be persisted
-	packet_seq = 0            ::non_neg_integer(), %% packet sequence number (ever increasing)
-	msg_in_flight             ::#mqtt_message{},
-	qos2_rec = gb_sets:new()  ::gb_sets:set(),
-	will                      ::#will_details{}
-}).

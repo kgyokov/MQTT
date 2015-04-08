@@ -137,8 +137,7 @@ explode(ParentLevels,[])->
 %%
 %% @end
 split(Topic) ->
-    lists:reverse(split([],Topic))
-.
+    lists:reverse(split([],Topic)).
 
 split(Split,<<>>) ->
     Split;
