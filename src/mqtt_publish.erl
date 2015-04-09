@@ -10,7 +10,7 @@
 -author("Kalin").
 
 -include("mqtt_pubsub.hrl").
--include("mqtt_session.hrl").
+-include("mqtt_internal_msgs.hrl").
 
 %% API
 -export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2, recover/1, discard_will/1, new/2]).

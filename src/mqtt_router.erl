@@ -9,7 +9,7 @@
 -module(mqtt_router).
 -author("Kalin").
 
--include("mqtt_session.hrl").
+-include("mqtt_internal_msgs.hrl").
 
 %% API
 -export([global_route/1, fwd_message/2]).

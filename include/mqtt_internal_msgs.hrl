@@ -22,3 +22,12 @@
     seq = 0
 }).
 
+-record(msg, {
+    client_id,
+    client_seq,
+    timestamp,
+    topic,
+    content,
+    qos
+}).
+

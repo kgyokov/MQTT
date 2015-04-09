@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %%-include("mqtt_packets.hrl").
--include("mqtt_session.hrl").
+-include("mqtt_internal_msgs.hrl").
 -behaviour(gen_server).
 
 %% API
