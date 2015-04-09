@@ -61,10 +61,10 @@ add_sub(ClientId, Topic, QoS) ->
             #mqtt_sub{subs = Subs} = R,
             case orddict:find(ClientId,Subs) of
                 {ok, QoS} ->
-                    {ok,new};
+                    {ok,existing};
                 _  ->
                     append_sub(R,ClientId,QoS),
-                    {ok,existing}
+                    {ok,new}
             end
         end,
     mnesia_transaction(Fun).
