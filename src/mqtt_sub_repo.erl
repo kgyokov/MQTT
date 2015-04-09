@@ -99,28 +99,27 @@ remove_sub(ClientId, Topic) ->
 %% per client
 %%
 %% @end
-get_matches(Filter) ->
-    Patterns = mqtt_topic:explode(Filter),
-    Spec = [{{'_',P},[],['$_']} || P <- Patterns],
-    Fun =
-        fun() ->
-            %% Rs = mnesia:dirty_select(?SUB_TABLE, Spec),
-            Rs = lists:flatten([ mnesia:read({?SUB_TABLE,Pattern}) || Pattern <- Patterns]),
-            AllSubs = lists:flatmap(fun(#mqtt_sub{subs = Subs}) -> orddict:to_list(Subs) end, Rs),
-            Merged = lists:foldr(
-                fun({ClientId,QoS},Acc) ->
-                    case orddict:find(ClientId,Acc) of
-                        {ok,OldQoS} when QoS =< OldQoS ->
-                            Acc;
-                        _ ->
-                            orddict:store(ClientId,QoS,Acc)
-                    end
-                end,
-                orddict:new(), AllSubs),
-            orddict:to_list(Merged)
+get_matches(Topic) ->
+    Patterns = mqtt_topic:explode(Topic),
+    Spec = [{
+                 #mqtt_sub{filter = '$1', subs = '$2', _ = '_'},
+                 [{'=:=', '$1', P}],
+                 ['$2']
+             } || P <- Patterns],
+    Rs = mnesia:dirty_select(?SUB_TABLE, Spec),
+    %%Rs = lists:flatten([ mnesia:read({?SUB_TABLE,Pattern}) || Pattern <- Patterns]),
+    AllSubs = lists:flatmap(fun(Subs) -> orddict:to_list(Subs) end, Rs),
+    Merged = lists:foldr(
+        fun({ClientId,QoS},Acc) ->
+            case orddict:find(ClientId,Acc) of
+                {ok,OldQoS} when QoS =< OldQoS ->
+                    Acc;
+                _ ->
+                    orddict:store(ClientId,QoS,Acc)
+            end
         end,
-    mnesia_transaction(Fun).
-    %%mnesia:async_dirty(Fun).
+        orddict:new(), AllSubs),
+    orddict:to_list(Merged).
 
 
 mnesia_transaction(Fun) ->
