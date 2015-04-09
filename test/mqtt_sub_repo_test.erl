@@ -117,6 +117,15 @@ my_test_() ->
                             mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
                             ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_matches(<<"/A/1">>))
                         end
+                    },
+                    {spawn,
+                     fun() ->
+                         ?assertMatch({ok,new},      mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1)),
+                         ?assertMatch({ok,existing}, mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1)),
+                         ?assertMatch({ok,new}, mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 2)),
+                         ?assertMatch(ok,            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>)),
+                         ?assertMatch({ok,new},      mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1))
+                     end
                     }
                 ]
             %%}

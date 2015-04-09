@@ -22,7 +22,7 @@
     -define(PERSISTENCE, disc_copies).
 -endif.
 
--record(mqtt_sub, {filter, subs}).
+-record(mqtt_sub, {filter, subs, topic, client_id, qos}).
 
 
 -define(SUB_TABLE, mqtt_sub).
@@ -86,7 +86,7 @@ remove_sub(ClientId, Topic) ->
                 [S = #mqtt_sub{subs = Subs}] ->
                     case orddict:is_key(ClientId,Subs) of
                         true ->
-                            mnesia:write(S#mqtt_sub{subs = orddict:erase(ClientId,Subs)});
+                            ok = mnesia:write(S#mqtt_sub{subs = orddict:erase(ClientId,Subs)});
                         false -> ok
                     end
             end
@@ -107,7 +107,6 @@ get_matches(Topic) ->
                  ['$2']
              } || P <- Patterns],
     Rs = mnesia:dirty_select(?SUB_TABLE, Spec),
-    %%Rs = lists:flatten([ mnesia:read({?SUB_TABLE,Pattern}) || Pattern <- Patterns]),
     AllSubs = lists:flatmap(fun(Subs) -> orddict:to_list(Subs) end, Rs),
     Merged = lists:foldr(
         fun({ClientId,QoS},Acc) ->
