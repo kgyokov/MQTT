@@ -71,6 +71,12 @@ wait_for_tables()->
     mnesia:wait_for_tables(?REG_TABLE,5000).
 
 
+%% @doc
+%% Call register/2 for the current process
+%% @end
+register(ClientId) ->
+    ?MODULE:register(self(),ClientId).
+
 %%
 %% @doc
 %%
@@ -107,12 +113,18 @@ register(Pid, ClientId)->
         ok ->
             ok;
         {dup_detected,EPid} ->
-            handle_duplicate(EPid),
+%%             handle_duplicate(EPid),
             {dup_detected,EPid}
     end.
 
-register(ClientId) ->
-    ?MODULE:register(self(),ClientId).
+%%
+%% @doc
+%%
+%% Call unregister/2 for the current process
+%%
+%% @end
+unregister(ClientId) ->
+    ?MODULE:unregister(self(),ClientId).
 
 %%
 %% @doc
@@ -150,8 +162,8 @@ get_registration(ClientId)->
     mnesia_transaction(Fun).
 
 
-handle_duplicate(Pid)->
-    mqtt_connection:close_duplicate(Pid).
+%% handle_duplicate(Pid)->
+%%     mqtt_connection:close_duplicate(Pid).
 
 
 mnesia_transaction(Fun) ->

@@ -61,19 +61,11 @@ add_topic(Topic) ->
 .
 
 get_matching_topics(Filters) ->
-    Ms = [
-        {
+    Ms = [{
             #mqtt_filter_idx{filter = '$1', topic = '$2', _ = '_'},
             [{'=:=','$1',Filter}],
             ['$2']
-        }
-%%         ets:fun2ms(
-%%         fun(#mqtt_filter_idx{filter = FMatch,
-%%                              topic = Topic})
-%%                when FMatch =:= Filter ->
-%%             Topic
-%%         end)
-        || Filter <- Filters],
+        }|| Filter <- Filters],
     mnesia:dirty_select(?IDX_TABLE,Ms).
     %%mnesia:dirty_select(?IDX_TABLE,[{#mqtt_filter_idx{filter = Filter, topic = '$1'},[],['$1']}]).
 

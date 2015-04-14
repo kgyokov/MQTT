@@ -67,7 +67,7 @@ add_sub(ClientId, Topic, QoS) ->
                     {ok,new}
             end
         end,
-    mnesia_transaction(Fun).
+    mnesia_do(Fun).
 
 append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
     mnesia:write(R#mqtt_sub{subs = orddict:store(ClientId,QoS,Subs)}).
@@ -91,7 +91,7 @@ remove_sub(ClientId, Topic) ->
                     end
             end
         end,
-    mnesia_transaction(Fun).
+    mnesia_do(Fun).
 
 
 %% @doc
@@ -120,8 +120,11 @@ get_matches(Topic) ->
         orddict:new(), AllSubs),
     orddict:to_list(Merged).
 
+%% ======================================================================
+%% Misc
+%% ======================================================================
 
-mnesia_transaction(Fun) ->
+mnesia_do(Fun) ->
     mnesia:activity(transaction,Fun,[],mnesia_frag).
 
 new(Topic) ->

@@ -11,7 +11,7 @@
 
 -compile(export_all).
 
--include("mqtt_session.hrl").
+-include("mqtt_internal_msgs.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %% {_Topic,_Content,_Retain,_Dup,Ref},
