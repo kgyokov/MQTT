@@ -197,8 +197,7 @@ handle_call({unsub,OldSubs}, _From,  S = #state{session = SO}) ->
 %%     SO1 = mqtt_session:cleanup(SO),
 %%     {reply,ok,S#state{session_out = SO1}};
 
-handle_call(close, _From, S = #state{session = SO}) ->
-    cleanup(S),
+handle_call(close, _From, S) ->
     {stop,normal,ok,S};
 
 handle_call(Request, _From, State) ->
