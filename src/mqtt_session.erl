@@ -27,13 +27,13 @@
 -record(session_out,{
     client_id                 ::binary(),            %% The id of the client
     is_persistent             ::boolean(),           %% whether the session needs to be persisted
-    packet_seq                ::non_neg_integer(),   %% The latest packet id (incremented by 1 for every packet
+    packet_seq                ::non_neg_integer(),   %% The latest packet id (incremented by 1 for every packet)
     qos1 = dict:new()         ,
     qos2 = dict:new()         ,
     qos2_rec = gb_sets:new()  ,
-    refs = gb_sets:new()      ,
-    subs = orddict:new()      ,
-    min_subs = orddict:new()
+    refs = gb_sets:new()
+%%     subs = orddict:new()      ,
+%%     min_subs = orddict:new()
 }).
 
 
@@ -41,23 +41,24 @@
 %% SUBSCRIPTIONS
 %% ================================================================================
 
-subscribe(S = #session_out{subs = Subs, min_subs = MinSubs, client_id = ClientId},NewSubs) ->
+subscribe(S =#session_out{ client_id = ClientId},NewSubs) ->
 
     %% Maintain a flat list of subscriptions
-    Subs1 = lists:foldr(fun({Topic,QoS},Acc) ->
-                                orddict:store(Topic,QoS,Acc)
-                              end,
-                             Subs, NewSubs),
-    MinCover = mqtt_topic:min_cover(orddict:to_list(Subs1)),
-    _MinCover =
+%%     Subs1 = lists:foldr(fun({Topic,QoS},Acc) ->
+%%                                 orddict:store(Topic,QoS,Acc)
+%%                               end,
+%%                              Subs, NewSubs),
+%%     MinCover = mqtt_topic:min_cover(orddict:to_list(Subs1)),
+%%     _MinCover =
     [
         begin
             error_logger:info_msg("Subscribing: ~p,~p,~p,~n",[ClientId,Topic,QoS]),
             mqtt_sub_repo:add_sub(ClientId,Topic,QoS)
         end
         || {Topic,QoS} <- NewSubs
-    ],
-    S#session_out{subs = Subs1, min_subs = MinCover}
+    ]
+    
+    %% S#session_out{subs = Subs1, min_subs = MinCover}
     %% @todo: Deduplicate, persist
 .
 
@@ -65,12 +66,12 @@ unsubscribe(S = #session_out{subs = Subs, client_id = ClientId},OldSubs) ->
     [
         mqtt_sub_repo:remove_sub(ClientId,Topic)
         || Topic <- Subs
-    ],
-    S#session_out{subs =
-                  lists:foldr(fun(Topic,Acc) ->
-                                orddict:erase(Topic,Acc)
-                              end,
-                              Subs, OldSubs)}
+    ]
+%%     S#session_out{subs =
+%%                   lists:foldr(fun(Topic,Acc) ->
+%%                                 orddict:erase(Topic,Acc)
+%%                               end,
+%%                               Subs, OldSubs)}
     %% @todo: Deduplicate, persist
     .
 
