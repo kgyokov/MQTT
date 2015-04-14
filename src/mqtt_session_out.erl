@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, push_qos0/2, push_reliable/3, new/3]).
+-export([start_link/3, push_qos0/2, push_reliable/3, new/4, close_duplicate/1, close/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -34,8 +34,10 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-    conn_pid,
-    session_out
+    sender_pid,
+    client_id,
+    seq,
+    session
 }).
 
 %%%===================================================================
@@ -43,8 +45,8 @@
 %%%===================================================================
 
 
-new(SupPid,ClientId,CleanSession) ->
-    {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),ClientId,CleanSession),
+new(SupPid,ClientId,SenderPid, CleanSession) ->
+    {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,SenderPid,ClientId,CleanSession),
     SessionPid.
 %%--------------------------------------------------------------------
 %% @doc
@@ -62,6 +64,17 @@ push_qos0(Pid, CTRPacket) ->
 
 push_reliable(Pid, CTRPacket,QoS) ->
     gen_server:call(Pid,{push_reliable,CTRPacket,QoS}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Closes the connection if we detect two connections from the same ClientId
+%% @end
+%%--------------------------------------------------------------------
+close_duplicate(Pid) ->
+    gen_server:cast(Pid, {force_close, duplicate}).
+
+close(Pid) ->
+    gen_server:call(Pid, close).
 
 push_reliable_comp(Pid, CTRPacket,QoS) ->
     gen_server:call(Pid,{push_reliable_comp,CTRPacket,QoS}).
@@ -110,7 +123,7 @@ unsubscribe(Pid,OldSubs) ->
     {stop, Reason :: term()} | ignore).
 init([ConnPid,ClientId,CleanSession]) ->
     self() ! {async_init,ClientId},
-    {ok, #state{conn_pid = ConnPid, session_out = mqtt_session:new(ClientId,CleanSession)}}.
+    {ok, #state{sender_pid = ConnPid, session = mqtt_session:new(ClientId,CleanSession)}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -128,66 +141,65 @@ init([ConnPid,ClientId,CleanSession]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session_out = SO})
+handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session = SO})
     when QoS =:= 1; QoS =:= 2 ->
     error_logger:info_msg("Pushing packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
     case mqtt_session:append_msg(SO,CTRPacket,QoS) of
         duplicate ->
-              {reply,duplicate,S#state{session_out = SO}};
+            {reply,duplicate,S#state{session = SO}};
         {ok,SO1,PacketId} ->
-            persist(SO1),
+            maybe_persist(SO1),
             Packet = mqtt_session:to_publish(CTRPacket,QoS,PacketId,false),
             send_to_client(S,Packet),
-            {reply,ok,S#state{session_out = SO1}}
-     end;
+            {reply,ok,S#state{session = SO1}}
+    end;
 
-handle_call({append_comp,Ref}, _From,  S = #state{session_out = SO}) ->
+handle_call({append_comp,Ref}, _From,  S = #state{session = SO}) ->
     SO1 = mqtt_session:append_message_comp(SO,Ref),
-    {reply,ok,S#state{session_out = SO1}};
+    {reply,ok,S#state{session = SO1}};
 
-handle_call({ack,PacketId}, _From,  S = #state{session_out = SO}) ->
+handle_call({ack,PacketId}, _From,  S = #state{session = SO}) ->
     NewSession =
     case mqtt_session:message_ack(SO,PacketId) of
-        {ok,SO1} ->
-            persist(SO1),
-            SO1;
-        duplicate ->
-            SO
+        {ok,SO1}  ->    maybe_persist(SO1);
+        duplicate ->    SO
     end,
-    {reply,ok,S#state{session_out = NewSession}};
+    {reply,ok,S#state{session = NewSession}};
 
-handle_call({pub_rec,PacketId}, _From,  S = #state{session_out = SO}) ->
+handle_call({pub_rec,PacketId}, _From,  S = #state{session = SO}) ->
     NewSession =
         case mqtt_session:message_pub_rec(SO,PacketId) of
-            {ok,S01} ->
-                persist(SO),
-                S01;
-            duplicate ->
-                SO
+            {ok,S01} ->   maybe_persist(S01);
+            duplicate ->  SO
         end,
+    %% ALWAYS respond with PubRel
     Packet = mqtt_session:to_pubrel(PacketId),
     send_to_client(S,Packet),
-    {reply,ok,S#state{session_out = NewSession}};
+    {reply,ok,S#state{session = NewSession}};
 
-handle_call({pub_comp,PacketId}, _From,  S = #state{session_out = SO}) ->
+handle_call({pub_comp,PacketId}, _From,  S = #state{session = SO}) ->
     NewSession =
-    case mqtt_session:message_pub_comp(SO,PacketId) of
-        {ok,SO1}    ->  persist(SO1);
-        duplicate   ->  SO
-    end,
-    {reply,ok,S#state{session_out = NewSession}};
+        case mqtt_session:message_pub_comp(SO,PacketId) of
+            {ok,SO1}    ->  maybe_persist(SO1);
+            duplicate   ->  SO
+        end,
+    {reply,ok,S#state{session = NewSession}};
 
-handle_call({sub,NewSub = {_,QoS}}, _From,  S = #state{session_out = SO}) ->
+handle_call({sub,NewSub = {_,QoS}}, _From,  S = #state{session = SO}) ->
     SO1 = mqtt_session:subscribe(SO,[NewSub]),
-    {reply,{ok,QoS},S#state{session_out = SO1}};
+    {reply,{ok,QoS},S#state{session = SO1}};
 
-handle_call({unsub,OldSubs}, _From,  S = #state{session_out = SO}) ->
+handle_call({unsub,OldSubs}, _From,  S = #state{session = SO}) ->
     SO1 = mqtt_session:unsubscribe(SO,OldSubs),
-    {reply,ok,S#state{session_out = SO1}};
+    {reply,ok,S#state{session = SO1}};
 
 %% handle_call(cleanup, _From, S = #state{session_out = SO}) ->
 %%     SO1 = mqtt_session:cleanup(SO),
 %%     {reply,ok,S#state{session_out = SO1}};
+
+handle_call(close, _From, S = #state{session = SO}) ->
+    cleanup(S),
+    {stop,normal,ok,S};
 
 handle_call(Request, _From, State) ->
     error_logger:info_msg("Unmatched call ~p,~p~n",[Request,State]),
@@ -210,6 +222,10 @@ handle_cast({push_qos0,CTRPacket}, S) ->
     send_to_client(S,Packet),
     {noreply,S};
 
+handle_cast({force_close, _Reason}, S) ->
+    cleanup(S),
+    {stop, normal, S};
+
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -231,8 +247,14 @@ handle_cast(_Request, State) ->
 
 handle_info({async_init,ClientId}, S) ->
     error_logger:info_msg("Registerin as ~p", [ClientId]),
-    mqtt_reg_repo:register(ClientId),
-    {noreply, S};
+    {Result,NewSeq} = mqtt_reg_repo:register(ClientId),
+    case Result of
+        ok ->
+            ok;
+        {dup_detected,DupPid} ->
+            close_duplicate(DupPid)
+    end,
+    {noreply, S#state{seq = NewSeq}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -250,7 +272,7 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, #state{session_out = SO}) ->
+terminate(_Reason, #state{session = SO}) ->
     mqtt_session:cleanup(SO).
 
 %%--------------------------------------------------------------------
@@ -271,8 +293,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-persist(S) ->
-    ok.
+cleanup(#state{session = SO, client_id = ClientId}) ->
+    mqtt_reg_repo:unregister(ClientId),
+    mqtt_session:cleanup(SO).
 
-send_to_client(#state{conn_pid = ConnPid}, Packet) ->
-    mqtt_connection:publish_packet(ConnPid,Packet).
+maybe_persist(S) ->
+    %% @todo: handle persistence
+    S.
+
+send_to_client(#state{sender_pid = SenderPid}, Packet) ->
+    mqtt_sender:send_packet(SenderPid, Packet).

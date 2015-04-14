@@ -18,7 +18,6 @@
          process_packet/2,
          process_bad_packet/2,
          process_unexpected_disconnect/2,
-         close_duplicate/1,
          publish_packet/2]).
 
 %% gen_server callbacks
@@ -76,15 +75,6 @@ process_bad_packet(Pid,Reason) ->
 
 process_unexpected_disconnect(Pid,Reason) ->
     gen_server:cast(Pid,{client_disconnected, Reason}).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Closes the connection if we detect two connections from the same ClientId
-%% @end
-%%--------------------------------------------------------------------
-close_duplicate(Pid) ->
-    gen_server:cast(Pid, {force_close, duplicate}).
 
 
 %%%===================================================================
@@ -170,9 +160,6 @@ handle_cast({malformed_packet,_Reason}, S) ->
 
 handle_cast({client_disconnected, _Reason}, S) ->
     receiver_closing(S, client_disconnected);
-
-handle_cast({force_close, Reason}, S = #state{connect_state = connected}) ->
-    abort_connection(S,Reason);
 
 handle_cast(_Request, State) ->
     {noreply, State}.
@@ -364,16 +351,16 @@ handle_packet(Packet = #'PUBLISH'{topic = Topic},
 
 
 handle_packet(#'PUBACK'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-    mqtt_session_out:message_ack(SessionOut,PacketId),
+     mqtt_session_out:message_ack(SessionOut,PacketId),
     {noreply,S};
 
-handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{session_out = SessionOut,sender_pid = SenderPid}) ->
+handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
     mqtt_session_out:message_pub_rec(SessionOut,PacketId),
-    send_to_client(SenderPid,#'PUBREL'{packet_id = PacketId}),
+%%     send_to_client(SenderPid,#'PUBREL'{packet_id = PacketId}),
     {noreply,S};
 
 handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-    mqtt_session_out:message_pub_comp(SessionOut,PacketId),
+     mqtt_session_out:message_pub_comp(SessionOut,PacketId),
     {noreply,S};
 
 handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn}) ->
@@ -382,7 +369,7 @@ handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn
     {noreply,S1};
 
 handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
-              S = #state{client_id = ClientId,security = {Security,_},
+              S = #state{client_id = _ClientId,security = {Security,_},
                          session_out = SessionOut, auth_ctx = AuthCtx }) ->
 
     %%=======================================================================
@@ -406,10 +393,9 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
 
 
 handle_packet(#'UNSUBSCRIBE'{packet_id = PacketId,topic_filters = Filters},
-              S = #state{session_in = SessionIn}) ->
-    [ mqtt_session_out:unsubscribe(SessionIn,Filter) || Filter <- Filters],
-    Ack = #'UNSUBACK'{packet_id = PacketId},
-    send_to_client(S,Ack),
+              S = #state{session_out = SessionOut}) ->
+    mqtt_session_out:unsubscribe(SessionOut,Filters),
+    send_to_client(S,#'UNSUBACK'{packet_id = PacketId}),
     {noreply,S};
 
 
@@ -498,8 +484,8 @@ map_msg_to_publish(#mqtt_message{packet_id = PacketId,
 %%     mqtt_reg_repo:unregister(self(),ClientId),
 %%     ok.
 
-new_session(#state{sup_pid = SupPid},ClientId,CleanSession) ->
-    mqtt_session_out:new(SupPid,ClientId,CleanSession).
+new_session(#state{sup_pid = SupPid, sender_pid = SenderPid},ClientId,CleanSession) ->
+    mqtt_session_out:new(SupPid,ClientId,SenderPid,CleanSession).
 %%     {ok,SessionPid} = mqtt_connection_sup2:create_session(SupPid,self(),CleanSession),
 %%     SessionPid.
 
@@ -631,10 +617,8 @@ graceful_disconnect(S = #state{session_in = SessionIn}) ->
 bad_disconnect(S) ->
     session_cleanup(S).
 
-session_cleanup(#state{client_id = ClientId, clean_session = CleanSession}) ->
-    %% mqtt_session_out:cleanup()
-    %%TODO: tell the session process
-    ok.
+session_cleanup(#state{session_out = SessionOut}) ->
+    mqtt_session_out:close(SessionOut).
 
 disconnect_client(_S,_Reason) ->
     ok. %% @todo: Do we even need this?
