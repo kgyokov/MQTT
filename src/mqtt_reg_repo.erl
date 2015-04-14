@@ -18,10 +18,14 @@
 -author("Kalin").
 
 %% API
--export([register/2, unregister/2, get_registration/1, create_tables/2, wait_for_tables/0, register/1]).
+-export([register/2, unregister/2, get_registration/1, create_tables/2, wait_for_tables/0, register/1, unregister/1]).
 
 
--record(client_reg, {client_id, connection_pid, timestamp}).
+-record(client_reg, {
+    client_id           ::binary(),
+    connection_pid      :: pid(),
+    seq = 0             ::non_neg_integer()
+}).
 
 -ifdef(TEST).
     -export([clear_tables/0,delete_tables/0]).
@@ -86,7 +90,7 @@ register(ClientId) ->
 %% @end
 
 register(Pid, ClientId)->
-    NewReg = #client_reg{client_id = ClientId,connection_pid = Pid,timestamp = time()},
+    NewReg = #client_reg{client_id = ClientId,connection_pid = Pid},
     Fun = fun() ->
         %% take write lock
         case mnesia:read(?REG_TABLE, ClientId, write) of
@@ -94,16 +98,18 @@ register(Pid, ClientId)->
                 %error_logger:info_msg("empty result"),
                 mnesia:write(?REG_TABLE,NewReg,write),
                 %error_logger:info_msg(P),
-                ok;
-            [#client_reg{connection_pid = EPid}] ->
+                {ok, 0};
+            [#client_reg{connection_pid = EPid, seq = Seq}] ->
                 case EPid of
                     Pid ->
-                        ok;
+                        {ok, Seq};
                     undefined ->
-                        mnesia:write(?REG_TABLE,NewReg,write),
-                        ok;
+                        NewSeq = Seq+1,
+                        mnesia:write(?REG_TABLE,NewReg#client_reg{seq = NewSeq},write),
+                        {ok, NewSeq};
                     _ ->
-                        mnesia:write(?REG_TABLE,NewReg,write),
+                        NewSeq = Seq+1,
+                        mnesia:write(?REG_TABLE,NewReg#client_reg{seq = NewSeq},write),
                         {dup_detected, EPid}
                 end
         end

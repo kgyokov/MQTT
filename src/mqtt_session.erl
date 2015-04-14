@@ -125,9 +125,10 @@ append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_Dup,Ref},QoS) ->
 forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,_Dup,Ref},QoS) ->
     #session_out{packet_seq = PacketSeq, refs = Refs} = Session,
 
+    NewPacketSeq = PacketSeq+1,
     PacketId = if QoS =:= ?QOS_1;
                   QoS =:= ?QOS_2 ->
-                        (PacketSeq+1) band 16#ffff;
+                        NewPacketSeq band 16#ffff;
                   true ->
                         undefined
                end,
@@ -136,11 +137,11 @@ forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,_Dup,Ref},QoS) ->
                       ?QOS_1 ->
                           #session_out{qos1 = QosQueue} = Session1,
                           Session1#session_out{qos1 = orddict:store(PacketId,CTRPacket,QosQueue),
-                                               packet_seq = PacketId};
+                                               packet_seq = NewPacketSeq};
                       ?QOS_2 ->
                           #session_out{qos2 = QosQueue} = Session1,
                           Session1#session_out{qos2 = orddict:store(PacketId,CTRPacket,QosQueue),
-                                               packet_seq = PacketId};
+                                               packet_seq = NewPacketSeq};
                       ?QOS_0 ->
                           Session
                   end),
