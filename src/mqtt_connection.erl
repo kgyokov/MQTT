@@ -381,9 +381,6 @@ handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn
     send_to_client(S1,#'PUBCOMP'{packet_id = PacketId}),
     {noreply,S1};
 
-handle_packet(#'SUBSCRIBE'{subscriptions = []}, S) ->
-    abort_connection(S,protocol_violation);
-
 handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
               S = #state{client_id = ClientId,security = {Security,_},
                          session_out = SessionOut, auth_ctx = AuthCtx }) ->

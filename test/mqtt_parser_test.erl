@@ -305,7 +305,7 @@ parse_SUBSCRIBE_empty__test()->
         packet_id = 1234,
         subscriptions = []
     },
-    test_packet(OriginalPacket).
+    ?assertException(error,_,test_packet(OriginalPacket)).
 
 
 %% ------------------------------------------------------

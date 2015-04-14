@@ -291,6 +291,9 @@ parse_topics(<<TopicLen:16,Topic:TopicLen/bytes,Rest/binary>>,Topics) ->
 parse_topic_subscriptions(Buffer) ->
     parse_topic_subscriptions(Buffer,[]).
 
+parse_topic_subscriptions(_Buffer = <<>>,[]) ->
+    throw({error,protocol_violation});
+
 parse_topic_subscriptions(_Buffer = <<>>,Subscriptions) ->
     Subscriptions;
 
