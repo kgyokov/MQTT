@@ -93,7 +93,8 @@ send_pending_message(Session =  #session_in{packet_seq = Seq, msg_in_flight = Ms
     %% Actually Forward the  message. Because the message has a unique incremental seq number,
     %% this can be performed multiple times during recovery
     fwd_message(Msg,Seq),
-    maybe_persist(Session#session_in{msg_in_flight = undefined}).
+    maybe_persist(Session#session_in{msg_in_flight = undefined}),
+    {ok, Session}.
 
 fwd_message(Msg = #mqtt_message{topic = _Topic},_Seq) ->
     error_logger:info_msg("Processing message ~p~n",[Msg]),
@@ -101,4 +102,4 @@ fwd_message(Msg = #mqtt_message{topic = _Topic},_Seq) ->
 
 maybe_persist(Session = #session_in{is_persistent = _IsPersistent}) ->
     %% @todo: handle persistence
-    {ok, Session}.
+    Session.
