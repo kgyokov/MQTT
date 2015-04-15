@@ -119,13 +119,13 @@ my_test_() ->
                         end
                     },
                     {spawn,
-                     fun() ->
-                         ?assertMatch({ok,new},      mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1)),
-                         ?assertMatch({ok,existing}, mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1)),
-                         ?assertMatch({ok,new}, mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 2)),
-                         ?assertMatch(ok,            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>)),
-                         ?assertMatch({ok,new},      mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1))
-                     end
+                         fun() ->
+                             ?assertMatch({ok,new},      mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1)),
+                             ?assertMatch({ok,existing}, mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1)),
+                             ?assertMatch({ok,new}, mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 2)),
+                             ?assertMatch(ok,            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>)),
+                             ?assertMatch({ok,new},      mqtt_sub_repo:add_sub(<<"Client1">>, <<"/A/+">>, 1))
+                         end
                     }
                 ]
             %%}

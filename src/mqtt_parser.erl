@@ -30,10 +30,9 @@ read_at_least( #parse_state {buffer =  Buffer}, TotalExpected)
     when TotalExpected =<  byte_size(Buffer) ->
     <<Buffer/binary>>;
 
-
 read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, TotalExpected)
     when TotalExpected > byte_size(Buffer)->
-    case ReadFun(TotalExpected- byte_size(Buffer)) of
+    case ReadFun(TotalExpected - byte_size(Buffer)) of
         {ok,NewFragment} ->
             NewBuffer = <<Buffer/binary,NewFragment/binary>>,
             read_at_least( S#parse_state{ buffer = NewBuffer}, TotalExpected); %% append the newly retrieved bytes
