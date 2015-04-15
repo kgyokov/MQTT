@@ -447,21 +447,21 @@ parse_incomplete_packet_test() ->
 
 test_packet(OriginalPacket) ->
     Binary = mqtt_builder:build_packet(OriginalPacket),
-    S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
+    S = #parse_state{buffer = Binary, max_buffer_size = 10000000, readfun = undefined},
     ?assertMatch({ok, OriginalPacket,_S1}, mqtt_parser:parse_packet(S)).
 
 test_binary_packet_for_error(Binary) ->
-    S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
+    S = #parse_state{buffer = Binary, max_buffer_size = 10000000, readfun = undefined},
     ?assertMatch({error, _}, mqtt_parser:parse_packet(S)).
 
 test_packetfor_error(OriginalPacket,Reason) ->
     Binary = mqtt_builder:build_packet(OriginalPacket),
-    S = #parse_state{buffer = Binary, max_buffer_size = 100000, readfun = undefined},
+    S = #parse_state{buffer = Binary, max_buffer_size = 10000000, readfun = undefined},
     ?assertMatch({error, Reason}, mqtt_parser:parse_packet(S)).
 
 initialize_parse_process(StartBuffer, Fun) ->
     ReadFun = fun(_) -> receive Fragment -> {ok, Fragment } after 1000 -> {error, timeout} end end,
-    State = #parse_state { buffer = StartBuffer, readfun = ReadFun, max_buffer_size = 1000000 },
+    State = #parse_state { buffer = StartBuffer, readfun = ReadFun, max_buffer_size = 10000000 },
     Self = self(),
     spawn(fun() -> Self! { self(), Fun(State)} end).
 
