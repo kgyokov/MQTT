@@ -74,7 +74,7 @@ new(ClientId,Will) ->
 %%% Internal Functions
 %%%===================================================================
 
-log_pending_message(Msg = #mqtt_message{packet_id = PacketId, qos = 2},
+log_pending_message(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
                     Session = #session_in{packet_seq = Seq, qos2_rec = Qos2Rec}) ->
     %% Remember PacketId
     NewRec = gb_sets:add(PacketId,Qos2Rec),

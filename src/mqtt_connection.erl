@@ -433,7 +433,7 @@ publish(Packet = #'PUBLISH'{packet_id = PacketId,
                            Sess1 = mqtt_publish:at_least_once(Msg,SessionIn),
                            send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId}),
                            Sess1;
-                       ?QOS_1 ->
+                       ?QOS_2 ->
                            Sess2 = mqtt_publish:exactly_once_phase1(Msg,SessionIn),
                            send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId}),
                            Sess2

@@ -20,8 +20,8 @@
 -define(SUBSCRIPTION_FAILURE,16#80).
 -define(QOS_0, 0).
 -define(QOS_1, 1).
--define(QOS_2, 3).
--define(QOS_RESERVED, 4).
+-define(QOS_2, 2).
+-define(QOS_RESERVED, 3).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%
