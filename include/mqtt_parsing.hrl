@@ -11,7 +11,7 @@
 -record(parse_state, {
   readfun           ::fun(),
   buffer            ::binary(),
-  max_buffer_size   ::integer()
+  max_buffer_size   ::non_neg_integer()
 }).
 
 
