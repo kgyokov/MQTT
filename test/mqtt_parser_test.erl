@@ -103,6 +103,19 @@ parse_variable_length_chunked_test()->
 %% ======================================================
 
 %% ------------------------------------------------------
+%% Packet Too Large
+%% ------------------------------------------------------
+
+parse_Large_Packet_test() ->
+    OriginalPacket = #'UNSUBSCRIBE'{
+        packet_id = 1234,
+        topic_filters = [ <<"SUB1">>, <<"SUB2">>, <<"SUB3">> ]
+    },
+    Binary = mqtt_builder:build_packet(OriginalPacket),
+    S = #parse_state{buffer = Binary, max_buffer_size = 5},
+    ?assertMatch({error, buffer_overflow}, mqtt_parser:parse_packet(S)).
+
+%% ------------------------------------------------------
 %% CONNECT
 %% ------------------------------------------------------
 

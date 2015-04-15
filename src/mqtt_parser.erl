@@ -22,8 +22,8 @@
 %% Communication Adaptors
 %% ========================================================
 
-read_at_least(#parse_state {max_buffer_size =  MaxBufferSize},  TotalExpected)
-    when TotalExpected >  byte_size(MaxBufferSize) ->
+read_at_least(#parse_state {buffer =  Buffer, max_buffer_size =  MaxBufferSize},  TotalExpected)
+    when TotalExpected + byte_size(Buffer) > MaxBufferSize ->
     throw({error, buffer_overflow });
 
 read_at_least( #parse_state {buffer =  Buffer}, TotalExpected)
