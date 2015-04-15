@@ -30,8 +30,7 @@ build_flags(Packet) ->
         #'PUBLISH'{ qos = QoS } when QoS =:= 2#11 ->
             throw({build_error,invalid_qos});
         #'PUBLISH' { qos = QoS, dup = Dup, retain = Retain } ->
-            %%<<?FLAG(Dup),QoS:2,?FLAG(Retain)>>;
-            <<(case Dup of true -> 1; false -> 0 end):1,QoS:2,(case Retain of true -> 1; false -> 0 end):1>>;
+            <<?FLAG(Dup),QoS:2,?FLAG(Retain)>>;
         _ -> <<0:4>>
     end.
 
@@ -80,7 +79,7 @@ build_rest(#'CONNECT'{
     (case WillDetails of
          undefined -> <<0:4>>;
          #will_details{retain = WillRetain,qos = WillQos} ->
-             <<(case WillRetain of true -> 1; false -> 0 end):1,WillQos:2,1:1>>
+             <<?FLAG(WillRetain),WillQos:2,1:1>>
      end)/bits,
 
     (maybe_flag(CleanSession))/bits,
