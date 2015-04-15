@@ -34,19 +34,19 @@ reg_repo_test_() ->
                 [
                     {spawn,
                         fun() ->
-                            ?assertEqual(undefined, mqtt_reg_repo:get_registration(<<"Client1">>))
+                            ?assertMatch(undefined, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            ?assertEqual(ok,mqtt_reg_repo:unregister(self(),<<"Client1">>))
+                            ?assertMatch(ok,mqtt_reg_repo:unregister(self(),<<"Client1">>))
                         end
                     },
                     {spawn,
                         fun() ->
                             Pid = spawn(fun() -> exit(normal) end),
                             mqtt_reg_repo:register(Pid,<<"Client1">>),
-                            ?assertEqual({ok,Pid}, mqtt_reg_repo:get_registration(<<"Client1">>))
+                            ?assertMatch({ok,Pid}, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     },
                     {spawn,
@@ -54,7 +54,7 @@ reg_repo_test_() ->
                             Pid = spawn(fun() -> exit(normal) end),
                             mqtt_reg_repo:register(Pid,<<"Client1">>),
                             mqtt_reg_repo:unregister(Pid,<<"Client1">>),
-                            ?assertEqual(undefined, mqtt_reg_repo:get_registration(<<"Client1">>))
+                            ?assertMatch(undefined, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     },
                     {spawn,
@@ -62,9 +62,9 @@ reg_repo_test_() ->
                             Pid1 = spawn(fun() -> exit(normal) end),
                             Pid2 = spawn(fun() -> exit(normal) end), %% just a way to generate a Pid
                             mqtt_reg_repo:register(Pid1,<<"Client1">>),
-                            ?assertEqual({dup_detected,Pid1},
+                            ?assertMatch({{dup_detected,Pid1},_},
                                 mqtt_reg_repo:register(Pid2,<<"Client1">>)),
-                            ?assertEqual({ok,Pid2}, mqtt_reg_repo:get_registration(<<"Client1">>))
+                            ?assertMatch({ok,Pid2}, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     },
                     {spawn,
@@ -73,8 +73,8 @@ reg_repo_test_() ->
                             Pid2 = spawn(fun() -> exit(normal) end), %% just a way to generate a Pid
                             mqtt_reg_repo:register(Pid1,<<"Client1">>),
                             mqtt_reg_repo:unregister(Pid1,<<"Client1">>),
-                            ?assertEqual(ok, mqtt_reg_repo:register(Pid2,<<"Client1">>)),
-                            ?assertEqual({ok,Pid2}, mqtt_reg_repo:get_registration(<<"Client1">>))
+                            ?assertMatch({ok,_}, mqtt_reg_repo:register(Pid2,<<"Client1">>)),
+                            ?assertMatch({ok,Pid2}, mqtt_reg_repo:get_registration(<<"Client1">>))
                         end
                     }
                 ]

@@ -90,7 +90,7 @@ register(ClientId) ->
 %% @end
 
 register(Pid, ClientId)->
-    NewReg = #client_reg{client_id = ClientId,connection_pid = Pid},
+    NewReg = #client_reg{client_id = ClientId,connection_pid = Pid, seq = 0},
     Fun = fun() ->
         %% take write lock
         case mnesia:read(?REG_TABLE, ClientId, write) of
@@ -110,18 +110,12 @@ register(Pid, ClientId)->
                     _ ->
                         NewSeq = Seq+1,
                         mnesia:write(?REG_TABLE,NewReg#client_reg{seq = NewSeq},write),
-                        {dup_detected, EPid}
+                        {{dup_detected, EPid},NewSeq}
                 end
         end
     end,
 
-    case mnesia_transaction(Fun) of
-        ok ->
-            ok;
-        {dup_detected,EPid} ->
-%%             handle_duplicate(EPid),
-            {dup_detected,EPid}
-    end.
+    mnesia_transaction(Fun).
 
 %%
 %% @doc
