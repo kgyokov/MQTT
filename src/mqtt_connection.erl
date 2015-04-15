@@ -456,19 +456,19 @@ map_publish_to_msg(#'PUBLISH'{packet_id = PacketId,
                   retain    = Retain,
                   topic     = Topic}.
 
-map_msg_to_publish(#mqtt_message{packet_id = PacketId,
-                                 client_id = ClientId,
-                                 content = Content,
-                                 dup = Dup,
-                                 qos = Qos,
-                                 retain = Retain,
-                                 topic = Topic}) ->
-    #'PUBLISH'{packet_id = PacketId,
-               retain = Retain,
-               qos = Qos,
-               content = Content,
-               dup = Dup,
-               topic = Topic}.
+%% map_msg_to_publish(#mqtt_message{packet_id = PacketId,
+%%                                  client_id = ClientId,
+%%                                  content = Content,
+%%                                  dup = Dup,
+%%                                  qos = Qos,
+%%                                  retain = Retain,
+%%                                  topic = Topic}) ->
+%%     #'PUBLISH'{packet_id = PacketId,
+%%                retain = Retain,
+%%                qos = Qos,
+%%                content = Content,
+%%                dup = Dup,
+%%                topic = Topic}.
 
 
 

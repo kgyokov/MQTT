@@ -145,7 +145,7 @@ handle_info({'EXIT',ConnPid, Reason}, S = #state{conn_pid = ConnPid}) ->
 
 handle_info({async_init,Ref,Opts},S = #state{transport = Transport, socket = Socket}) ->
     {ok,ConnPid} = mqtt_connection_sup_sup:start_link_tree(Transport,Socket,Opts),
-    error_logger:info_msg(ConnPid),
+    error_logger:info_msg("Connection Process ~p started",[ConnPid]),
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, once}]),
     ParserPid = spawn_link(fun() -> start_loop(ConnPid,Opts) end),

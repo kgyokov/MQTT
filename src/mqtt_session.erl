@@ -192,23 +192,23 @@ message_pub_comp(Session,PacketId)  ->
 %% RECOVERY
 %% =========================================================================
 
-recover(Session) ->
-    recover_in_flight(Session),
-    recover_queued(Session).
-
-recover_in_flight(#session_out{qos1 = UnAck1, qos2 = UnAck2,
-                               qos2_rec = Rec, packet_seq = PacketSeq}) ->
-    NewPackets =
-    [ to_publish(CTRPacket,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
-    [ to_publish(CTRPacket,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
-    [ to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)],
-    {PacketSeq,NewPackets}.
-
-recover_queued(_Session) ->
-    ok.
-
-get_retained(_Session) ->
-    ok.
+%% recover(Session) ->
+%%     recover_in_flight(Session),
+%%     recover_queued(Session).
+%%
+%% recover_in_flight(#session_out{qos1 = UnAck1, qos2 = UnAck2,
+%%                                qos2_rec = Rec, packet_seq = PacketSeq}) ->
+%%     NewPackets =
+%%     [ to_publish(CTRPacket,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
+%%     [ to_publish(CTRPacket,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
+%%     [ to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)],
+%%     {PacketSeq,NewPackets}.
+%%
+%% recover_queued(_Session) ->
+%%     ok.
+%%
+%% get_retained(_Session) ->
+%%     ok.
 
 to_publish({Topic,Content,Retain,_Dup,_Ref}, QoS, PacketId, Dup) ->
     #'PUBLISH'{content = Content,packet_id = PacketId,

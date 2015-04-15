@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, push_qos0/2, push_reliable/3, new/4, close_duplicate/1, close/1]).
+-export([start_link/3, push_qos0/2, push_reliable/3, new/4, close_duplicate/1, close/1, push_reliable_comp/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -78,12 +78,6 @@ close(Pid) ->
 
 push_reliable_comp(Pid, CTRPacket,QoS) ->
     gen_server:call(Pid,{push_reliable_comp,CTRPacket,QoS}).
-
-%% append_msg(Pid,CTRPacket = {_Topic,_Content,_Retain,_QoS},Ref) ->
-%%     gen_server:call(Pid,{append, CTRPacket,Ref}).
-
-%% append_message_comp(Pid,Ref) ->
-%%     gen_server:call(Pid,{append_comp,Ref}).
 
 message_ack(Pid,PacketId) ->
     gen_server:call(Pid,{ack,PacketId}).
