@@ -9,3 +9,4 @@ rel/mqtt_node
 .concrete/DEV_MODE
 .rebar
 out/
+.idea/workspace.xml
