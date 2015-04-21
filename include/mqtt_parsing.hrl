@@ -9,15 +9,15 @@
 -author("Kalin").
 
 -record(parse_state, {
-  readfun,
-  buffer,
-  max_buffer_size
+  readfun           ::fun(),
+  buffer            ::binary(),
+  max_buffer_size   ::non_neg_integer()
 }).
 
 
 % Packets
 -define(Reserved, 0).
--define(CONNECT, 1) .
+-define(CONNECT, 1).
 -define(CONNACK, 2).
 -define(PUBLISH, 3).
 -define(PUBACK, 4).
@@ -33,10 +33,4 @@
 -define(DISCONNECT, 14).
 %%-define(Reserved, 15).
 
-
-%% QOS
--define(QOS_AT_MOST_ONCE, 0).
--define(QOS_AT_LEAST_ONCE, 1).
--define(QOS_EXACTLY_ONCE, 3).
--define(QOS_RESERVED, 4).
 

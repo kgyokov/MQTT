@@ -4,9 +4,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 12. Jan 2015 1:37 AM
+%%% Created : 28. Jan 2015 11:54 PM
 %%%-------------------------------------------------------------------
--module(mqtt_connection_sup).
+-module(mqtt_connection_sup2).
 -author("Kalin").
 
 -behaviour(supervisor).
@@ -22,10 +22,10 @@
     }
 ).
 
--define(CONN_SPEC(SenderPid,Options),
+-define(CONN_SPEC(ReceiverPid,SenderPid,SupPid,Options),
     {
         connection,                               %% Id
-        {mqtt_connection, start_link, [SenderPid,Options]},
+        {mqtt_connection, start_link, [ReceiverPid,SenderPid,SupPid,Options]},
         permanent,                                %% must never stop
         5000,                                     %% should be more than sufficient for the process to clean up
         worker,                                   %% as opposed to supervisor
@@ -33,21 +33,19 @@
     }
 ).
 
--define(RECEIVER_SPEC(TRS,ConnPid,Opts),
+-define(SESSION_SPEC(ConnPid,ClientId,CleanSession),
     {
-        receiver,
-        {mqtt_parser_server, start_link, [TRS,ConnPid,Opts]},
-        permanent,          % must never stop
-        2000,               % should be more than sufficient
-        worker,             % as opposed to supervisor
-        [mqtt_parser_server]
+        session,                               %% Id
+        {mqtt_session_out, start_link, [ConnPid,ClientId,CleanSession]},
+        permanent,                                %% must never stop
+        5000,                                     %% should be more than sufficient for the process to clean up
+        worker,                                   %% as opposed to supervisor
+        [mqtt_session_out]
     }
 ).
 
-
-
 %% API
--export([start_link/2]).
+-export([start_link/0, create_tree/5, create_session/4]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -66,21 +64,18 @@
 %%--------------------------------------------------------------------
 %% -spec(start_link() ->
 %%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(TRS = {Transport,_Ref,Socket},Options) ->
-    {ok, SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
-    {ok, SenderPid } = supervisor:start_child(SupPid,
-        ?SENDER_SPEC(Transport,Socket)),
-    {ok, ConnPid} = supervisor:start_child(SupPid,
-        ?CONN_SPEC(SenderPid,Options)),
-    {ok, _ReceiverPid } = supervisor:start_child(SupPid,
-        ?RECEIVER_SPEC(TRS,ConnPid, Options)),
-    {ok,SupPid}.
+start_link() ->
+    {ok,_SupPid} = supervisor:start_link(?MODULE, []).
 
-%% start_link(Options,Security,Transport,_Ref,Socket,ReceiverPid) ->
-%%   {ok,SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
-%%   {ok, SenderPid } = supervisor:start_child(SupPid, ?SENDER_SPEC(Transport,Socket)),
-%%   {ok, _ConnPid} = supervisor:start_child(SupPid, ?CONN_SPEC(SenderPid,Options)),
-%%   {ok,SupPid}.
+create_tree(SupPid,ReceiverPid,Transport,Socket,Options) ->
+    {ok, SenderPid } = supervisor:start_child(SupPid,
+                        ?SENDER_SPEC(Transport,Socket)),
+    {ok, ConnPid} = supervisor:start_child(SupPid,
+                        ?CONN_SPEC(ReceiverPid,SenderPid,SupPid,Options)),
+    {ok, ConnPid}.
+
+create_session(SupPid,ConnPid,ClientId,CleanSession) ->
+    supervisor:start_child(SupPid,?SESSION_SPEC(ConnPid,ClientId,CleanSession)).
 
 %%%===================================================================
 %%% Supervisor callbacks

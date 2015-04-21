@@ -1,18 +1,18 @@
 %%%-------------------------------------------------------------------
 %%% @author Kalin
-%%% @copyright (C) 2014, <COMPANY>
+%%% @copyright (C) 2015, <COMPANY>
 %%% @doc
 %%%
 %%% @end
-%%% Created : 06. Dec 2014 11:51 PM
+%%% Created : 15. Mar 2015 1:40 AM
 %%%-------------------------------------------------------------------
--module(test_sup).
+-module(mqtt_connection_sup_sup).
 -author("Kalin").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, start_link_tree/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -30,9 +30,10 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec(start_link() ->
-  {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    error_logger:info_msg("Start_link ~p",[?SERVER]),
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -49,27 +50,26 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
-  {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
-    MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
-    [ChildSpec :: supervisor:child_spec()]
-  }} |
-  ignore |
-  {error, Reason :: term()}).
+    {ok, {SupFlags :: {RestartStrategy :: supervisor:strategy(),
+        MaxR :: non_neg_integer(), MaxT :: non_neg_integer()},
+        [ChildSpec :: supervisor:child_spec()]
+    }} |
+    ignore |
+    {error, Reason :: term()}).
 init([]) ->
-  RestartStrategy = one_for_one,
-  MaxRestarts = 1000,
-  MaxSecondsBetweenRestarts = 3600,
+    SupFlags = {simple_one_for_one, 0, 1},
 
-  SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
+    AChild = {conn_sup,
+        {mqtt_connection_sup2, start_link, []},
+        temporary, infinity, supervisor, [mqtt_connection_sup2]},
 
-  Restart = permanent,
-  Shutdown = 2000,
-  Type = worker,
+    {ok, {SupFlags, [AChild]}}.
 
-  AChild = {'AName', {'AModule', start_link, []},
-    Restart, Shutdown, Type, ['AModule']},
-
-  {ok, {SupFlags, [AChild]}}.
+start_link_tree(Transport,Socket,Options) ->
+    error_logger:info_msg("Starting Sup",[?SERVER]),
+    {ok,SupPid} = supervisor:start_child(?SERVER, []),
+    error_logger:info_msg("Started Sup ~p",[SupPid]),
+    {ok, _ConnPid} = mqtt_connection_sup2:create_tree(SupPid,self(),Transport,Socket,Options).
 
 %%%===================================================================
 %%% Internal functions

@@ -1,20 +1,18 @@
 %%%-------------------------------------------------------------------
 %%% @author Kalin
-%%% @copyright (C) 2014, <COMPANY>
+%%% @copyright (C) 2015, <COMPANY>
 %%% @doc
 %%%
 %%% @end
-%%% Created : 08. Dec 2014 1:29 AM
+%%% Created : 21. Feb 2015 9:53 AM
 %%%-------------------------------------------------------------------
--module(mqtt_sender).
+-module(mqtt_parser_serv2).
 -author("Kalin").
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/2,
-    send_packet/2
-]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -26,7 +24,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, { socket, transport }).
+-record(state, {}).
 
 %%%===================================================================
 %%% API
@@ -38,14 +36,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(Transport::term(),Socket::pid()) ->
+-spec(start_link() ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(Transport,Socket) ->
-    gen_server:start_link(?MODULE, [Transport,Socket], []).
-
-
-send_packet(Pid,Packet) ->
-    gen_server:cast(Pid, {packet,Packet}).
+start_link() ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -65,8 +59,8 @@ send_packet(Pid,Packet) ->
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([Transport,Socket]) ->
-    {ok, #state{socket = Socket, transport = Transport}}.
+init([]) ->
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -83,9 +77,8 @@ init([Transport,Socket]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-
 handle_call(_Request, _From, State) ->
-    {noreply, State}.
+    {reply, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -98,14 +91,6 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast({packet,Packet},S) ->
-    case send_as_binary(Packet,S) of
-        ok ->
-            {noreply,S};
-        {error, _Reason} ->
-            {stop, normal, S}
-    end;
-
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -159,9 +144,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-send_as_binary(Packet, #state{socket = Socket, transport = Transport})  ->
-    Binary = mqtt_builder:build_packet(Packet),
-    error_logger:info_msg("Sending packet ~p~n",[Packet]),
-    error_logger:info_msg("Binary ~p~n",[Binary]),
-    Transport:send(Socket,Binary).

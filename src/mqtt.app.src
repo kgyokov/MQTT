@@ -1,0 +1,17 @@
+{application, mqtt,
+    [
+        {description, ""},
+        {vsn, "1"},
+        {registered, []},
+        {applications, [
+            kernel,
+            stdlib,
+%%                   crypto,
+%%                   public_key,
+%%                   sasl,
+            ranch,
+            poolboy
+        ]},
+        {mod, { mqtt_app, []}},
+        {env, []}
+    ]}.
