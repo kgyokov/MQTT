@@ -13,7 +13,8 @@
 -include("mqtt_internal_msgs.hrl").
 
 %% API
--export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2, recover/1, discard_will/1, new/2]).
+-export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2,
+         recover/1, discard_will/1, new/2, maybe_publish_will/1]).
 
 
 -record(session_in,{
@@ -50,9 +51,11 @@ exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
     case gb_sets:is_element(PacketId,Qos2Rec) of
         false ->
             NewSession = log_pending_message(Msg,Session),
-            send_pending_message(NewSession);
+            send_pending_message(NewSession),
+            NewSession;
         true ->
-            duplicate %% packet already processed, do nothing
+            %%duplicate, %% packet already processed, do nothing
+            Session
     end.
 
 %%  Completes message send
@@ -60,6 +63,30 @@ exactly_once_phase2(PacketId,Session = #session_in{qos2_rec = Qos2Rec}) ->
     NewSession = Session#session_in{qos2_rec = gb_sets:del_element(PacketId,Qos2Rec)},
     maybe_persist(NewSession).
 
+
+maybe_publish_will(Session = #session_in{will = undefined}) ->
+    Session;
+
+maybe_publish_will(Session = #session_in{will = Will,
+                                         client_id = ClientId,
+                                         packet_seq = Seq}) ->
+    #will_details{content = Content,
+                  qos = Qos,
+                  retain = Retain,
+                  topic = Topic} = Will,
+
+    NewSeq = Seq +1,
+    Msg = #mqtt_message{
+        client_id = ClientId,
+        seq = NewSeq,
+        dup = false,
+        content = Content,
+        qos = Qos,
+        retain = Retain,
+        topic = Topic
+    },
+    fwd_message(Msg,NewSeq),
+    Session.
 
 recover(Session = #session_in{msg_in_flight = undefined}) ->
     Session;
@@ -89,7 +116,7 @@ log_pending_message(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
         qos2_rec = NewRec},
     maybe_persist(NewSession).
 
-send_pending_message(Session =  #session_in{packet_seq = Seq, msg_in_flight = Msg}) ->
+send_pending_message(Session = #session_in{packet_seq = Seq, msg_in_flight = Msg}) ->
     %% Actually Forward the  message. Because the message has a unique incremental seq number,
     %% this can be performed multiple times during recovery
     fwd_message(Msg,Seq),

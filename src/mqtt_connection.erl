@@ -614,8 +614,10 @@ graceful_disconnect(S = #state{session_in = SessionIn}) ->
     {stop,normal,
      S1#state{connect_state = {closing,graceful,normal}}}.
 
-bad_disconnect(S) ->
-    session_cleanup(S).
+%% Common cleanup on bad disconnects
+bad_disconnect(S = #state{session_in = SessionIn}) ->
+    S1 = S#state{session_in = mqtt_publish:maybe_publish_will(SessionIn)},
+    session_cleanup(S1).
 
 session_cleanup(#state{session_out = SessionOut}) ->
     mqtt_session_out:close(SessionOut).
