@@ -316,7 +316,7 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
 
             SessionPresent =
             case CleanSession of
-                false  -> error({not_supported,persistent_session});
+                false  -> true;%%error({not_supported,persistent_session});
                 true   -> false
             end,
             S2 = S1#state{clean_session = CleanSession,
@@ -614,8 +614,10 @@ graceful_disconnect(S = #state{session_in = SessionIn}) ->
     {stop,normal,
      S1#state{connect_state = {closing,graceful,normal}}}.
 
-bad_disconnect(S) ->
-    session_cleanup(S).
+%% Common cleanup on bad disconnects
+bad_disconnect(S = #state{session_in = SessionIn}) ->
+    S1 = S#state{session_in = mqtt_publish:maybe_publish_will(SessionIn)},
+    session_cleanup(S1).
 
 session_cleanup(#state{session_out = SessionOut}) ->
     mqtt_session_out:close(SessionOut).

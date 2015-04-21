@@ -30,7 +30,7 @@
 
 -record(will_details,{
   topic           ::topic(),
-  message         ::binary(),
+  content ::binary(),
   qos             ::qos(),
   retain          ::boolean()
 }).

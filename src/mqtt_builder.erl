@@ -92,7 +92,7 @@ build_rest(#'CONNECT'{
     (case WillDetails of
          undefined ->
              <<>>;
-         #will_details{topic = WillTopic,message = WillMessage} ->
+         #will_details{topic = WillTopic, content = WillMessage} ->
              <<(build_string(WillTopic))/binary,(build_string(WillMessage))/binary>>
      end)/binary,
     (maybe_build_string(Username))/binary,
