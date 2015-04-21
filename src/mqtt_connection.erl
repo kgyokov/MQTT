@@ -316,7 +316,7 @@ handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
 
             SessionPresent =
             case CleanSession of
-                false  -> error({not_supported,persistent_session});
+                false  -> true;%%error({not_supported,persistent_session});
                 true   -> false
             end,
             S2 = S1#state{clean_session = CleanSession,
