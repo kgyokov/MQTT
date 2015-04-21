@@ -79,7 +79,7 @@ bild_CONNECT_test() ->
                                                       password = <<"Password">>,
                                                       protocol_name = <<"MQTT">>,
                                                       protocol_version = 4,
-                                                      will = #will_details{message = <<"WillMessage">>,
+                                                      will = #will_details{content = <<"WillMessage">>,
                                                                            topic = <<"WillTopic">>,
                                                                            qos = 1,
                                                                            retain = false}})).

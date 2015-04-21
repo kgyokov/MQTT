@@ -128,7 +128,7 @@ parse_CONNECT_1_test()->
         username = list_to_binary([ <<"U">> || _  <- lists:seq(1,65535)]),
         protocol_name = <<"MQTT">>,
         protocol_version = 4,
-        will = #will_details {message = <<"WILL_MESSAGE">>, qos = 2, topic = <<"TOPIC">>, retain = true}
+        will = #will_details {content = <<"WILL_MESSAGE">>, qos = 2, topic = <<"TOPIC">>, retain = true}
     },
 
     test_packet(OriginalPacket).

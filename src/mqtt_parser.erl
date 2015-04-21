@@ -315,7 +315,7 @@ parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer) when WillQoS =
         #will_details{
             retain = WillRetain =:= 1,
             qos = WillQoS,
-            message = WillMessage,
+            content = WillMessage,
             topic = WillTopic
         },
         Rest2
