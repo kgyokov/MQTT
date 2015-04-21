@@ -210,7 +210,7 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_cast({push_qos0,CTRPacket}, S) ->
+handle_cast({push_0,CTRPacket}, S) ->
     Packet = mqtt_session:to_publish(CTRPacket,0,undefined,false),
     send_to_client(S,Packet),
     {noreply,S};
