@@ -364,7 +364,7 @@ handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{session_out = Session
     {noreply,S};
 
 handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn}) ->
-    S1 = S#state{session_in = mqtt_publish:exactly_once_phase2(PacketId, SessionIn)},
+    S1 = S#state{session_in = mqtt_publish:qos2_phase2(PacketId, SessionIn)},
     send_to_client(S1,#'PUBCOMP'{packet_id = PacketId}),
     {noreply,S1};
 
@@ -428,13 +428,13 @@ publish(Packet = #'PUBLISH'{packet_id = PacketId,
     Msg = map_publish_to_msg(Packet,ClientId),
     NewSessionIn = case QoS of
                        ?QOS_0 ->
-                           mqtt_publish:at_most_once(Msg,SessionIn);
+                           mqtt_publish:qos0(Msg,SessionIn);
                        ?QOS_1 ->
-                           Sess1 = mqtt_publish:at_least_once(Msg,SessionIn),
+                           Sess1 = mqtt_publish:qos1(Msg,SessionIn),
                            send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId}),
                            Sess1;
                        ?QOS_2 ->
-                           Sess2 = mqtt_publish:exactly_once_phase1(Msg,SessionIn),
+                           Sess2 = mqtt_publish:qos2_phase1(Msg,SessionIn),
                            send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId}),
                            Sess2
                    end,
