@@ -9,7 +9,7 @@
 -author("Kalin").
 -include("mqtt_packets.hrl").
 
--type subscription() :: {Topic::binary(),QoS::byte()}.
+-type subscription() :: {Topic::binary(),QoS::qos()}.
 
 -record(mqtt_message,{
 	topic,
