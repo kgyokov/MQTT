@@ -27,8 +27,6 @@ build_flags(Packet) ->
         #'SUBSCRIBE'{}      ->  <<2#0010:4>>;
         #'UNSUBSCRIBE'{}    ->  <<2#0010:4>>;
         #'PUBREL'{}         ->  <<2#0010:4>>;
-        #'PUBLISH'{ qos = QoS } when QoS =:= 2#11 ->
-            throw({build_error,invalid_qos});
         #'PUBLISH' { qos = QoS, dup = Dup, retain = Retain } ->
             <<?FLAG(Dup),QoS:2,?FLAG(Retain)>>;
         _ -> <<0:4>>
