@@ -10,3 +10,5 @@ rel/mqtt_node
 .rebar
 out/
 .idea/workspace.xml
+Mnesia.nonode@nohost/
+MnesiaCore.nonode*
