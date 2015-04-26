@@ -136,33 +136,37 @@ explode(ParentLevels,[])->
 %% /user/123/location -> ["/",<<"user">>,"/",<<"123>>,"/",<<"location">>]
 %%
 %% @end
-split(Topic) ->
-    lists:reverse(split([],Topic)).
+split(Pattern) ->
+    lists:reverse(split([],Pattern)).
 
-split(Split,<<>>) ->
-    Split;
+split(Acc,<<>>) ->
+    Acc;
 
 split(["#"|_],_Rest) ->
     throw({error,invalid_wildcard});
 
-split(Split,<<"/"/utf8,Rest/binary>>) ->
-    split(["/"|Split],Rest);
+split(Acc,<<"/">>) ->
+    ["/"|Acc];
 
-split(Split,<<Rest/binary>>) ->
+split(Acc,<<"/",Rest/binary>>) ->
+    Acc1 = ["/"|Acc],
     {NextLevel,Rest1} = consume_level(Rest),
-    split([NextLevel|Split],Rest1).
+    split([NextLevel|Acc1],Rest1);
 
+split(Acc,<<Rest/binary>>) ->
+    {NextLevel,Rest1} = consume_level(Rest),
+    split([NextLevel|Acc],Rest1).
 
 
 consume_level(Binary) ->
     consume_level(<<>>,Binary).
 
-consume_level(<<>>,     <<"#"/utf8>>)                   ->  {"#",<<>>};
-consume_level(_,        <<"#"/utf8,_/binary>>)          ->  throw({error,unexpected_wildcard});
-consume_level(<<>>,     <<"+"/utf8,Rest/binary>>)       ->  {"+",Rest};
-consume_level(Level,    Rest = <<"/"/utf8,_/binary>>)   ->  {Level,Rest};
-consume_level(Level,    <<>>)                           ->  {Level,<<>>};
-consume_level(Level,    <<NextCh/utf8,Rest/binary>>)    ->  consume_level(<<Level/binary,NextCh/utf8>>,Rest).
+consume_level(<<>>,  <<"#">>)                       ->  {"#",<<>>};
+consume_level(_,     <<"#",_/binary>>)              ->  throw({error,unexpected_wildcard});
+consume_level(<<>>,  <<"+",Rest/binary>>)           ->  {"+",Rest};
+consume_level(Level, Rest = <<"/",_/binary>>)       ->  {Level,Rest};
+consume_level(Level, <<>>)                          ->  {Level,<<>>};
+consume_level(Level, <<NextCh/utf8,Rest/binary>>)   ->  consume_level(<<Level/binary,NextCh/utf8>>,Rest).
 
 
 
