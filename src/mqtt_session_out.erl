@@ -212,7 +212,7 @@ handle_call(Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_cast({push_0,CTRPacket}, S) ->
-    Packet = mqtt_session:to_publish(CTRPacket,0,undefined,false),
+    Packet = mqtt_session:to_publish(CTRPacket,false,0,undefined,false),
     send_to_client(S,Packet),
     {noreply,S};
 

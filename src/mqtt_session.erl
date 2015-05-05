@@ -21,7 +21,7 @@
          subscribe/2,
          unsubscribe/2,
          cleanup/1,
-         new/2, to_publish/4, to_pubrel/1]).
+         new/2, to_publish/5, to_pubrel/1]).
 
 
 -record(session_out,{
@@ -210,7 +210,7 @@ message_pub_comp(Session,PacketId)  ->
 %% get_retained(_Session) ->
 %%     ok.
 
-to_publish({Topic,Content,Retain,_Dup,_Ref}, QoS, PacketId, Dup) ->
+to_publish({Topic,Content,_Dup,_Ref},Retain,QoS,PacketId,Dup) ->
     #'PUBLISH'{content = Content,packet_id = PacketId,
                qos = QoS,topic = Topic,
                dup = Dup,retain = Retain}.

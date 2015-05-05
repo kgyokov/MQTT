@@ -17,8 +17,8 @@
 
 global_route(#mqtt_message{topic = Topic,retain = Retain,
                            dup = Dup,qos = MsgQoS,
-                           content = Content, seq = Ref}) ->
-    CTRPacket = {Topic,Content,Retain,Dup,Ref},
+                           content = Content, seq = Seq}) ->
+    CTRPacket = {Topic,Content,Dup,Seq},
 
     List = lists:filtermap(fun({ClientId,SubQoS}) ->
                                 case mqtt_reg_repo:get_registration(ClientId) of
