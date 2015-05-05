@@ -83,10 +83,10 @@ unsubscribe(S = #session_out{subs = Subs, client_id = ClientId},OldSubs) ->
 
 %% clear persisted data during shutdown
 cleanup(S = #session_out{client_id = ClientId}) ->
-    mqtt_reg_repo:unregister(ClientId),
+    %%mqtt_reg_repo:unregister(ClientId),
     maybe_clear_subs(S).
 
-maybe_clear_subs(#session_out{subs = Subs, client_id = ClientId, is_persistent = true}) ->
+maybe_clear_subs(#session_out{subs = Subs, client_id = ClientId, is_persistent = false}) ->
     [ mqtt_sub_repo:remove_sub(ClientId,Topic) || {Topic,_QoS}  <- Subs ],
     ok;
 
