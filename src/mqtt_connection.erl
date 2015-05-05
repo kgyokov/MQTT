@@ -375,18 +375,13 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
     %%=======================================================================
     %% TODO: Use CleanSession to determine what to do
     %%=======================================================================
-
-    Results = [
-        case Security:authorize(AuthCtx,subscribe,Sub) of
-            ok ->
-                case mqtt_session_out:subscribe(SessionOut,Sub) of
-                    {error,_} -> ?SUBSCRIPTION_FAILURE;
-                    {ok,QoS} -> QoS
-                end;
-            {error,_}-> ?SUBSCRIPTION_FAILURE %% In 3.1.1 there is no distinction between a sub failure and auth failure
-        end
-        || Sub  <- Subs],
-
+    %% Which subscriptions are we authorized to create?
+    AuthResults = [{Security:authorize(AuthCtx,subscribe,Sub),Sub} || Sub  <- Subs],
+    %% Actual subscriptions we are going to create
+    AuthSubs = [Sub || {Result,Sub} <- AuthResults, Result = ok],
+    SubResults = mqtt_session:subscribe(SessionOut, AuthSubs),
+    %% Combine actual Subscription results with Authroization error results
+    Results = combine_results(AuthResults,SubResults),
     Ack = #'SUBACK'{packet_id = PacketId,return_codes = Results},
     send_to_client(S,Ack),
     {noreply,S};
@@ -627,8 +622,27 @@ disconnect_client(_S,_Reason) ->
 
 
 %% ==========================================================
-%% Misc.
+%% Misc. heklper functions
 %% ==========================================================
 
 auto_generate_client_id() ->
     base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>).
+
+combine_results(AuthResults, SubResults) ->
+    lists:reverse(combine_results(AuthResults,SubResults,[])).
+
+combine_results([], [], Acc) ->
+    Acc;
+
+combine_results([AR|ART], SubResults = [SR|SRT], Acc) ->
+    case AR of
+        ok  ->
+            Result =
+                case SR of
+                    {ok,QoS}  -> QoS;
+                    {error,_} -> ?SUBSCRIPTION_FAILURE
+                end,
+            combine_results(ART,SRT,[Result|Acc]);
+        {error,_} ->
+            combine_results(ART,SubResults,[?SUBSCRIPTION_FAILURE|Acc])
+    end.

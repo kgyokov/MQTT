@@ -179,9 +179,10 @@ handle_call({pub_comp,PacketId}, _From,  S = #state{session = SO}) ->
         end,
     {reply,ok,S#state{session = NewSession}};
 
-handle_call({sub,NewSub = {_,QoS}}, _From,  S = #state{session = SO}) ->
-    SO1 = mqtt_session:subscribe(SO,[NewSub]),
-    {reply,{ok,QoS},S#state{session = SO1}};
+handle_call({sub,NewSubs}, _From,  S = #state{session = SO,sender = Sender}) ->
+    SO2 = mqtt_session:subscribe(SO,NewSubs),
+    QosResults = [{ok,QoS} || {_,QoS} <- NewSubs],
+    {reply,QosResults,S#state{session = SO2}};
 
 handle_call({unsub,OldSubs}, _From,  S = #state{session = SO}) ->
     SO1 = mqtt_session:unsubscribe(SO,OldSubs),
