@@ -2,14 +2,14 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%%  Used to keep a list of existing topics per filter
+%%% This way we can qucikly grab a list of topics for a given filter whenever it gets a new subscriber
+%%% (and consequently obtain the retained messages)
 %%% @end
 %%% Created : 07. Apr 2015 10:05 PM
 %%%-------------------------------------------------------------------
 -module(mqtt_filter_index).
 -author("Kalin").
-
--include_lib("stdlib/include/ms_transform.hrl").
 
 %% API
 -export([add_topic/1, get_matching_topics/1, wait_for_tables/0, create_tables/2]).

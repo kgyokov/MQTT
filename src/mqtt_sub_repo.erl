@@ -22,15 +22,21 @@
     -define(PERSISTENCE, disc_copies).
 -endif.
 
--record(mqtt_sub, {filter, subs, topic, client_id, qos}).
+-define(SUB_RECORD, mqtt_sub).
 
+-record(mqtt_sub, {
+    filter,
+    subs,
+    topic,
+    client_id,
+    qos
+}).
 
--define(SUB_TABLE, mqtt_sub).
 
 -define(BASIC_TABLE_DEF(Nodes),[
     {?PERSISTENCE, Nodes},
     {type,set},
-    {attributes,record_info(fields,mqtt_sub)}
+    {attributes,record_info(fields,?SUB_RECORD)}
 ]).
 
 -define(DISTRIBUTED_DEF(NFragments,Nodes), (
@@ -54,7 +60,7 @@ add_sub(ClientId, Topic, QoS) ->
     Fun =
         fun() ->
             R =
-                case mnesia:read(?SUB_TABLE, Topic, write) of
+                case mnesia:read(?SUB_RECORD, Topic, write) of
                     [] ->   new(Topic);
                     [S]->   S
                 end,
@@ -80,7 +86,7 @@ append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
 remove_sub(ClientId, Topic) ->
     Fun =
         fun() ->
-            case mnesia:read(?SUB_TABLE,Topic,write) of
+            case mnesia:read(?SUB_RECORD,Topic,write) of
                 [] ->
                     ok;
                 [S = #mqtt_sub{subs = Subs}] ->
@@ -106,7 +112,7 @@ get_matches(Topic) ->
                  [{'=:=', '$1', P}],
                  ['$2']
              } || P <- Patterns],
-    Rs = mnesia:dirty_select(?SUB_TABLE, Spec),
+    Rs = mnesia:dirty_select(?SUB_RECORD, Spec),
     AllSubs = lists:flatmap(fun(Subs) -> orddict:to_list(Subs) end, Rs),
     Merged = lists:foldr(
         fun({ClientId,QoS},Acc) ->
@@ -138,15 +144,15 @@ new(Topic) ->
 -ifdef(TEST).
 
 clear_tables() ->
-    {atomic,ok} = mnesia:clear_table(?SUB_TABLE).
+    {atomic,ok} = mnesia:clear_table(?SUB_RECORD).
 
 delete_tables() ->
-    {atomic,ok} = mnesia:delete_table(?SUB_TABLE).
+    {atomic,ok} = mnesia:delete_table(?SUB_RECORD).
 
 -endif.
 
 wait_for_tables() ->
-    mnesia:wait_for_tables(?SUB_TABLE,5000).
+    mnesia:wait_for_tables(?SUB_RECORD,5000).
 
 %% @doc
 %%
@@ -165,7 +171,7 @@ create_tables(Nodes,NFragments) ->
                     [?DISTRIBUTED_DEF(NFragments,Nodes) | DefaultProps]
             end,
 
-    case mnesia:create_table(?SUB_TABLE, Props) of
+    case mnesia:create_table(?SUB_RECORD, Props) of
         {atomic, ok}                            -> ok;
-        {aborted, {already_exists, ?SUB_TABLE}} -> ok
+        {aborted, {already_exists, ?SUB_RECORD}} -> ok
     end.
