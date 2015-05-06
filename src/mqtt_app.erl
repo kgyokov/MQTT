@@ -44,7 +44,9 @@ init() ->
 
 wait_for_tables(_Nodes) ->
     mqtt_sub_repo:wait_for_tables(),
-    mqtt_reg_repo:wait_for_tables().
+    mqtt_reg_repo:wait_for_tables(),
+    mqtt_filter_index:wait_for_tables(),
+    mqtt_topic_repo:wait_for_tables().
 
 install(Nodes) ->
     install(Nodes,1).
@@ -54,7 +56,10 @@ install(Nodes,Frags) ->
     mnesia:create_schema(Nodes),
     rpc:multicall(Nodes, application, ensure_started, [mnesia]),
     error_logger:info_msg("Mnesia started on all nodes"),
+
     mqtt_sub_repo:create_tables(Nodes,Frags),
     mqtt_reg_repo:create_tables(Nodes,Frags),
+    mqtt_filter_index:create_tables(Nodes,Frags),
+    mqtt_topic_repo:create_tables(Nodes,Frags),
 
     error_logger:info_msg("Installation complete").
