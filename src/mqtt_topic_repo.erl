@@ -23,9 +23,9 @@
 }).
 
 -record(mqtt_topic,{
-    topic       ::binary(),
-    retained    ::#queue_msg{},
-    seq = 0     ::non_neg_integer()
+    topic,       %%::binary(),
+    retained,    %%::#queue_msg{},
+    seq = 0     %%::non_neg_integer()
     %% queue       ::term()
 }).
 
@@ -75,18 +75,27 @@ enqueue(Topic, Msg) ->
                 [] ->   new(Topic);
                 [S]->   S
             end,
+        mqtt_filter_index:add_topic(Topic),
         do_enqueue(R,Msg),
         mnesia:write(R)
     end,
-    mnesia_do(Fun).
+    mnesia_do(Fun),
+    error_logger:info_msg("Enqueued ~p for topic ~p",[Msg,Topic]).
 
-get_retained(Topics) ->
+get_retained(Filters) ->
+    Topics = mqtt_filter_index:get_matching_topics(Filters),
     Ms = [{
               #mqtt_topic{topic = '$1', retained = '$2', _ = '_'},
               [{'=:=','$1',Topic}],
-              ['$2']
+              ['$1','$2']
           }|| Topic <- Topics],
-    mnesia:dirty_select(?TOPIC_RECORD,Ms).
+    RetainedMsgs = mnesia:dirty_select(?TOPIC_RECORD,Ms),
+    [{Topic,Content,ClientSeq,QoS}
+     || [#queue_msg{qos = QoS,
+                   content = Content,
+                   client_seq = ClientSeq,
+                   topic_seq = _NewSeq},
+        Topic]<- RetainedMsgs].
 
 %% ===========================================================================
 %% Internal DB functions

@@ -35,7 +35,7 @@
     {?PERSISTENCE, Nodes},
     {type,bag},                          %% @todo: test 'bag' performance
     {attributes,record_info(fields,mqtt_filter_idx)},
-    {index,[#mqtt_filter_idx.topic]}
+    {index,[#mqtt_filter_idx.filter]}
 ]).
 
 

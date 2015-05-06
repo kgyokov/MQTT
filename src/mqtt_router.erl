@@ -15,11 +15,9 @@
 -export([global_route/1, fwd_message/2]).
 
 
-global_route(#mqtt_message{topic = Topic,retain = Retain,
-                           dup = Dup,qos = MsgQoS,
-                           content = Content, seq = Seq}) ->
-    CTRPacket = {Topic,Content,Dup,Seq},
-
+global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
+                                 content = Content,seq = Seq}) ->
+    CTRPacket = {Topic,Content,Seq},
     List = lists:filtermap(fun({ClientId,SubQoS}) ->
                                 case mqtt_reg_repo:get_registration(ClientId) of
                                     {ok,Pid} -> {true,{Pid,min(MsgQoS,SubQoS)}};
@@ -28,6 +26,8 @@ global_route(#mqtt_message{topic = Topic,retain = Retain,
                            end,
                            mqtt_sub_repo:get_matches(Topic)),
 
+    error_logger:info_msg("To enqueue ~p for topic ~p",[Msg,Topic]),
+    mqtt_topic_repo:enqueue(Topic,Msg),
     {QoS_0,QoS_Reliable} = lists:partition(fun({_,QoS}) -> QoS =:= ?QOS_0 end,List),
     [ mqtt_session_out:push_qos0(ConnPid,CTRPacket) || {ConnPid,_} <- QoS_0 ],
     rpc:pmap({?MODULE,fwd_message},[CTRPacket],QoS_Reliable).

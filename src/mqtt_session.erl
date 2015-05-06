@@ -83,7 +83,6 @@ unsubscribe(S = #session_out{subs = Subs, client_id = ClientId},OldSubs) ->
 
 %% clear persisted data during shutdown
 cleanup(S = #session_out{client_id = ClientId}) ->
-    %%mqtt_reg_repo:unregister(ClientId),
     maybe_clear_subs(S).
 
 maybe_clear_subs(#session_out{subs = Subs, client_id = ClientId, is_persistent = false}) ->
@@ -115,7 +114,7 @@ maybe_clear_subs(_S) ->
 %% @doc
 %% Appends message for delivery
 %% @end
-append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_Dup,Ref},QoS) ->
+append_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
     #session_out{refs = Refs, subs = _Subs} = Session,
 
     case gb_sets:is_member(Ref,Refs) of
@@ -123,7 +122,7 @@ append_msg(Session,CTRPacket = {_Topic,_Content,_Retain,_Dup,Ref},QoS) ->
         true  -> duplicate
     end.
 
-forward_msg(Session,CTRPacket = {_Content,_Topic,_Retain,_Dup,Ref},QoS) ->
+forward_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
     #session_out{packet_seq = PacketSeq, refs = Refs} = Session,
 
     NewPacketSeq = PacketSeq+1,
@@ -210,7 +209,7 @@ message_pub_comp(Session,PacketId)  ->
 %% get_retained(_Session) ->
 %%     ok.
 
-to_publish({Topic,Content,_Dup,_Ref},Retain,QoS,PacketId,Dup) ->
+to_publish({Topic,Content,_Ref},Retain,QoS,PacketId,Dup) ->
     #'PUBLISH'{content = Content,packet_id = PacketId,
                qos = QoS,topic = Topic,
                dup = Dup,retain = Retain}.
