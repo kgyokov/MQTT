@@ -42,7 +42,8 @@
 %% ======================================================================
 %% API
 %% ======================================================================
-
+-spec(add_topic(Topic::binary()) ->
+    term()).
 add_topic(Topic) ->
     Filters = mqtt_topic:explode(Topic),
     %%Fun = fun() ->
@@ -59,7 +60,8 @@ add_topic(Topic) ->
     %%end,
     %%mnesia_do(Fun)
 .
-
+-spec(get_matching_topics(Filters::[binary()]) ->
+    [binary()]).
 get_matching_topics(Filters) ->
     Ms = [{
             #mqtt_filter_idx{filter = '$1', topic = '$2', _ = '_'},
