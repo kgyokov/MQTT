@@ -173,8 +173,26 @@ handle_call({pub_comp,PacketId}, _From,  S = #state{session = SO}) ->
     {reply,ok,S#state{session = NewSession}};
 
 handle_call({sub,NewSubs}, _From,  S = #state{session = SO,sender = Sender}) ->
-    SO2 = mqtt_session:subscribe(SO,NewSubs),
+    %% Create subscription
+    SO1 = mqtt_session:subscribe(SO,NewSubs),
     QosResults = [{ok,QoS} || {_,QoS} <- NewSubs],
+    Filters = [ Filter || {Filter,_} <- NewSubs],
+    %% Get the retained messages
+    Msgs =
+    [ begin
+          {_,SubQos} = mqtt_topic:best_match(NewSubs,Topic),
+          {Topic,Content,Ref,min(SubQos,MsgQoS)}
+      end
+      ||{Topic,Content,Ref,MsgQoS} <- mqtt_topic_repo:get_retained(Filters)],
+    %% Send them
+    SO2 = lists:mapfoldl(
+        fun(Msg,SessionsAcc) ->
+            {Topic,Content,Ref,QoS} = Msg,
+            CTRPacket = {Topic,Content,Ref},
+            {_, NewSession} = maybe_push_msg(SessionsAcc,Sender,CTRPacket,true,QoS),
+            NewSession
+        end,
+        SO1,Msgs),
     {reply,QosResults,S#state{session = SO2}};
 
 handle_call({unsub,OldSubs}, _From,  S = #state{session = SO}) ->
