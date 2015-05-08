@@ -228,7 +228,7 @@ handle_cast({push_0,CTRPacket}, S) ->
     {noreply,S};
 
 handle_cast({force_close, _Reason}, S) ->
-    cleanup(S),
+    %% cleanup(S),
     {stop, normal, S};
 
 handle_cast(_Request, State) ->
@@ -278,8 +278,8 @@ handle_info(_Info, State) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
 
-terminate(_Reason, #state{session = SO}) ->
-    mqtt_session:cleanup(SO).
+terminate(_Reason,S) ->
+    cleanup(S).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -313,10 +313,6 @@ push_msg(SO1,Sender,CTRPacket,Retained,QoS,PacketId) ->
     Packet = mqtt_session:to_publish(CTRPacket,Retained,QoS,PacketId,false),
     send_to_client(Sender,Packet).
 
-cleanup(#state{session = SO, client_id = ClientId}) ->
-    mqtt_reg_repo:unregister(ClientId),
-    mqtt_session:cleanup(SO).
-
 maybe_persist(S) ->
     %% @todo: handle persistence
     S.
@@ -326,3 +322,8 @@ send_to_client(#state{sender = Sender}, Packet) ->
 
 send_to_client(Sender, Packet) ->
     mqtt_sender:send_packet(Sender, Packet).
+
+%% Termination handling
+cleanup(#state{session = SO, client_id = ClientId}) ->
+    mqtt_reg_repo:unregister(ClientId),
+    mqtt_session:cleanup(SO).
