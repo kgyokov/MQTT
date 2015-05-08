@@ -10,13 +10,15 @@
 -author("Kalin").
 
 %% API
--export([explode/1, is_covered_by/2, split/1, min_cover/1]).
+-export([explode/1, is_covered_by/2, split/1, min_cover/1, best_match/2]).
 
 
-%% Determines the minimum subset of Patterns that covers the same topics
+%% @doc
+%%Determines the minimum subset of Filters that covers the same topics
 %% e.g. [ /A/B/+ , /A/B/C ] can be reduced to [/A/B/+]
-min_cover(Patterns) ->
-    min_cover([],Patterns).
+%% @end
+min_cover(Filters) ->
+    min_cover([],Filters).
 
 min_cover(Maximals,[]) ->
     Maximals;
@@ -29,6 +31,18 @@ merge_max(Maximals,NewMax) ->
     case lists:any(fun(Max) -> is_covered_by(NewMax,Max) end, DedupL) of
         true    -> DedupL;
         false   -> [NewMax|DedupL]
+    end.
+
+
+%% @doc
+%% Picks the filter with highest QoS. Breaks ties by checking if one filter
+%% covers the other
+%% @end
+best_match(Subs,Topic) ->
+    lists:filter(fun({Filter,_}) -> is_covered_by(Topic,Filter) end, Subs),
+    case lists:sort(fun({_,QoS1},{_,QoS2}) -> QoS1 > QoS2 end, Topic) of
+        [H|_] -> {ok,H};
+        []   -> error
     end.
 
 %% normalize(<<Pattern/binary>>) ->
@@ -136,33 +150,37 @@ explode(ParentLevels,[])->
 %% /user/123/location -> ["/",<<"user">>,"/",<<"123>>,"/",<<"location">>]
 %%
 %% @end
-split(Topic) ->
-    lists:reverse(split([],Topic)).
+split(Pattern) ->
+    lists:reverse(split([],Pattern)).
 
-split(Split,<<>>) ->
-    Split;
+split(Acc,<<>>) ->
+    Acc;
 
 split(["#"|_],_Rest) ->
     throw({error,invalid_wildcard});
 
-split(Split,<<"/"/utf8,Rest/binary>>) ->
-    split(["/"|Split],Rest);
+split(Acc,<<"/">>) ->
+    ["/"|Acc];
 
-split(Split,<<Rest/binary>>) ->
+split(Acc,<<"/",Rest/binary>>) ->
+    Acc1 = ["/"|Acc],
     {NextLevel,Rest1} = consume_level(Rest),
-    split([NextLevel|Split],Rest1).
+    split([NextLevel|Acc1],Rest1);
 
+split(Acc,<<Rest/binary>>) ->
+    {NextLevel,Rest1} = consume_level(Rest),
+    split([NextLevel|Acc],Rest1).
 
 
 consume_level(Binary) ->
     consume_level(<<>>,Binary).
 
-consume_level(<<>>,     <<"#"/utf8>>)                   ->  {"#",<<>>};
-consume_level(_,        <<"#"/utf8,_/binary>>)          ->  throw({error,unexpected_wildcard});
-consume_level(<<>>,     <<"+"/utf8,Rest/binary>>)       ->  {"+",Rest};
-consume_level(Level,    Rest = <<"/"/utf8,_/binary>>)   ->  {Level,Rest};
-consume_level(Level,    <<>>)                           ->  {Level,<<>>};
-consume_level(Level,    <<NextCh/utf8,Rest/binary>>)    ->  consume_level(<<Level/binary,NextCh/utf8>>,Rest).
+consume_level(<<>>,  <<"#">>)                       ->  {"#",<<>>};
+consume_level(_,     <<"#",_/binary>>)              ->  throw({error,unexpected_wildcard});
+consume_level(<<>>,  <<"+",Rest/binary>>)           ->  {"+",Rest};
+consume_level(Level, Rest = <<"/",_/binary>>)       ->  {Level,Rest};
+consume_level(Level, <<>>)                          ->  {Level,<<>>};
+consume_level(Level, <<NextCh/utf8,Rest/binary>>)   ->  consume_level(<<Level/binary,NextCh/utf8>>,Rest).
 
 
 

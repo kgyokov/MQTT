@@ -13,7 +13,7 @@
 -include("mqtt_internal_msgs.hrl").
 
 %% API
--export([at_most_once/2, at_least_once/2, exactly_once_phase1/2, exactly_once_phase2/2,
+-export([qos0/2, qos1/2, qos2_phase1/2, qos2_phase2/2,
          recover/1, discard_will/1, new/2, maybe_publish_will/1]).
 
 
@@ -35,18 +35,20 @@ discard_will(Session) ->
     NewSession = Session#session_in{will = undefined},
     maybe_persist(NewSession).
 
-at_most_once(Msg,Session) ->
-    fwd_message(Msg,Session),
-    Session.
+qos0(Msg,Session = #session_in{packet_seq = Seq}) ->
+    NewSeq = Seq + 1,
+    fwd_message(Msg,NewSeq),
+    Session#session_in{packet_seq = NewSeq}.
 
-at_least_once(Msg,Session) ->
-    fwd_message(Msg,Session),
-    Session.
+qos1(Msg,Session = #session_in{packet_seq = Seq}) ->
+    NewSeq = Seq + 1,
+    fwd_message(Msg,Seq),
+    Session#session_in{packet_seq = NewSeq}.
 
 %% --------------------------------------------------------------------------------------
 %% Storing Packet Identifier and Forwarding the message need to be atomic operations
 %% --------------------------------------------------------------------------------------
-exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
+qos2_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
                     Session = #session_in{packet_seq = Seq, qos2_rec = Qos2Rec})  ->
     case gb_sets:is_element(PacketId,Qos2Rec) of
         false ->
@@ -59,7 +61,7 @@ exactly_once_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
     end.
 
 %%  Completes message send
-exactly_once_phase2(PacketId,Session = #session_in{qos2_rec = Qos2Rec}) ->
+qos2_phase2(PacketId,Session = #session_in{qos2_rec = Qos2Rec}) ->
     NewSession = Session#session_in{qos2_rec = gb_sets:del_element(PacketId,Qos2Rec)},
     maybe_persist(NewSession).
 

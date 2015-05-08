@@ -9,17 +9,17 @@
 -author("Kalin").
 -include("mqtt_packets.hrl").
 
--type subscription() :: {Topic::binary(),QoS::byte()}.
+-type subscription() :: {Topic::binary(),QoS::qos()}.
 
 -record(mqtt_message,{
-	topic,
-	content,
-	client_id,
-	qos = 0,
-	dup = false,
-	retain = false,
-	packet_id = undefined,
-    seq = 0
+	topic           ::binary(),
+	content         ::binary(),
+	client_id       ::binary(),
+	qos = ?QOS_0    ::qos(),
+	dup = false     ::boolean(),
+	retain = false  ::boolean(),
+	packet_id       ::packet_id(),
+    seq = 0         ::non_neg_integer()
 }).
 
 -record(msg, {

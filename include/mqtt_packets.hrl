@@ -8,12 +8,6 @@
 %%%-------------------------------------------------------------------
 -author("Kalin").
 
--type packet_id() :: 0..16#ffff.
--type client_id() :: binary().
--type qos()       ::0..2.
--type topic()     ::binary().
-
-
 %%%%%%%%%%%%%%%%%%%%%%%
 %% Special Values
 %%%%%%%%%%%%%%%%%%%%%%%
@@ -21,7 +15,12 @@
 -define(QOS_0, 0).
 -define(QOS_1, 1).
 -define(QOS_2, 2).
--define(QOS_RESERVED, 3).
+
+-type packet_id() :: 0..16#ffff.
+-type client_id() :: binary().
+-type qos()       ::?QOS_0 | ?QOS_1 | ?QOS_2.
+-type topic()     ::binary().
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%
@@ -30,7 +29,7 @@
 
 -record(will_details,{
   topic           ::topic(),
-  content ::binary(),
+  content         ::binary(),
   qos             ::qos(),
   retain          ::boolean()
 }).

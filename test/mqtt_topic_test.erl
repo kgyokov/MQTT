@@ -267,7 +267,18 @@ is_covered_by_test_()->
 
     ?_assertNot(mqtt_topic:is_covered_by(<<"/A/1/#">>,<<"/A/X/#">>)),
     ?_assertNot(mqtt_topic:is_covered_by(<<"/A/1/#">>,<<"/X/1/#">>)),
-    ?_assertNot(mqtt_topic:is_covered_by(<<"/A/1/#">>,<<"/A/1/+">>))
+    ?_assertNot(mqtt_topic:is_covered_by(<<"/A/1/#">>,<<"/A/1/+">>)),
+
+    %% empty topics
+    ?_assert(mqtt_topic:is_covered_by(<<"/A//">>,<<"/A//">>)),
+    ?_assert(mqtt_topic:is_covered_by(<<"/A//">>,<<"/A/+/">>)),
+    ?_assert(mqtt_topic:is_covered_by(<<"/A//">>,<<"/A/#">>)),
+    ?_assert(mqtt_topic:is_covered_by(<<"/A//">>,<<"/A//#">>)),
+    ?_assert(mqtt_topic:is_covered_by(<<"/A///">>,<<"/A/+/+/">>)),
+
+    ?_assertNot(mqtt_topic:is_covered_by(<<"/A//">>,<<"/A///">>)),
+    ?_assertNot(mqtt_topic:is_covered_by(<<"/A//">>,<<"/A/">>)),
+    ?_assertNot(mqtt_topic:is_covered_by(<<"/A/">>,<<"/A//#">>))
   ]
 .
 

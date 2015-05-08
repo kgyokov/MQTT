@@ -2,14 +2,14 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%%  Used to keep a list of existing topics per filter
+%%% This way we can qucikly grab a list of topics for a given filter whenever it gets a new subscriber
+%%% (and consequently obtain the retained messages)
 %%% @end
 %%% Created : 07. Apr 2015 10:05 PM
 %%%-------------------------------------------------------------------
 -module(mqtt_filter_index).
 -author("Kalin").
-
--include_lib("stdlib/include/ms_transform.hrl").
 
 %% API
 -export([add_topic/1, get_matching_topics/1, wait_for_tables/0, create_tables/2]).
@@ -35,14 +35,15 @@
     {?PERSISTENCE, Nodes},
     {type,bag},                          %% @todo: test 'bag' performance
     {attributes,record_info(fields,mqtt_filter_idx)},
-    {index,[#mqtt_filter_idx.topic]}
+    {index,[#mqtt_filter_idx.filter]}
 ]).
 
 
 %% ======================================================================
 %% API
 %% ======================================================================
-
+-spec(add_topic(Topic::binary()) ->
+    term()).
 add_topic(Topic) ->
     Filters = mqtt_topic:explode(Topic),
     %%Fun = fun() ->
@@ -59,7 +60,8 @@ add_topic(Topic) ->
     %%end,
     %%mnesia_do(Fun)
 .
-
+-spec(get_matching_topics(Filters::[binary()]) ->
+    [binary()]).
 get_matching_topics(Filters) ->
     Ms = [{
             #mqtt_filter_idx{filter = '$1', topic = '$2', _ = '_'},

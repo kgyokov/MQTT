@@ -364,7 +364,7 @@ handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{session_out = Session
     {noreply,S};
 
 handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn}) ->
-    S1 = S#state{session_in = mqtt_publish:exactly_once_phase2(PacketId, SessionIn)},
+    S1 = S#state{session_in = mqtt_publish:qos2_phase2(PacketId, SessionIn)},
     send_to_client(S1,#'PUBCOMP'{packet_id = PacketId}),
     {noreply,S1};
 
@@ -375,18 +375,13 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
     %%=======================================================================
     %% TODO: Use CleanSession to determine what to do
     %%=======================================================================
-
-    Results = [
-        case Security:authorize(AuthCtx,subscribe,Sub) of
-            ok ->
-                case mqtt_session_out:subscribe(SessionOut,Sub) of
-                    {error,_} -> ?SUBSCRIPTION_FAILURE;
-                    {ok,QoS} -> QoS
-                end;
-            {error,_}-> ?SUBSCRIPTION_FAILURE %% In 3.1.1 there is no distinction between a sub failure and auth failure
-        end
-        || Sub  <- Subs],
-
+    %% Which subscriptions are we authorized to create?
+    AuthResults = [{Security:authorize(AuthCtx,subscribe,Sub),Sub} || Sub  <- Subs],
+    %% Actual subscriptions we are going to create
+    AuthSubs = [Sub || {Result,Sub} <- AuthResults, Result =:= ok],
+    SubResults = mqtt_session_out:subscribe(SessionOut, AuthSubs),
+    %% Combine actual Subscription results with Authroization error results
+    Results = combine_results([ Result || {Result,_} <- AuthResults],SubResults),
     Ack = #'SUBACK'{packet_id = PacketId,return_codes = Results},
     send_to_client(S,Ack),
     {noreply,S};
@@ -428,13 +423,13 @@ publish(Packet = #'PUBLISH'{packet_id = PacketId,
     Msg = map_publish_to_msg(Packet,ClientId),
     NewSessionIn = case QoS of
                        ?QOS_0 ->
-                           mqtt_publish:at_most_once(Msg,SessionIn);
+                           mqtt_publish:qos0(Msg,SessionIn);
                        ?QOS_1 ->
-                           Sess1 = mqtt_publish:at_least_once(Msg,SessionIn),
+                           Sess1 = mqtt_publish:qos1(Msg,SessionIn),
                            send_to_client(SenderPid, #'PUBACK'{packet_id = PacketId}),
                            Sess1;
                        ?QOS_2 ->
-                           Sess2 = mqtt_publish:exactly_once_phase1(Msg,SessionIn),
+                           Sess2 = mqtt_publish:qos2_phase1(Msg,SessionIn),
                            send_to_client(SenderPid, #'PUBREC'{packet_id = PacketId}),
                            Sess2
                    end,
@@ -627,8 +622,27 @@ disconnect_client(_S,_Reason) ->
 
 
 %% ==========================================================
-%% Misc.
+%% Misc. heklper functions
 %% ==========================================================
 
 auto_generate_client_id() ->
     base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>).
+
+combine_results(AuthResults, SubResults) ->
+    lists:reverse(combine_results(AuthResults,SubResults,[])).
+
+combine_results([], [], Acc) ->
+    Acc;
+
+combine_results([AR|ART], SubResults = [SR|SRT], Acc) ->
+    case AR of
+        ok  ->
+            Result =
+                case SR of
+                    {ok,QoS}  -> QoS;
+                    {error,_} -> ?SUBSCRIPTION_FAILURE
+                end,
+            combine_results(ART,SRT,[Result|Acc]);
+        {error,_} ->
+            combine_results(ART,SubResults,[?SUBSCRIPTION_FAILURE|Acc])
+    end.

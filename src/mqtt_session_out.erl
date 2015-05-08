@@ -34,7 +34,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-    sender_pid,
+    sender,
     client_id,
     seq,
     session
@@ -117,7 +117,7 @@ unsubscribe(Pid,OldSubs) ->
     {stop, Reason :: term()} | ignore).
 init([ConnPid,ClientId,CleanSession]) ->
     self() ! {async_init,ClientId},
-    {ok, #state{sender_pid = ConnPid, session = mqtt_session:new(ClientId,CleanSession)}}.
+    {ok, #state{sender = ConnPid, session = mqtt_session:new(ClientId,CleanSession)}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -135,18 +135,11 @@ init([ConnPid,ClientId,CleanSession]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session = SO})
+handle_call({push_reliable, CTRPacket,QoS}, _From, S = #state{session = SO, sender = Sender})
     when QoS =:= 1; QoS =:= 2 ->
     error_logger:info_msg("Pushing packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
-    case mqtt_session:append_msg(SO,CTRPacket,QoS) of
-        duplicate ->
-            {reply,duplicate,S#state{session = SO}};
-        {ok,SO1,PacketId} ->
-            maybe_persist(SO1),
-            Packet = mqtt_session:to_publish(CTRPacket,QoS,PacketId,false),
-            send_to_client(S,Packet),
-            {reply,ok,S#state{session = SO1}}
-    end;
+    {Result,SO1} = maybe_push_msg(SO,Sender,CTRPacket,false,QoS),
+    {reply,Result,S#state{session = SO1}};
 
 handle_call({append_comp,Ref}, _From,  S = #state{session = SO}) ->
     SO1 = mqtt_session:append_message_comp(SO,Ref),
@@ -163,7 +156,7 @@ handle_call({ack,PacketId}, _From,  S = #state{session = SO}) ->
 handle_call({pub_rec,PacketId}, _From,  S = #state{session = SO}) ->
     NewSession =
         case mqtt_session:message_pub_rec(SO,PacketId) of
-            {ok,S01} ->   maybe_persist(S01);
+            {ok,S01}  ->  maybe_persist(S01);
             duplicate ->  SO
         end,
     %% ALWAYS respond with PubRel
@@ -179,9 +172,27 @@ handle_call({pub_comp,PacketId}, _From,  S = #state{session = SO}) ->
         end,
     {reply,ok,S#state{session = NewSession}};
 
-handle_call({sub,NewSub = {_,QoS}}, _From,  S = #state{session = SO}) ->
-    SO1 = mqtt_session:subscribe(SO,[NewSub]),
-    {reply,{ok,QoS},S#state{session = SO1}};
+handle_call({sub,NewSubs}, _From,  S = #state{session = SO,sender = Sender}) ->
+    %% Create subscription
+    SO1 = mqtt_session:subscribe(SO,NewSubs),
+    QosResults = [{ok,QoS} || {_,QoS} <- NewSubs],
+    Filters = [Filter || {Filter,_} <- NewSubs],
+    %% Get the retained messages
+    Msgs =
+    [ begin
+          {_,SubQos} = mqtt_topic:best_match(NewSubs,Topic),
+          {Topic,Content,Ref,min(SubQos,MsgQoS)}
+      end
+      ||{Topic,Content,Ref,MsgQoS} <- mqtt_topic_repo:get_retained(Filters)],
+    %% Send them
+    {_,SO2} = lists:mapfoldl(
+        fun(Msg,SessionsAcc) ->
+            {Topic,Content,Ref,QoS} = Msg,
+            CTRPacket = {Topic,Content,Ref},
+            maybe_push_msg(SessionsAcc,Sender,CTRPacket,true,QoS)
+        end,
+        SO1,Msgs),
+    {reply,QosResults,S#state{session = SO2}};
 
 handle_call({unsub,OldSubs}, _From,  S = #state{session = SO}) ->
     SO1 = mqtt_session:unsubscribe(SO,OldSubs),
@@ -211,12 +222,12 @@ handle_call(Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_cast({push_0,CTRPacket}, S) ->
-    Packet = mqtt_session:to_publish(CTRPacket,0,undefined,false),
+    Packet = mqtt_session:to_publish(CTRPacket,false,0,undefined,false),
     send_to_client(S,Packet),
     {noreply,S};
 
 handle_cast({force_close, _Reason}, S) ->
-    cleanup(S),
+    %% cleanup(S),
     {stop, normal, S};
 
 handle_cast(_Request, State) ->
@@ -265,8 +276,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, #state{session = SO}) ->
-    mqtt_session:cleanup(SO).
+
+terminate(_Reason,S) ->
+    cleanup(S).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -286,13 +298,31 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-cleanup(#state{session = SO, client_id = ClientId}) ->
-    mqtt_reg_repo:unregister(ClientId),
-    mqtt_session:cleanup(SO).
+maybe_push_msg(SO,Sender,CTRPacket,Retained,QoS) ->
+    case mqtt_session:append_msg(SO,CTRPacket,QoS) of
+        duplicate ->             %% do nothing
+            {duplicate,SO};
+        {ok,SO1,PacketId} ->     %% side effects
+            push_msg(SO1,Sender,CTRPacket,Retained,QoS,PacketId),
+            {ok,SO1}
+    end.
+
+push_msg(SO1,Sender,CTRPacket,Retained,QoS,PacketId) ->
+    maybe_persist(SO1),
+    Packet = mqtt_session:to_publish(CTRPacket,Retained,QoS,PacketId,false),
+    send_to_client(Sender,Packet).
 
 maybe_persist(S) ->
     %% @todo: handle persistence
     S.
 
-send_to_client(#state{sender_pid = SenderPid}, Packet) ->
-    mqtt_sender:send_packet(SenderPid, Packet).
+send_to_client(#state{sender = Sender}, Packet) ->
+    send_to_client(Sender, Packet);
+
+send_to_client(Sender, Packet) ->
+    mqtt_sender:send_packet(Sender, Packet).
+
+%% Termination handling
+cleanup(#state{session = SO, client_id = ClientId}) ->
+    mqtt_reg_repo:unregister(ClientId),
+    mqtt_session:cleanup(SO).

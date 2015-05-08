@@ -19,7 +19,7 @@
 setup() ->
     Session = mqtt_session:new(<<"Client">>,true),
     Ref = make_ref(),
-    Packet = {<<"Topic1">>, <<"Content">>, false, false, Ref},
+    Packet = {<<"Topic1">>, <<"Content">>, Ref},
     [Session,Packet].
 
 message_test_() ->
