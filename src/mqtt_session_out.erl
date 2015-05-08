@@ -185,12 +185,11 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,sender = Sender}) ->
       end
       ||{Topic,Content,Ref,MsgQoS} <- mqtt_topic_repo:get_retained(Filters)],
     %% Send them
-    SO2 = lists:mapfoldl(
+    {_,SO2} = lists:mapfoldl(
         fun(Msg,SessionsAcc) ->
             {Topic,Content,Ref,QoS} = Msg,
             CTRPacket = {Topic,Content,Ref},
-            {_, NewSession} = maybe_push_msg(SessionsAcc,Sender,CTRPacket,true,QoS),
-            NewSession
+            maybe_push_msg(SessionsAcc,Sender,CTRPacket,true,QoS)
         end,
         SO1,Msgs),
     {reply,QosResults,S#state{session = SO2}};
