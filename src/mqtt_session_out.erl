@@ -176,7 +176,7 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,sender = Sender}) ->
     %% Create subscription
     SO1 = mqtt_session:subscribe(SO,NewSubs),
     QosResults = [{ok,QoS} || {_,QoS} <- NewSubs],
-    Filters = [ Filter || {Filter,_} <- NewSubs],
+    Filters = [Filter || {Filter,_} <- NewSubs],
     %% Get the retained messages
     Msgs =
     [ begin

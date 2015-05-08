@@ -82,7 +82,7 @@ unsubscribe(S = #session_out{subs = Subs, client_id = ClientId},OldSubs) ->
 
 
 %% clear persisted data during shutdown
-cleanup(S = #session_out{client_id = ClientId}) ->
+cleanup(S) ->
     maybe_clear_subs(S).
 
 maybe_clear_subs(#session_out{subs = Subs, client_id = ClientId, is_persistent = false}) ->
