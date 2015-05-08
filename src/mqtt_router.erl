@@ -19,29 +19,30 @@ global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
                                  content = Content,seq = Seq}) ->
     CTRPacket = {Topic,Content,Seq},
     Subs = mqtt_sub_repo:get_matches(Topic),
-    Regs = lists:map(fun({ClientId,SubQoS}) ->
-                Qos = min(MsgQoS,SubQoS),
+    Regs = lists:filtermap(fun({ClientId,SubQoS}) ->
+                QoS = min(MsgQoS,SubQoS),
                 case mqtt_reg_repo:get_registration(ClientId) of
-                    {ok,Pid}  -> {live,{Pid,ClientId},Qos};
-                    undefined -> {dead, ClientId, Qos}
+                    {ok,Pid}  ->
+                        {true,{live,{Pid,ClientId},QoS}};
+                    undefined when QoS =/= ?QOS_0 ->
+                        {true,{dead, ClientId, QoS}};
+                    undefined when QoS =:= ?QOS_0 ->
+                        false
                 end
          end,Subs),
 
-    error_logger:info_msg("To enqueue ~p for topic ~p",[Msg,Topic]),
     mqtt_topic_repo:enqueue(Topic,Msg),
+
+    error_logger:info_msg("To enqueue ~p for topic ~p",[Msg,Topic]),
     {QoS_0,QoS_Reliable} = lists:partition(fun({_,_,QoS}) -> QoS =:= ?QOS_0 end,Regs),
-
-    % Send out QoS messages, do not wwait for response
-    [begin
-         {Pid,_}=  Pair,
-         mqtt_session_out:push_qos0(Pid,CTRPacket)
-     end
-        || {State,Pair,_QoS} <- QoS_0, State =:= live],
-
     {MaybeLive,Dead} = lists:partition(fun({State,_,_QoS}) -> State =:= live end, QoS_Reliable),
+
+    % Send out QoS messages, do not wait for response
+    [mqtt_session_out:push_qos0(Pid,CTRPacket)
+     || {_,{Pid,_},_QoS} <- QoS_0],
     %% Send out QoS 1/2 messages to registered processes and wait for response
     SyncResults = rpc:pmap({?MODULE,fwd_message},[CTRPacket],MaybeLive),
-    OldRegs =
+    StaleRegs =
     [begin
           {noproc,Tuple} = Result,
           Tuple
@@ -49,9 +50,9 @@ global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
 
     %% Get rid of any stale process registrations
     lists:map(fun({Pid,ClientId,_}) -> mqtt_reg_repo:unregister(Pid,ClientId) end,
-              OldRegs),
+              StaleRegs),
     %% persist if necessary
-    case {OldRegs,Dead} of
+    case {StaleRegs,Dead} of
         {[],[]} -> ok;
         _       -> persist_message(CTRPacket)
     end.
