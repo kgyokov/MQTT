@@ -66,9 +66,9 @@ init([]) ->
     {ok, {SupFlags, [AChild]}}.
 
 start_link_tree(Transport,Socket,Options) ->
-    error_logger:info_msg("Starting Sup",[?SERVER]),
+    error_logger:info_msg("Starting Sup ~p~n",[?SERVER]),
     {ok,SupPid} = supervisor:start_child(?SERVER, []),
-    error_logger:info_msg("Started Sup ~p",[SupPid]),
+    error_logger:info_msg("Started Sup ~p~n",[SupPid]),
     {ok, _ConnPid} = mqtt_connection_sup2:create_tree(SupPid,self(),Transport,Socket,Options).
 
 %%%===================================================================

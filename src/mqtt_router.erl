@@ -15,23 +15,56 @@
 -export([global_route/1, fwd_message/2]).
 
 
-global_route(#mqtt_message{topic = Topic,retain = Retain,
-                           dup = Dup,qos = MsgQoS,
-                           content = Content, seq = Ref}) ->
-    CTRPacket = {Topic,Content,Retain,Dup,Ref},
+global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
+                                 content = Content,seq = Seq}) ->
+    CTRPacket = {Topic,Content,Seq},
+    Subs = mqtt_sub_repo:get_matches(Topic),
+    Regs = lists:map(fun({ClientId,SubQoS}) ->
+                Qos = min(MsgQoS,SubQoS),
+                case mqtt_reg_repo:get_registration(ClientId) of
+                    {ok,Pid}  -> {live,{Pid,ClientId},Qos};
+                    undefined -> {dead, ClientId, Qos}
+                end
+         end,Subs),
 
-    List = lists:filtermap(fun({ClientId,SubQoS}) ->
-                                case mqtt_reg_repo:get_registration(ClientId) of
-                                    {ok,Pid} -> {true,{Pid,min(MsgQoS,SubQoS)}};
-                                    undefined -> false
-                                end
-                           end,
-                           mqtt_sub_repo:get_matches(Topic)),
+    error_logger:info_msg("To enqueue ~p for topic ~p",[Msg,Topic]),
+    mqtt_topic_repo:enqueue(Topic,Msg),
+    {QoS_0,QoS_Reliable} = lists:partition(fun({_,_,QoS}) -> QoS =:= ?QOS_0 end,Regs),
 
-    {QoS_0,QoS_Reliable} = lists:partition(fun({_,QoS}) -> QoS =:= ?QOS_0 end,List),
-    [ mqtt_session_out:push_qos0(ConnPid,CTRPacket) || {ConnPid,_} <- QoS_0 ],
-    rpc:pmap({?MODULE,fwd_message},[CTRPacket],QoS_Reliable).
+    % Send out QoS messages, do not wwait for response
+    [begin
+         {Pid,_}=  Pair,
+         mqtt_session_out:push_qos0(Pid,CTRPacket)
+     end
+        || {State,Pair,_QoS} <- QoS_0, State =:= live],
 
-fwd_message({ConnPid,QoS},CTRPacket) ->
-    mqtt_session_out:push_reliable(ConnPid,CTRPacket,QoS).
+    {MaybeLive,Dead} = lists:partition(fun({State,_,_QoS}) -> State =:= live end, QoS_Reliable),
+    %% Send out QoS 1/2 messages to registered processes and wait for response
+    SyncResults = rpc:pmap({?MODULE,fwd_message},[CTRPacket],MaybeLive),
+    OldRegs =
+    [begin
+          {noproc,Tuple} = Result,
+          Tuple
+     end || Result <- SyncResults, Result =/= ok],
+
+    %% Get rid of any stale process registrations
+    lists:map(fun({Pid,ClientId,_}) -> mqtt_reg_repo:unregister(Pid,ClientId) end,
+              OldRegs),
+    %% persist if necessary
+    case {OldRegs,Dead} of
+        {[],[]} -> ok;
+        _       -> persist_message(CTRPacket)
+    end.
+
+
+fwd_message({live,{Pid,ClientId},QoS},CTRPacket) ->
+    %% @todo: use basic messaging (instead of depending on the specifics of gen_server:call)
+    try mqtt_session_out:push_reliable(Pid,CTRPacket,QoS) of
+        _ -> ok
+    catch
+        exit:{noproc, _} -> {noproc,{Pid,ClientId,QoS}}
+    end.
+
+persist_message(_CTRPacket) ->
+    ok.
 

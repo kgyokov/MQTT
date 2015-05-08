@@ -26,7 +26,7 @@ setup()->
 teardown()->
     mqtt_filter_index:delete_tables().
 
-my_test_() ->
+filter_index_test_() ->
     {foreach,
      fun() -> setup() end,
      fun(_) -> teardown() end,

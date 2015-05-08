@@ -161,11 +161,6 @@ get_registration(ClientId)->
     end,
     mnesia_transaction(Fun).
 
-
-%% handle_duplicate(Pid)->
-%%     mqtt_connection:close_duplicate(Pid).
-
-
 mnesia_transaction(Fun) ->
     mnesia:activity(transaction,Fun,[],mnesia_frag).
 
