@@ -11,6 +11,7 @@
 
 %%-include("mqtt_packets.hrl").
 -include("mqtt_internal_msgs.hrl").
+-include("mqtt_session.hrl").
 %% API
 -export([append_msg/3,
          append_message_comp/2,
