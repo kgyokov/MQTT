@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%% Hosts a mqtt_session data structure and handles side effects such as messaging and persistence
 %%% @end
 %%% Created : 24. Feb 2015 12:50 AM
 %%%-------------------------------------------------------------------
@@ -12,7 +12,21 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, push_qos0/2, push_reliable/3, new/4, close_duplicate/1, close/1, push_reliable_comp/3]).
+-export([
+    start_link/3,
+    message_ack/2,
+    message_pub_rec/2,
+    message_pub_comp/2,
+    subscribe/2,
+    unsubscribe/2,
+    %%cleanup/1
+    push_qos0/2,
+    push_reliable/3,
+    close_duplicate/1,
+    close/1,
+    push_reliable_comp/3,
+    new/4
+]).
 
 %% gen_server callbacks
 -export([init/1,

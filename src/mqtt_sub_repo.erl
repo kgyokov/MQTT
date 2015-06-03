@@ -56,12 +56,12 @@
 %%
 %% @end
 
-add_sub(ClientId, Topic, QoS) ->
+add_sub(ClientId, Filter, QoS) ->
     Fun =
         fun() ->
             R =
-                case mnesia:read(?SUB_RECORD, Topic, write) of
-                    [] ->   new(Topic);
+                case mnesia:read(?SUB_RECORD, Filter, write) of
+                    [] ->   new(Filter);
                     [S]->   S
                 end,
             #mqtt_sub{subs = Subs} = R,
@@ -83,10 +83,10 @@ append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
 %% Removes a subscription
 %%
 %% @end
-remove_sub(ClientId, Topic) ->
+remove_sub(ClientId, Filter) ->
     Fun =
         fun() ->
-            case mnesia:read(?SUB_RECORD,Topic,write) of
+            case mnesia:read(?SUB_RECORD,Filter,write) of
                 [] ->
                     ok;
                 [S = #mqtt_sub{subs = Subs}] ->

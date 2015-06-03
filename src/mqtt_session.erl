@@ -2,7 +2,8 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%% Purely functional outgoing Session data structure.
+%%% Does not have any side effects (e.g. message sending or persistence)
 %%% @end
 %%% Created : 21. Feb 2015 5:37 PM
 %%%-------------------------------------------------------------------
@@ -21,8 +22,10 @@
          %%recover/1,
          subscribe/2,
          unsubscribe/2,
-         cleanup/1,
-         new/2, to_publish/5, to_pubrel/1]).
+         new/0,
+         to_publish/5,
+         to_pubrel/1,
+         get_subs/1]).
 
 
 -record(session_out,{
