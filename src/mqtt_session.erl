@@ -19,7 +19,7 @@
          message_ack/2,
          message_pub_rec/2,
          message_pub_comp/2,
-         %%recover/1,
+         msg_in_flight/1,
          subscribe/2,
          unsubscribe/2,
          new/0,
@@ -28,87 +28,33 @@
          get_subs/1]).
 
 
--record(session_out,{
-    client_id                 ::binary(),            %% The id of the client
-    is_persistent             ::boolean(),           %% whether the session needs to be persisted
-    packet_seq                ::non_neg_integer(),   %% The latest packet id (incremented by 1 for every packet)
-    qos1 = dict:new()         ,
-    qos2 = dict:new()         ,
-    qos2_rec = gb_sets:new()  ,
-    refs = gb_sets:new()      ,
-    subs = orddict:new()
-%%     min_subs = orddict:new()
-}).
-
 
 %% ================================================================================
 %% SUBSCRIPTIONS
 %% ================================================================================
 
-subscribe(S =#session_out{subs = Subs, client_id = ClientId},NewSubs) ->
-
+%% @doc
+%% Adds new subscriptions to the session data
+%% @end
+subscribe(S = #session_out{subs = Subs},NewSubs) ->
     %% Maintain a flat list of subscriptions
     %% @todo: Optimize/deduplicate
     Subs1 = lists:foldr(fun({Topic,QoS},Acc) ->
                                 orddict:store(Topic,QoS,Acc)
                               end,
                              Subs, NewSubs),
-    [
-        begin
-            error_logger:info_msg("Subscribing: ~p,~p,~p,~n",[ClientId,Topic,QoS]),
-            mqtt_sub_repo:add_sub(ClientId,Topic,QoS)
-        end
-        || {Topic,QoS} <- NewSubs
-    ],
-
-    %% @todo: Deduplicate, persist
+    %% @todo: Deduplicate
     S#session_out{subs = Subs1}.
 
-unsubscribe(S = #session_out{subs = Subs, client_id = ClientId},OldSubs) ->
-    [
-        mqtt_sub_repo:remove_sub(ClientId,Topic)
-        || Topic <- OldSubs
-    ],
+%% @doc
+%% Removed existing subscriptions from the session data
+%% @end
+unsubscribe(S = #session_out{subs = Subs},OldSubs) ->
     S#session_out{subs =
                   lists:foldr(fun(Topic,Acc) ->
                                 orddict:erase(Topic,Acc)
                               end,
                               Subs, OldSubs)}.
-
-%% get_sub_diff(Subs,NewSubs) ->
-%%     orddict:update().
-
-%% check_sub_exists(Subs,NewSub = {Filter,QoS}) ->
-%%     case lists:dropwhile(fun(Sub) -> not mqtt_topic:is_covered_by(Sub, NewSub) end, Subs) of
-%%         [] -> error;
-%%         [Sub| _] = Sub
-%%     end
-
-
-%% clear persisted data during shutdown
-cleanup(S) ->
-    maybe_clear_subs(S).
-
-maybe_clear_subs(#session_out{subs = Subs, client_id = ClientId, is_persistent = false}) ->
-    [ mqtt_sub_repo:remove_sub(ClientId,Topic) || {Topic,_QoS}  <- Subs ],
-    ok;
-
-maybe_clear_subs(_S) ->
-    ok.
-
-
-
-%%add_or_replace_sub(ClientId,{Topic,QoS},Subs)->
-%%     State = case orddict:find(Topic,Subs) of
-%%                 error ->
-%%                     new;
-%%                 {ok,CurrentQoS} when CurrentQoS =/= QoS ->
-%%                     replaced;
-%%                 {ok,CurrentQoS} when CurrentQoS =:= QoS ->
-%%                     exists
-%%             end,
-%%     mqtt_sub_repo:add_sub(ClientId,Topic,QoS),
-%%     {State,orddict:store(Topic,QoS,Subs)}.
 
 
 %% =========================================================================
@@ -120,7 +66,6 @@ maybe_clear_subs(_S) ->
 %% @end
 append_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
     #session_out{refs = Refs, subs = _Subs} = Session,
-
     case gb_sets:is_member(Ref,Refs) of
         false -> forward_msg(Session,CTRPacket,QoS);
         true  -> duplicate
@@ -155,7 +100,6 @@ forward_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
 append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
     Session#session_out{refs = gb_sets:del_element(Ref,Refs)}.
 
-
 message_ack(Session,PacketId) ->
     #session_out{qos1 = Msgs} = Session,
     case orddict:find(PacketId,Msgs) of
@@ -189,29 +133,26 @@ message_pub_comp(Session,PacketId)  ->
             duplicate
     end.
 
-
+get_subs(#session_out{subs = Subs}) ->
+    Subs.
 
 %% =========================================================================
 %% RECOVERY
 %% =========================================================================
 
-%% recover(Session) ->
-%%     recover_in_flight(Session),
-%%     recover_queued(Session).
-%%
-%% recover_in_flight(#session_out{qos1 = UnAck1, qos2 = UnAck2,
-%%                                qos2_rec = Rec, packet_seq = PacketSeq}) ->
-%%     NewPackets =
-%%     [ to_publish(CTRPacket,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
-%%     [ to_publish(CTRPacket,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
-%%     [ to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)],
-%%     {PacketSeq,NewPackets}.
-%%
-%% recover_queued(_Session) ->
-%%     ok.
-%%
-%% get_retained(_Session) ->
-%%     ok.
+msg_in_flight(Session) ->
+    retry_in_flight(Session)
+    %% recover_queued(Session)
+.
+
+%% Retries messages persisted in session
+retry_in_flight(#session_out{qos1 = UnAck1,
+                             qos2 = UnAck2,
+                             qos2_rec = Rec}) ->
+    [to_publish(CTRPacket,false,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
+    [to_publish(CTRPacket,false,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
+    [to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)].
+
 
 to_publish({Topic,Content,_Ref},Retain,QoS,PacketId,Dup) ->
     #'PUBLISH'{content = Content,packet_id = PacketId,
@@ -222,10 +163,8 @@ to_pubrel(PacketId) ->
     #'PUBREL'{packet_id = PacketId}.
 
 
-new(ClientId,CleanSession) ->
+new() ->
     #session_out{
-        client_id = ClientId,
-        is_persistent = not CleanSession,
         packet_seq = 0,
         qos1 = orddict:new(),
         qos2 = orddict:new(),

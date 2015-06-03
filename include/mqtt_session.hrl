@@ -10,11 +10,11 @@
 
 
 -record(session_out,{
-    client_id                 ::binary(),            %% The id of the client
+    %%client_id                 ::binary(),            %% The id of the client
     packet_seq                ::non_neg_integer(),   %% The latest packet id (incremented by 1 for every packet)
-    qos1 = dict:new()         ,
-    qos2 = dict:new()         ,
+    qos1 = dict:new()         ,                      %% Unacknowledged QoS1 messages
+    qos2 = dict:new()         ,                      %% Unacknowledged QoS2 messages
     qos2_rec = gb_sets:new()  ,
-    refs = gb_sets:new()      ,
-    subs = orddict:new()
+    refs = gb_sets:new()      ,                     %% Message in transit
+    subs = orddict:new()                            %% Subscriptions
 }).

@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 26. Apr 2015 1:31 AM
 %%%-------------------------------------------------------------------
--module(gen_repo).
+%%-module(gen_repo).
 -author("Kalin").
 
 -ifdef(TEST).
@@ -23,8 +23,8 @@
 
 -define(DISTRIBUTED_DEF(NFragments,Nodes), (
     {frag_properties,
-     {n_fragments,NFragments},
-     {node_pool,Nodes}}
+    {n_fragments,NFragments},
+    {node_pool,Nodes}}
 )).
 
 -callback wait_for_tables() -> term().

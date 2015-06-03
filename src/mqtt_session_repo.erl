@@ -7,24 +7,29 @@
 %%% Created : 21. Apr 2015 12:15 AM
 %%%-------------------------------------------------------------------
 -module(mqtt_session_repo).
--include("gen_repo.erl").
+-include("gen_repo.hrl").
 -include("mqtt_session.hrl").
 -author("Kalin").
 
--behaviour(gen_repo).
+%%-behaviour(gen_repo).
 
 %% API
--export([wait_for_tables/0, create_tables/2, save/1, load/1]).
+-export([wait_for_tables/0, create_tables/2, save/2, load/1]).
 
 -ifdef(TEST).
     -export([clear_tables/0, delete_tables/0]).
 -endif.
 
--define(SESSION_RECORD, session_out).
+-record(mqtt_session,{
+    client_id,
+    session
+}).
+
+-define(SESSION_RECORD, mqtt_session).
 
 
-save(Session) ->
-    Fun = fun() -> mnesia:write(Session) end,
+save(ClientId,Session) ->
+    Fun = fun() -> mnesia:write(#mqtt_session{client_id = ClientId, session = Session}) end,
     mnesia_do(Fun).
 
 load(ClientId) ->
