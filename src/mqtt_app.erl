@@ -61,5 +61,6 @@ install(Nodes,Frags) ->
     mqtt_reg_repo:create_tables(Nodes,Frags),
     mqtt_filter_index:create_tables(Nodes,Frags),
     mqtt_topic_repo:create_tables(Nodes,Frags),
+    mqtt_session_repo:create_tables(Nodes,Frags),
 
     error_logger:info_msg("Installation complete").

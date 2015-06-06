@@ -26,7 +26,7 @@ setup()->
 teardown()->
     mqtt_sub_repo:delete_tables().
 
-my_test_() ->
+sub_persistence_test_() ->
         {foreach,
             fun() -> setup() end,
             fun(_) -> teardown() end,

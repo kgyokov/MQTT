@@ -122,8 +122,8 @@ build_rest(#'PUBLISH'{
     packet_id = PacketId,
     qos = QoS,
     topic = Topic,
-    content = Content}) when (QoS =:= 1 orelse
-                              QoS =:= 2)
+    content = Content}) when (QoS =:= ?QOS_1 orelse
+                              QoS =:= ?QOS_2)
                              andalso is_integer(PacketId) ->
     <<(build_string(Topic))/binary,
     PacketId:16,
@@ -132,7 +132,7 @@ build_rest(#'PUBLISH'{
 build_rest(#'PUBLISH'{
     qos = QoS,
     topic = Topic,
-    content = Content}) when QoS =:= 0 ->
+    content = Content}) when QoS =:= ?QOS_0 ->
     <<(build_string(Topic))/binary,
     Content/binary>>;
 

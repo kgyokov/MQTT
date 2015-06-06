@@ -23,9 +23,9 @@
 }).
 
 -record(mqtt_topic,{
-    topic,       %%::binary(),
-    retained,    %%::#queue_msg{},
-    seq = 0     %%::non_neg_integer()
+    topic,          %%::binary(),
+    retained,       %%::#queue_msg{},
+    seq = 0         %%::non_neg_integer()
     %% queue       ::term()
 }).
 
@@ -153,7 +153,7 @@ create_tables(Nodes,NFragments) ->
             end,
 
     case mnesia:create_table(?TOPIC_RECORD, Props) of
-        {atomic, ok}                            -> ok;
+        {atomic, ok}                               -> ok;
         {aborted, {already_exists, ?TOPIC_RECORD}} -> ok
     end.
 

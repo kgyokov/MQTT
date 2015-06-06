@@ -16,23 +16,51 @@
 
 %% {_Topic,_Content,_Retain,_Dup,Ref},
 
-setup() ->
-    Session = mqtt_session:new(<<"Client">>,true),
+setup_msg() ->
+    Session = mqtt_session:new(),
     Ref = make_ref(),
     Packet = {<<"Topic1">>, <<"Content">>, Ref},
     [Session,Packet].
 
-message_test_() ->
+setup_sub() ->
+    Session = mqtt_session:new(),
+    NewSubs = [{<<"Filter1",1>>,<<"Filter2",2>>}],
+    [Session,NewSubs].
+
+msg_test_() ->
     {
-        foreach, fun setup/0, fun(_) -> ok end,
+        foreach, fun setup_msg/0, fun(_) -> ok end,
         [
-            fun ok_on_qos0/1,
-            fun ok_on_qos1/1,
-            fun ok_on_qos2/1,
-            fun deduplicate_qos1/1,
-            fun deduplicate_qos2/1,
-            fun qos1_flow_double_ack/1,
-            fun qos2_flow/1
+            fun msg_in_flight_qos0/1,
+            fun msg_in_flight_qos1/1,
+            fun msg_in_flight_qos1_flow_complete/1,
+            fun msg_in_flight_qos2_phase1/1,
+            fun msg_in_flight_qos2_phase2/1,
+            fun msg_in_flight_qos2_flow_complete/1
+        ]
+    }.
+
+msg_in_flight_test_() ->
+    {
+        foreach, fun setup_msg/0, fun(_) -> ok end,
+        [
+            fun msg_in_flight_qos0/1,
+            fun msg_in_flight_qos1/1,
+            fun msg_in_flight_qos1_flow_complete/1,
+            fun msg_in_flight_qos2_phase1/1,
+            fun msg_in_flight_qos2_phase2/1,
+            fun msg_in_flight_qos2_flow_complete/1
+        ]
+    }.
+
+sub_test_() ->
+    {
+        foreach, fun setup_sub/0, fun(_) -> ok end,
+        [
+            fun subscribe_new/1,
+            fun subscribe_existing/1,
+            fun unsubscribe_existing/1,
+            fun unsubscribe_non_existing/1
         ]
     }.
 
@@ -56,11 +84,11 @@ ok_on_qos2([Session,Packet]) ->
         end
     ).
 
-deduplicate_qos1([Session,Packet]) ->
+qos1_flow_double_append([Session,Packet]) ->
     {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
     ?_assertMatch(duplicate, mqtt_session:append_msg(NewSession,Packet,?QOS_1)).
 
-deduplicate_qos2([Session,Packet]) ->
+qo2_flow_double_append([Session,Packet]) ->
     {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
     ?_assertMatch(duplicate, mqtt_session:append_msg(NewSession,Packet,?QOS_2)).
 
@@ -80,6 +108,55 @@ qos2_flow([S0,Packet]) ->
         {ok,S3} = mqtt_session:message_pub_comp(S2,PacketId),
         ?assertMatch(duplicate,mqtt_session:message_pub_comp(S3 ,PacketId))
     end).
+
+msg_in_flight_qos0([Session,Packet]) ->
+    {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_0),
+    ?_assertMatch([], mqtt_session:msg_in_flight(NewSession)).
+
+msg_in_flight_qos1([Session,Packet]) ->
+    {ok, S1, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
+    ?_assertMatch([_], mqtt_session:msg_in_flight(S1)).
+
+msg_in_flight_qos1_flow_complete([Session,Packet]) ->
+    {ok, S1, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
+    {ok, S2} = mqtt_session:message_ack(S1,PacketId),
+    ?_assertMatch([], mqtt_session:msg_in_flight(S2)).
+
+msg_in_flight_qos2_phase1([Session,Packet]) ->
+    {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
+    ?_assertMatch([_], mqtt_session:msg_in_flight(NewSession)).
+
+msg_in_flight_qos2_phase2([Session,Packet]) ->
+    {ok, NewSession, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
+    mqtt_session:message_pub_rec(NewSession,PacketId),
+    ?_assertMatch([_], mqtt_session:msg_in_flight(NewSession)).
+
+msg_in_flight_qos2_flow_complete([Session,Packet]) ->
+    {ok,S1,PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
+    {ok,S2} = mqtt_session:message_pub_rec(S1,PacketId),
+    {ok,S3} = mqtt_session:message_pub_comp(S2,PacketId),
+    ?_assertMatch([], mqtt_session:msg_in_flight(S3)).
+
+
+subscribe_new([Session,NewSubs]) ->
+    S1 = mqtt_session:subscribe(Session,NewSubs),
+    ?_assertMatch(NewSubs,mqtt_session:get_subs(S1)).
+
+subscribe_existing([Session,NewSubs]) ->
+    S1 = mqtt_session:subscribe(Session,NewSubs),
+    S2 = mqtt_session:subscribe(S1,NewSubs),
+    ?_assertMatch(NewSubs,mqtt_session:get_subs(S2)).
+
+unsubscribe_existing([Session,NewSubs]) ->
+    S1 = mqtt_session:subscribe(Session,NewSubs),
+    Filters = [Filter || {Filter,_Qos} <- NewSubs],
+    S2 = mqtt_session:unsubscribe(S1,Filters),
+    ?_assertMatch([],mqtt_session:get_subs(S2)).
+
+unsubscribe_non_existing([Session,NewSubs]) ->
+    S1 = mqtt_session:subscribe(Session,NewSubs),
+    S2 = mqtt_session:unsubscribe(S1,[<<"NonExisting">>]),
+    ?_assertMatch(NewSubs,mqtt_session:get_subs(S2)).
 
 
 
