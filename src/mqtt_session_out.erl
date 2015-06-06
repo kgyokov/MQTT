@@ -45,7 +45,8 @@
     client_id,
     seq,
     session,
-    is_persistent
+    is_persistent,
+    persistence
 }).
 
 %%%===================================================================
@@ -125,7 +126,15 @@ unsubscribe(Pid,OldSubs) ->
     {stop, Reason :: term()} | ignore).
 init([ConnPid,ClientId,CleanSession]) ->
     self() ! {async_init,ClientId},
-    {ok, #state{sender = ConnPid, is_persistent = not CleanSession, client_id = ClientId}}.
+    Persistence =
+        if CleanSession -> fun(SO) -> mqtt_session_repo:save(ClientId,SO),ok end;
+           true         -> fun(_) -> ok end
+        end,
+    S = #state{sender = ConnPid,
+               is_persistent = not CleanSession,
+               client_id = ClientId,
+               persistence = Persistence},
+    {ok,S}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -202,43 +211,16 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
                                               sender = Sender,
                                               client_id = ClientId,
                                               is_persistent = IsPersistent}) ->
-    QosResults = [{ok,QoS} || {_,QoS} <- NewSubs],
     Filters = [Filter || {Filter,_} <- NewSubs],
-
     %% Add subscriptions to in-memory session
-    error_logger:info_msg("Subscribing to ~p~n",[NewSubs]),
-    SO1 = mqtt_session:subscribe(SO,NewSubs),
     [mqtt_sub_repo:add_sub(ClientId,Filter,QoS) || {Filter,QoS} <- NewSubs],
-
-    %% Get the retained messages
-    Msgs =
-    [   begin
-          {_,SubQos} = mqtt_topic:best_match(NewSubs,Topic),
-          {Topic,Content,Ref,min(SubQos,MsgQoS)}
-        end
-      ||{Topic,Content,Ref,MsgQoS} <- mqtt_topic_repo:get_retained(Filters)],
-    %% Apply them to session
-    {Results,SO3} = lists:mapfoldl(
-        fun(Msg,SOAcc) ->
-            {Topic,Content,Ref,QoS} = Msg,
-            CTRPacket = {Topic,Content,Ref},
-            case mqtt_session:append_msg(SO1,CTRPacket,QoS) of
-                duplicate ->            {duplicate,SOAcc};
-                {ok,SO2,PacketId} ->    {{ok,CTRPacket,QoS,PacketId},SO2}
-            end
-        end,
-        SO1,Msgs),
-    maybe_persist(SO3,ClientId,IsPersistent),
+    Retained =  mqtt_topic_repo:get_retained(Filters),
+    {SO1,PkToSend} = mqtt_session:append_retained(SO,NewSubs,Retained),
+    maybe_persist(SO1,ClientId,IsPersistent),
     %% Send any that need to be sent
-    [   case Result of
-              {ok,CTRPacket,QoS,PacketId} ->
-                  Packet = mqtt_session:to_publish(CTRPacket,true,QoS,PacketId,false),
-                  send_to_client(Sender,Packet);
-              _ ->
-                  ok
-        end
-      || Result <- Results],
-    {reply,QosResults,S#state{session = SO3}};
+    [send_to_client(Sender,Package)|| Package <- PkToSend],
+    QosResults = [{ok,QoS} || {_,QoS} <- NewSubs],
+    {reply,QosResults,S#state{session = SO1}};
 
 handle_call({unsub,OldSubs}, _From,  S = #state{session = SO,
                                                 client_id = ClientId,
@@ -401,3 +383,5 @@ cleanup(#state{session = SO,client_id = ClientId,is_persistent = IsPers}) ->
         [mqtt_sub_repo:remove_sub(ClientId,Topic) || {Topic,_QoS}  <- Subs];
       true -> ok
     end.
+
+

@@ -25,7 +25,8 @@
          new/0,
          to_publish/5,
          to_pubrel/1,
-         get_subs/1]).
+         get_subs/1,
+         append_retained/3]).
 
 
 
@@ -132,6 +133,37 @@ message_pub_comp(Session,PacketId)  ->
         false ->
             duplicate
     end.
+
+append_retained(SO,NewSubs,Retained) ->
+    SO1 = mqtt_session:subscribe(SO,NewSubs),
+    %% Get the retained messages
+    Msgs =
+    [   begin
+            {_,SubQos} = mqtt_topic:best_match(NewSubs,Topic),
+            {Topic,Content,Ref,min(SubQos,MsgQoS)}
+        end
+        ||{Topic,Content,Ref,MsgQoS} <- Retained],
+    %% Apply them to session
+    {Results,SO3} = lists:mapfoldl(
+        fun(Msg,SOAcc) ->
+            {Topic,Content,Ref,QoS} = Msg,
+            CTRPacket = {Topic,Content,Ref},
+            case mqtt_session:append_msg(SO1,CTRPacket,QoS) of
+                duplicate ->            {duplicate,SOAcc};
+                {ok,SO2,PacketId} ->    {{ok,CTRPacket,QoS,PacketId},SO2}
+            end
+        end,
+        SO1,Msgs),
+    PkToSend = lists:filtermap(
+        fun(Result) ->
+            case Result of
+                {ok,CTRPacket,QoS,PacketId} ->
+                    {true, mqtt_session:to_publish(CTRPacket,true,QoS,PacketId,false)};
+                _ ->
+                    false
+            end
+        end, Results),
+    {SO3,PkToSend}.
 
 get_subs(#session_out{subs = Subs}) ->
     Subs.
