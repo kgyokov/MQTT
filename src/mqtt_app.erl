@@ -46,7 +46,8 @@ wait_for_tables(_Nodes) ->
     mqtt_sub_repo:wait_for_tables(),
     mqtt_reg_repo:wait_for_tables(),
     mqtt_filter_index:wait_for_tables(),
-    mqtt_topic_repo:wait_for_tables().
+    mqtt_topic_repo:wait_for_tables(),
+    mqtt_session_repo:wait_for_tables().
 
 install(Nodes) ->
     install(Nodes,1).
