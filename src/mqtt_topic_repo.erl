@@ -69,33 +69,34 @@ new(Topic) ->
 
 enqueue(Topic, Msg) ->
     Fun =
-    fun() ->
-        R =
-            case mnesia:read(?TOPIC_RECORD, Topic, write) of
-                [] ->   new(Topic);
-                [S]->   S
-            end,
-        mqtt_filter_index:add_topic(Topic),
-        do_enqueue(R,Msg),
-        mnesia:write(R)
-    end,
+        fun() ->
+            R =
+                case mnesia:read(?TOPIC_RECORD, Topic, write) of
+                    [] ->   new(Topic);
+                    [S]->   S
+                end,
+            mqtt_filter_index:add_topic(Topic),
+            R1 = do_enqueue(R,Msg),
+            mnesia:write(R1)
+        end,
     mnesia_do(Fun),
     error_logger:info_msg("Enqueued ~p for topic ~p",[Msg,Topic]).
 
 get_retained(Filters) ->
     Topics = mqtt_filter_index:get_matching_topics(Filters),
+    error_logger:info_msg("Matching Topics for ~p~n",[Topics]),
     Ms = [{
               #mqtt_topic{topic = '$1', retained = '$2', _ = '_'},
               [{'=:=','$1',Topic}],
-              ['$1','$2']
+              [['$1','$2']]
           }|| Topic <- Topics],
     RetainedMsgs = mnesia:dirty_select(?TOPIC_RECORD,Ms),
+    error_logger:info_msg("Read msgs ~p",[RetainedMsgs]),
     [{Topic,Content,ClientSeq,QoS}
-     || [#queue_msg{qos = QoS,
-                   content = Content,
-                   client_seq = ClientSeq,
-                   topic_seq = _NewSeq},
-        Topic]<- RetainedMsgs].
+     || [Topic, #queue_msg{qos = QoS,
+                           content = Content,
+                           client_seq = ClientSeq,
+                           topic_seq = _NewSeq}] <- RetainedMsgs].
 
 %% ===========================================================================
 %% Internal DB functions
@@ -108,26 +109,24 @@ mnesia_do(Fun) ->
 %% Internal pure functions
 %% ===========================================================================
 
-do_enqueue(Rec = #mqtt_topic{%%queue = _Q,
-                             seq  = Seq,
-                             retained = Ret},
-           #mqtt_message{retain = Retain,
-                         content = Content,
-                         qos = QoS,
-                         seq = ClientSeq}) ->
+do_enqueue(Rec,M) ->
+    maybe_retain(Rec,M). %%@todo: actually enqueue
 
-    NewSeq = Seq+1,
-    NewMsg = #queue_msg{qos = QoS,
-                        content = Content,
-                        client_seq = ClientSeq,
-                        topic_seq = NewSeq},
-    Rec#mqtt_topic{retained = case Retain of
-                                  true -> NewMsg;
-                                  false -> Ret
-                              end,
-                   %% @todo: add to the queue
-                   %% queue = queue:in(NewMsg,Q),
-                   seq = NewSeq}.
+maybe_retain(Rec,#mqtt_message{retain = false}) ->
+    Rec;
+
+maybe_retain(Rec,#mqtt_message{content = <<>>}) ->
+    Rec#mqtt_topic{retained = undefined};
+
+maybe_retain(Rec,#mqtt_message{content = Content,
+                               qos = QoS,
+                               seq = ClientSeq}) ->
+    #mqtt_topic{seq = Seq} = Rec,
+    NewRetained = #queue_msg{qos = QoS,
+                             content = Content,
+                             client_seq = ClientSeq,
+                             topic_seq = Seq + 1},
+    Rec#mqtt_topic{retained = NewRetained}.
 
 %% do_get_retained(#mqtt_topic{retained = Retained}) ->
 %%     Retained.
