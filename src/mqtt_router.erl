@@ -17,8 +17,11 @@
 
 global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
                                  content = Content,seq = Seq}) ->
-    CTRPacket = {Topic,Content,Seq},
+
+    mqtt_topic_repo:enqueue(Topic,Msg),
     Subs = mqtt_sub_repo:get_matches(Topic),
+
+    CTRPacket = {Topic,Content,Seq},
     Regs = lists:filtermap(fun({ClientId,SubQoS}) ->
                 QoS = min(MsgQoS,SubQoS),
                 case mqtt_reg_repo:get_registration(ClientId) of
@@ -30,24 +33,15 @@ global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
                         false
                 end
          end,Subs),
-
-    mqtt_topic_repo:enqueue(Topic,Msg),
-
     error_logger:info_msg("To enqueue ~p for topic ~p",[Msg,Topic]),
     {QoS_0,QoS_Reliable} = lists:partition(fun({_,_,QoS}) -> QoS =:= ?QOS_0 end,Regs),
     {MaybeLive,Dead} = lists:partition(fun({State,_,_QoS}) -> State =:= live end, QoS_Reliable),
 
     % Send out QoS messages, do not wait for response
-    [mqtt_session_out:push_qos0(Pid,CTRPacket)
-     || {_,{Pid,_},_QoS} <- QoS_0],
+    [mqtt_session_out:push_qos0(Pid,CTRPacket) || {_,{Pid,_},_QoS} <- QoS_0],
     %% Send out QoS 1/2 messages to registered processes and wait for response
     SyncResults = rpc:pmap({?MODULE,fwd_message},[CTRPacket],MaybeLive),
-    StaleRegs =
-    [begin
-          {noproc,Tuple} = Result,
-          Tuple
-     end || Result <- SyncResults, Result =/= ok],
-
+    StaleRegs = [Tuple || {noproc,Tuple} <- SyncResults],
     %% Get rid of any stale process registrations
     lists:map(fun({Pid,ClientId,_}) -> mqtt_reg_repo:unregister(Pid,ClientId) end,
               StaleRegs),

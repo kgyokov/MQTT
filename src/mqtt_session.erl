@@ -135,6 +135,7 @@ message_pub_comp(Session,PacketId)  ->
     end.
 
 append_retained(SO,NewSubs,Retained) ->
+    error_logger:info_msg("append_retained called with: ~p, ~p,~n",[NewSubs,Retained]),
     SO1 = mqtt_session:subscribe(SO,NewSubs),
     %% Get the retained messages
     Msgs =
@@ -148,12 +149,13 @@ append_retained(SO,NewSubs,Retained) ->
         fun(Msg,SOAcc) ->
             {Topic,Content,Ref,QoS} = Msg,
             CTRPacket = {Topic,Content,Ref},
-            case mqtt_session:append_msg(SO1,CTRPacket,QoS) of
+            case mqtt_session:append_msg(SOAcc,CTRPacket,QoS) of
                 duplicate ->            {duplicate,SOAcc};
                 {ok,SO2,PacketId} ->    {{ok,CTRPacket,QoS,PacketId},SO2}
             end
         end,
         SO1,Msgs),
+    error_logger:info_msg("Results: ~p~n",[Results]),
     PkToSend = lists:filtermap(
         fun(Result) ->
             case Result of
@@ -181,10 +183,14 @@ msg_in_flight(Session) ->
 retry_in_flight(#session_out{qos1 = UnAck1,
                              qos2 = UnAck2,
                              qos2_rec = Rec}) ->
-    [to_publish(CTRPacket,false,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
-    [to_publish(CTRPacket,false,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
+    list_to_pub_packets(UnAck1,?QOS_1) ++
+    list_to_pub_packets(UnAck2,?QOS_2) ++
+%%     [to_publish(CTRPacket,false,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
+%%     [to_publish(CTRPacket,false,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
     [to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)].
 
+list_to_pub_packets(List,QoS) ->
+    [to_publish(CTRPacket,false,QoS,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(List)].
 
 to_publish({Topic,Content,_Ref},Retain,QoS,PacketId,Dup) ->
     #'PUBLISH'{content = Content,packet_id = PacketId,
