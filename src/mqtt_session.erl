@@ -140,7 +140,7 @@ append_retained(SO,NewSubs,Retained) ->
     %% Get the retained messages
     Msgs =
     [   begin
-            {_,SubQos} = mqtt_topic:best_match(NewSubs,Topic),
+            {ok,{_,SubQos}} = mqtt_topic:best_match(NewSubs,Topic),
             {Topic,Content,Ref,min(SubQos,MsgQoS)}
         end
         ||{Topic,Content,Ref,MsgQoS} <- Retained],

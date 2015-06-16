@@ -35,14 +35,13 @@ merge_max(Maximals,NewMax) ->
 
 
 %% @doc
-%% Picks the filter with highest QoS. Breaks ties by checking if one filter
-%% covers the other
+%% Picks a matching filter with highest QoS.
 %% @end
 best_match(Subs,Topic) ->
-    lists:filter(fun({Filter,_}) -> is_covered_by(Topic,Filter) end, Subs),
-    case lists:sort(fun({_,QoS1},{_,QoS2}) -> QoS1 > QoS2 end, Topic) of
+    Matches = lists:filter(fun({Filter,_}) -> is_covered_by(Topic,Filter) end, Subs),
+    case lists:sort(fun({_,QoS1},{_,QoS2}) -> QoS1 >= QoS2 end, Matches) of
         [H|_] -> {ok,H};
-        []   -> error
+        []    -> error
     end.
 
 %% normalize(<<Pattern/binary>>) ->
