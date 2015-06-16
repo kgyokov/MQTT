@@ -72,7 +72,7 @@ is_covered_by({Pattern1,QoS1},{Pattern2,QoS2}) ->
     is_covered_by(Pattern1,Pattern2) andalso QoS2 >= QoS1;
 
 %% @doc
-%% Tells us if the 2nd topic pattern covers the 1st one.
+%% Tells us if the Cover covers the Pattern.
 %% Examples
 %% /user/+/location covers /user/123/location
 %% /user/# covers /user/123/location

@@ -378,7 +378,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
     %% Which subscriptions are we authorized to create?
     AuthResults = [{Security:authorize(AuthCtx,subscribe,Sub),Sub} || Sub  <- Subs],
     %% Actual subscriptions we are going to create
-    AuthSubs = [Sub || {Result,Sub} <- AuthResults, Result =:= ok],
+    AuthSubs = [Sub || {ok,Sub} <- AuthResults],
     SubResults = mqtt_session_out:subscribe(SessionOut, AuthSubs),
     %% Combine actual Subscription results with Authroization error results
     Results = combine_results([ Result || {Result,_} <- AuthResults],SubResults),
