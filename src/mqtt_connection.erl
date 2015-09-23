@@ -278,60 +278,22 @@ handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = true}, S) ->
 
 
 %% Valid complete packet!
-handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
-                         clean_session = CleanSession,will = Will,
-                         password = Password,username = Username},
-              S = #state{connect_state = connecting,
-                         security = {Security,SecConf}}) ->
+handle_packet(Packet = #'CONNECT'{},
+              S = #state{connect_state = connecting}) ->
 
     %%=======================================================================
     %% @todo: validate connect packet
     %%=======================================================================
-
-    %%=======================================================================
-    %% @todo: authorize Will?!?!?
-    %%=======================================================================
-
-    case Security:authenticate(SecConf,ClientId,Username,Password) of
-        {error,Reason} ->
-            Code = case Reason of
-                       bad_credentials -> ?CONNACK_BAD_USERNAME_OR_PASSWORD;
-                       _ -> ?CONNACK_UNAUTHORIZED
-                   end,
-            send_to_client(S,#'CONNACK'{session_present = false,return_code = Code}),
-            prevent_connection(S,bad_auth);
-        {ok, AuthCtx} ->
-            S1 = S#state{auth_ctx = AuthCtx},
-            %%=======================================================================
-            %% @todo: determine session state
-            %%=======================================================================
-%% 			SessionPresent = if(CleanSession) ->
-%% 				mqtt_session_repo:clear(ClientId);
-%% 				                 false,
-%% 				                 true ->
-%% 					                 true  %% @todo: determine session state
-%% 			                 end,
-
-            %register_self(ClientId,CleanSession),
-
-            SessionPresent =
-            case CleanSession of
-                false  -> true;%%error({not_supported,persistent_session});
-                true   -> false
+    NewState =
+            try
+                S1 = authorize(Packet,S),
+                S2 = establish_session(Packet,S1),
+                S3 = maybe_start_keep_alive(S2, Packet#'CONNECT'.keep_alive * 1000),
+                S3#state{connect_state = connected}
+            catch
+                throw:{Reason,NewS}-> prevent_connection(NewS,Reason)
             end,
-            S2 = S1#state{clean_session = CleanSession,
-                          client_id = ClientId,
-                          session_in = mqtt_publish:new(ClientId,Will),
-                          session_out = new_session(S1,ClientId,CleanSession)},
-
-            %% @todo:  Determine session present
-            send_to_client(S2, #'CONNACK'{return_code = ?CONNACK_ACCEPTED,
-                                          session_present = SessionPresent}),
-
-            S4 = maybe_start_keep_alive(S2, KeepAliveTimeout * 1000),
-            S5 = S4#state{connect_state = connected},
-            {noreply,S5}
-    end;
+    {noreply,NewState};
 
 %% Catch- all case
 handle_packet(Packet, S = #state{ connect_state = connecting})
@@ -408,6 +370,44 @@ handle_packet(_, S) ->
 
 
 %% =================================================
+%% Connect
+%% =================================================
+
+authorize(#'CONNECT'{client_id = ClientId,
+                     password = Password,
+                     username = Username},
+          S = #state{security = {Security,SecConf}}) ->
+    %%=======================================================================
+    %% @todo: authorize Will?!?!?
+    %%=======================================================================
+    case Security:authenticate(SecConf,ClientId,Username,Password) of
+        {error,Reason} ->
+            Code = case Reason of
+                       bad_credentials -> ?CONNACK_BAD_USERNAME_OR_PASSWORD;
+                       _               -> ?CONNACK_UNAUTHORIZED
+                   end,
+            send_to_client(S,#'CONNACK'{session_present = false,return_code = Code}),
+            throw({bad_auth,S});
+        {ok, AuthCtx} ->
+            S#state{auth_ctx = AuthCtx}
+    end.
+
+establish_session(#'CONNECT'{client_id = ClientId,
+                             clean_session = CleanSession,
+                             will = Will},
+                  S) ->
+    SessionPresent = not CleanSession,
+    NewState = S#state{clean_session = CleanSession,
+                       client_id = ClientId,
+                       session_in = mqtt_publish:new(ClientId,Will),
+                       session_out = new_session(S,ClientId,CleanSession)},
+
+    %% @todo:  Determine session present
+    send_to_client(NewState, #'CONNACK'{return_code = ?CONNACK_ACCEPTED,
+                                        session_present = SessionPresent}),
+    NewState.
+
+%% =================================================
 %% Publish
 %% =================================================
 
@@ -415,7 +415,7 @@ handle_publish(Packet,S) ->
     S#state{session_in = publish(Packet,S)}.
 
 publish(Packet = #'PUBLISH'{packet_id = PacketId,
-                            qos       = QoS},
+                            qos = QoS},
         #state{client_id     = ClientId,
                session_in    = SessionIn,
                sender_pid    = SenderPid}) ->
@@ -634,15 +634,11 @@ combine_results(AuthResults, SubResults) ->
 combine_results([], [], Acc) ->
     Acc;
 
-combine_results([AR|ART], SubResults = [SR|SRT], Acc) ->
-    case AR of
-        ok  ->
-            Result =
-                case SR of
-                    {ok,QoS}  -> QoS;
-                    {error,_} -> ?SUBSCRIPTION_FAILURE
-                end,
-            combine_results(ART,SRT,[Result|Acc]);
-        {error,_} ->
-            combine_results(ART,SubResults,[?SUBSCRIPTION_FAILURE|Acc])
-    end.
+combine_results([{error,_}|ART], SubResults, Acc) ->
+    combine_results(ART,SubResults,[?SUBSCRIPTION_FAILURE|Acc]);
+
+combine_results([ok|ART], [{ok,QoS}|SRT], Acc) ->
+    combine_results(ART,SRT,[QoS|Acc]);
+
+combine_results([ok|ART], [{error,_} |SRT], Acc) ->
+    combine_results(ART,SRT,[?SUBSCRIPTION_FAILURE|Acc]).
