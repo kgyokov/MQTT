@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% Parses MQTT packets
 %%% @end
 %%% Created : 04. Dec 2014 9:34 PM
 %%%-------------------------------------------------------------------

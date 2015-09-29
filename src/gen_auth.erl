@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%% Authentication / Authroization behavior
 %%% @end
 %%% Created : 04. Feb 2015 11:11 PM
 %%%-------------------------------------------------------------------

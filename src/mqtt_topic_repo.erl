@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%% Topic repository - persists messages published for a particular topic
 %%% @end
 %%% Created : 26. Apr 2015 1:10 AM
 %%%-------------------------------------------------------------------

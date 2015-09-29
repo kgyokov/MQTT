@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% gen_server for sending messages out through the socket
 %%% @end
 %%% Created : 08. Dec 2014 1:29 AM
 %%%-------------------------------------------------------------------

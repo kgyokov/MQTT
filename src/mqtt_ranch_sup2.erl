@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%  Simple Adaptor mapping ranch_protocol to mqtt_connection_sup
+%%%  Simple Adaptor mapping ranch_protocol behavior to mqtt_connection_sup
 %%% @end
 %%% Created : 20. Feb 2015 12:40 AM
 %%%-------------------------------------------------------------------

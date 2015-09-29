@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%% Hosts a mqtt_session data structure and handles side effects such as messaging and persistence
+%%% gen_server which hosts a mqtt_session data structure and handles side effects such as messaging and persistence
 %%% @end
 %%% Created : 24. Feb 2015 12:50 AM
 %%%-------------------------------------------------------------------

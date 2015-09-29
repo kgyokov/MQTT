@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% Build MQTT packages
 %%% @end
 %%% Created : 15. Dec 2014 9:34 PM
 %%%-------------------------------------------------------------------

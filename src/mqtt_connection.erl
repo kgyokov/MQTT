@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% gen_server to manage a connection
 %%% @end
 %%% Created : 06. Dec 2014 6:14 PM
 %%%-------------------------------------------------------------------

@@ -3,7 +3,7 @@
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
 %%%
-%%% gen_server to parse incoming packets and send them to the connection gen_server
+%%% gen_server to parse incoming packets and forward them to the connection process
 %%%
 %%% @end
 %%% Created : 26. Jan 2015 10:13 PM

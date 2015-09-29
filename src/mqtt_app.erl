@@ -3,7 +3,14 @@
 -behaviour(application).
 
 %% Application callbacks
--export([start/2, stop/1, install/1, install/2, wait_for_tables/1]).
+-export([start/2, stop/1]).
+
+-export([install/1, install/2, wait_for_tables/1]).
+
+
+
+start() ->
+    application:ensure_all_started(?MODULE)
 
 %% ===================================================================
 %% Application callbacks

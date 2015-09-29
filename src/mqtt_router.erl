@@ -2,7 +2,8 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%% Routes incoming message to any established connections that should receive them
+%%% @todo: Persist messages that do not match currently established connections
 %%% @end
 %%% Created : 16. Mar 2015 9:48 PM
 %%%-------------------------------------------------------------------
