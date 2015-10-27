@@ -5,12 +5,12 @@
 %% Application callbacks
 -export([start/2, stop/1]).
 
--export([install/1, install/2, wait_for_tables/1]).
+-export([start/0, install/1, install/2, wait_for_tables/1]).
 
 
 
 start() ->
-    application:ensure_all_started(?MODULE)
+    application:ensure_all_started(?MODULE).
 
 %% ===================================================================
 %% Application callbacks
@@ -50,25 +50,28 @@ init() ->
     wait_for_tables(Nodes).
 
 wait_for_tables(_Nodes) ->
-    mqtt_sub_repo:wait_for_tables(),
-    mqtt_reg_repo:wait_for_tables(),
-    mqtt_filter_index:wait_for_tables(),
-    mqtt_topic_repo:wait_for_tables(),
-    mqtt_session_repo:wait_for_tables().
+    [Mod:wait_for_tables() || Mod <- get_tables()].
 
 install(Nodes) ->
     install(Nodes,1).
 
 install(Nodes,Frags) ->
+
     error_logger:info_msg("Creating mnesia schema"),
     mnesia:create_schema(Nodes),
     rpc:multicall(Nodes, application, ensure_started, [mnesia]),
     error_logger:info_msg("Mnesia started on all nodes"),
 
-    mqtt_sub_repo:create_tables(Nodes,Frags),
-    mqtt_reg_repo:create_tables(Nodes,Frags),
-    mqtt_filter_index:create_tables(Nodes,Frags),
-    mqtt_topic_repo:create_tables(Nodes,Frags),
-    mqtt_session_repo:create_tables(Nodes,Frags),
+    [Mod:create_tables(Nodes,Frags) || Mod <- get_tables()],
 
     error_logger:info_msg("Installation complete").
+
+get_tables() ->
+    [
+        mqtt_sub_repo,
+        mqtt_reg_repo,
+        mqtt_filter_index,
+        mqtt_topic_repo,
+        mqtt_session_repo
+    ].
+
