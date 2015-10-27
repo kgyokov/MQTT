@@ -1,7 +1,7 @@
 {application, mqtt,
     [
-        {description, ""},
-        {vsn, "1"},
+        {description, "Mqtt server"},
+        {vsn, "0.0.3"},
         {registered, []},
         {applications, [
             kernel,
