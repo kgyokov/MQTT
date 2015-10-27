@@ -26,11 +26,11 @@ read_at_least(#parse_state {buffer =  Buffer, max_buffer_size =  MaxBufferSize},
     when TotalExpected + byte_size(Buffer) > MaxBufferSize ->
     throw({error, buffer_overflow });
 
-read_at_least( #parse_state {buffer =  Buffer}, TotalExpected)
+read_at_least(#parse_state {buffer =  Buffer}, TotalExpected)
     when TotalExpected =<  byte_size(Buffer) ->
     <<Buffer/binary>>;
 
-read_at_least( S = #parse_state {readfun = ReadFun,buffer =  Buffer}, TotalExpected)
+read_at_least(S = #parse_state {readfun = ReadFun,buffer =  Buffer}, TotalExpected)
     when TotalExpected > byte_size(Buffer)->
     case ReadFun(TotalExpected - byte_size(Buffer)) of
         {ok,NewFragment} ->

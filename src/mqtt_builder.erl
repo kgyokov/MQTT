@@ -149,7 +149,7 @@ build_rest(#'PUBREL'{packet_id = PacketId})->
 build_rest(#'PUBCOMP'{packet_id = PacketId})->
     <<PacketId:16>>;
 
-%%% TODO: maybe build binaries more efficiently than lists:map)
+%%% @todo: maybe build binaries more efficiently than lists:map)
 
 %%--------------------------------------------------------
 %% Subscriptions

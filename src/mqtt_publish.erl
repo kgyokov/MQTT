@@ -110,10 +110,9 @@ log_pending_message(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
     %% so it can be easily de-duplicated at the receiver
     NewSeq = Seq + 1,
     MsgToSend = Msg#mqtt_message{seq = NewSeq},
-    NewSession = Session#session_in{
-        packet_seq = NewSeq,
-        msg_in_flight = MsgToSend,
-        qos2_rec = NewRec},
+    NewSession = Session#session_in{packet_seq = NewSeq,
+                                    msg_in_flight = MsgToSend,
+                                    qos2_rec = NewRec},
     maybe_persist(NewSession).
 
 send_pending_message(Session = #session_in{packet_seq = Seq, msg_in_flight = Msg}) ->
