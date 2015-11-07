@@ -10,6 +10,7 @@
 -module(mqtt_sub_repo).
 -author("Kalin").
 
+-include_lib("mqtt_internal_msgs.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 %% API
@@ -26,10 +27,10 @@
 
 -record(mqtt_sub, {
     filter,
-    subs,
-    topic,
-    client_id,
-    qos
+    subs        ::{topic(),qos()},
+    topic       ::binary(),
+    client_id   ::binary(),
+    qos         ::qos()
 }).
 
 
@@ -55,6 +56,8 @@
 %% Appends a new subscription OR replaces an existing one with a new QoS
 %%
 %% @end
+
+-spec add_sub(ClientId::client_id(),Filter::binary(),QoS::qos()) -> any().
 
 add_sub(ClientId, Filter, QoS) ->
     Fun =
@@ -83,6 +86,9 @@ append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
 %% Removes a subscription
 %%
 %% @end
+
+-spec remove_sub(ClientId::client_id(),Filter::binary()) -> any().
+
 remove_sub(ClientId, Filter) ->
     Fun =
         fun() ->
@@ -105,6 +111,9 @@ remove_sub(ClientId, Filter) ->
 %% per client
 %%
 %% @end
+
+-spec get_matches(Topic::topic()) -> [{ClientId::client_id(),QoS::qos()}].
+
 get_matches(Topic) ->
     Patterns = mqtt_topic:explode(Topic),
     Spec = [{

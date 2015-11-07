@@ -15,9 +15,14 @@
 -include("mqtt_internal_msgs.hrl").
 
 %% API
--export([global_route/1, fwd_message/2]).
+-export([global_route/1, fwd_message/2, call_msg_local/2, cast_msg_local/2]).
 
-
+%% @doc
+%% Takes a message and:
+%%  - Finds subscribed clients
+%%  - Finds Pids for connected clients
+%%  - Sends messages to those Pids
+%% @end
 global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
                                  content = Content,seq = Seq}) ->
     mqtt_topic_repo:enqueue(Topic,Msg),
@@ -27,7 +32,7 @@ global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
 
     error_logger:info_msg("To enqueue ~p for topic ~p",[Msg,Topic]),
     CTRPacket = {Topic,Content,Seq},
-    % Send out QoS messages, do NOT wait for response
+    %% Send out QoS messages, do NOT wait for response
     [cast_msg(NodeRegs ,CTRPacket) || NodeRegs <- QoS_0],
     %% Send out QoS 1/2 messages to registered processes and wait for response
     SyncResults = lists:flatten([call_msg(NodeRegs ,CTRPacket) || NodeRegs  <- Live]),
@@ -134,4 +139,6 @@ fwd_message(Reg = {Pid,_,QoS},CTRPacket) ->
 
 persist_message(_CTRPacket) ->
     ok.
+
+
 
