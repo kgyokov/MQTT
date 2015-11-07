@@ -27,10 +27,10 @@
 
 -record(mqtt_sub, {
     filter,
-    subs        ::{topic(),qos()},
-    topic       ::binary(),
-    client_id   ::binary(),
-    qos         ::qos()
+    subs,
+    topic,
+    client_id,
+    qos
 }).
 
 
