@@ -17,6 +17,10 @@
 %% API
 -export([global_route/1, fwd_message/2, call_msg_local/2, cast_msg_local/2]).
 
+-ifdef(TEST).
+    -export([split_regs_by_state/2]).
+-endif.
+
 %% @doc
 %% Takes a message and:
 %%  - Finds subscribed clients
@@ -74,37 +78,74 @@ split_regs_by_state(Regs,MsgQoS) ->
         QoS = min(MsgQoS,SubQoS),
         case Reg of
             {ok,Pid}  ->
-                {true,{live,{Pid,ClientId},QoS}};
+                {true,{Pid,ClientId,QoS}};
             undefined when QoS =/= ?QOS_0 ->
-                {true,{dead, ClientId, QoS}};
+                {true,{ClientId, QoS}};
             undefined when QoS =:= ?QOS_0 ->
                 false
         end
     end,Regs),
 
-    {QoS_0,QoS_Reliable} = lists:partition(fun({_,_,QoS}) -> QoS =:= ?QOS_0 end,RegStates),
-    {Live,Dead} = lists:partition(fun({State,_,_QoS}) -> State =:= live end, QoS_Reliable),
+    {Live,Dead} = lists:partition(fun(RegState) ->
+        case RegState of
+            {_,_,_} ->  true;
+            {_,_}   ->  false
+        end
+    end, RegStates),
+    {QoS_0,QoS_Rel} = lists:partition(fun({_,_,QoS}) -> QoS =:= ?QOS_0 end, Live),
 
     QoS_0_PerNode = batch_up(QoS_0),
-    Live_PerNode = batch_up(Live),
-    {QoS_0_PerNode,Live_PerNode,Dead}.
+    QoS_Rel_PerNode = batch_up(QoS_Rel),
+    {QoS_0_PerNode,QoS_Rel_PerNode,Dead}.
 
-batch_up(Regs) ->
-    RegsPerNode = group_by_node(Regs),
+%% split_regs_by_state(,Regs,MsgQoS) ->
+%%     lists:foldr(fun({ClientId,SubQoS,Reg},{QoS_0,QoS_Reliable,Dead}) ->
+%%             QoS = min(MsgQoS,SubQoS),
+%%             case Reg of
+%%                 {ok,Pid} when QoS =:= ?QOS_0->
+%%                     {
+%%                         [{Pid,ClientId,QoS}|QoS_0],
+%%                         QoS_Reliable,
+%%                         Dead
+%%                     };
+%%                 {ok,Pid} when QoS =/= ?QOS_0 ->
+%%                     {
+%%                         QoS_0,
+%%                         [{Pid,ClientId,QoS}|QoS_Reliable],
+%%                         Dead
+%%                     };
+%%                 undefined when QoS =:= ?QOS_0 ->
+%%                     {
+%%                         QoS_0,
+%%                         QoS_Reliable,
+%%                         Dead
+%%                     };
+%%                 undefined when QoS =/= ?QOS_0 ->
+%%                     {
+%%                         QoS_0,
+%%                         QoS_Reliable,
+%%                         [{ClientId,QoS},Dead]
+%%                     }
+%%             end
+%%         end,{[],[],[]},Regs).
+
+
+batch_up(ClientRegs) ->
+    RegsPerNode = group_by_node(ClientRegs),
     lists:flatmap(fun({Node,NodeRegs}) ->
-                    Batches = split_into_batches(NodeRegs,?BATCH_SIZE),
+                    Batches = split_into_batches(?BATCH_SIZE,NodeRegs),
                     lists:map(fun(Batch) -> {Node,Batch} end,Batches)
                   end,
         RegsPerNode).
 
-split_into_batches(L,Len) ->
-    split_into_batches(L,Len,[]).
+split_into_batches(Len,L) ->
+    split_into_batches(Len,L,[]).
 
-split_into_batches(L,Len,B) when length(L) > Len ->
-    {H,T} = lists:split(L,Len),
-    split_into_batches(T,Len,[H|B]);
+split_into_batches(Len,L,B) when length(L) > Len ->
+    {H,T} = lists:split(Len,L),
+    split_into_batches(Len,T,[H|B]);
 
-split_into_batches(L,Len,B) when length(L) =< Len ->
+split_into_batches(Len,L,B) when length(L) =< Len ->
     [L|B].
 
 group_by_node(Regs) ->
