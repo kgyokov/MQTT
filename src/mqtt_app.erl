@@ -10,7 +10,7 @@
 
 
 start() ->
-    application:ensure_all_started(?MODULE).
+    application:ensure_all_started(mqtt).
 
 %% ===================================================================
 %% Application callbacks
