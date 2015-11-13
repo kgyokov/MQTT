@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, subscribe/3]).
+-export([start_link/2, subscribe/4, unsubscribe/3, get_live_clients/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -27,6 +27,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
+    repo        ::module(),
     filter      ::binary(),
     clients     ::any(), %% dictionary of {ClientId::binary(),#client_reg{}}
     monitored   ::any()  %% dictionary of (MonitorRef,ClientId}
@@ -34,7 +35,7 @@
 
 -record(client_reg, {
     qos         ::qos(),
-    monitored   ::ref(),
+    monref      ::any(),
     pid         ::pid(),
     seq         ::non_neg_integer()
 }).
@@ -49,18 +50,21 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(Filter::binary()) ->
+-spec(start_link(Filter::binary(),Mod::module()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(Filter) ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [Filter], []).
+start_link(Filter,Mod) ->
+    gen_server:start_link(?MODULE, [Filter,Mod], []).
 
--spec(subscribe(Pid::pid(),ClientId::client_id(),QoS::qos())
+-spec(subscribe(Pid::pid(),ClientId::client_id(),QoS::qos(),Seq::non_neg_integer())
         -> ok).
-subscribe(Pid,ClientId,QoS) ->
-    gen_server:call(Pid,{sub,ClientId,QoS}).
+subscribe(Pid,ClientId,QoS,Seq) ->
+    gen_server:call(Pid,{sub,ClientId,QoS,Seq}).
 
-unsubscribe(Pid,ClientId) ->
-    gen_server:call(Pid,{unsub,ClientId}).
+unsubscribe(Pid,ClientId,Seq) ->
+    gen_server:call(Pid,{unsub,ClientId,Seq}).
+
+get_live_clients(Pid) ->
+    gen_server:call(Pid,get_live_clients).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -80,10 +84,9 @@ unsubscribe(Pid,ClientId) ->
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([Filter]) ->
-    {ok, #state{filter = Filter,
-                clients = orddict:new(),
-                monitored = orddict:new()}}.
+init([Filter, Repo]) ->
+    self() ! async_init,
+    {ok,#state{filter = Filter,monitored = orddict:new(),repo = Repo}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -102,42 +105,70 @@ init([Filter]) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_call({sub,ClientId,NewQoS,NewSeq},{FromPid,_},S = #state{clients = Clients,
-                                                                monitored = Mon}) ->
+handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients,
+                                                               monitored = Mon}) ->
     CurrentClient = orddict:find(ClientId,Clients),
     case CurrentClient of
         error ->
-            {NewRef,Mon1} = monitor_reg(Clients,ClientId,FromPid),
-            Clients1 = orddict:update(ClientId,{NewQoS,NewRef,FromPid,NewSeq},Clients),
+            {NewRef,Mon1} = monitor_reg(Clients,ClientId,NewPid),
+            NewVal = #client_reg{seq = NewSeq,
+                                 qos = NewQoS,
+                                 pid = NewPid,
+                                 monref = NewRef},
+            Clients1 = orddict:update(ClientId,NewVal,Clients),
             NewState = S#state{monitored = Mon1,
-                                clients = Clients1},
+                               clients = Clients1},
             {reply,ok,NewState};
-        {ok,Record} ->
-            case Record of
-                {_,_,FromPid,CurSeq} when CurSeq > NewSeq ->
-                    {reply,ok,S}; %%ignore old messages
-                {_,_,_OtherPid,CurSeq} when CurSeq > NewSeq ->
-                    {reply,duplicate,S}; %%ignore old messages
-                {NewQoS,_,FromPid,_} ->
+        {ok,CurReg} ->
+            case CurReg of
+                #client_reg{pid = OldPid, seq = CurSeq} when CurSeq > NewSeq ->
+                    if OldPid =:= NewPid -> {reply,ok,S}; %%ignore old messages from this Pid
+                        true ->             {reply,duplicate,S}
+                    end;
+                #client_reg{pid = NewPid,qos = NewQoS} ->
                     {reply,ok,S}; %% nothing to change
-                {_,_,FromPid,_} ->
+                #client_reg{pid = NewPid} ->
                     %% replace existing QoS
-                    NewVal = {NewQoS,FromPid,NewSeq},
-                    NewState = S#state{clients = orddict:update(ClientId,NewVal,Clients)},
+                    NewReg = CurReg#client_reg{qos = NewQoS,seq = NewSeq},
+                    NewState = S#state{clients = orddict:update(ClientId,NewReg,Clients)},
                     {reply,ok,NewState};
-                {_,OldRef,_,_} ->
+                #client_reg{monref = OldRef, pid = OldPid} when OldPid =/= NewPid ->
                     %% replace existing Pid
                     {_,Mon1} = demonitor_reg(Mon,OldRef),
-                    {NewRef,Mon2} = monitor_reg(Mon1,ClientId,FromPid),
-                    NewClients = orddict:update(ClientId,{NewQoS,NewRef,FromPid,NewSeq},Clients),
+                    {NewRef,Mon2} = monitor_reg(Mon1,ClientId,NewPid),
+                    NewReg = #client_reg{seq = NewSeq,
+                                         qos = NewQoS,
+                                         pid = NewPid,
+                                         monref = NewRef},
+                    NewClients = orddict:update(ClientId,NewReg,Clients),
                     NewState = S#state{clients = NewClients,
-                                        monitored = Mon2},
+                                       monitored = Mon2},
                     {reply,ok,NewState}
             end
+    end;
 
-    end,
-    NewState = ok,
-    {reply,ok,NewState};
+handle_call({unsub,ClientId,NewSeq}, _From, S = #state{clients = Clients,
+                                                        monitored = Mon}) ->
+    CurrentClient = orddict:find(ClientId,Clients),
+    case CurrentClient of
+        error ->
+            {reply,ok,S};
+        {ok,ExistingReg} ->
+            case ExistingReg of
+               #client_reg{monref = MonRef, seq = Seq} when NewSeq >= Seq ->
+                   {_,Mon1} = demonitor_reg(Mon,MonRef),
+                   Clients1 = orddict:erase(ClientId,Clients),
+                   {reply,ok,S#state{monitored = Mon1,clients = Clients1}};
+                _ ->
+                    {reply,ok,S}
+            end
+    end;
+
+handle_call(get_live_clients, _From, S = #state{clients = Clients}) ->
+    ClientPids = [
+        {ClientId,QoS,Pid} ||
+        {ClientId,#client_reg{pid = Pid,qos = QoS}} <- orddict:to_list(Clients), Pid =/= undefined],
+    {reply, ClientPids, S};
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -170,6 +201,24 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_info({'DOWN', MonitorRef, _, _, _}, S = #state{clients = Clients,
+                                                      monitored = Mon}) ->
+    {ClientId,Mon1} = demonitor_reg(Mon,MonitorRef),
+    orddict:update(ClientId,
+        fun(Reg) -> Reg#client_reg{monref = undefined,
+                                   pid = undefined}
+        end,Mon),
+    Clients1 = orddict:erase(ClientId,Clients),
+    {noreply, S#state{monitored = Mon1,clients = Clients1}};
+
+handle_info(async_init, S = #state{filter = Filter,repo = Repo}) ->
+    Subs = Repo:load(Filter),
+    S1 = load_sub(S,Subs),
+    {noreply,S1};
+%%     Clients = [{ClientId,#client_reg{qos = QoS,seq = Seq}} || {ClientId,QoS,Seq} <- Subs],
+%%     {noreply, S#state{clients = Clients,monitored = orddict:new()}};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -186,8 +235,8 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, #state{filter = Filter,repo = Repo}) ->
+    repo = Repo:clear_pid(Filter).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -208,13 +257,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
+%% handle_sub(ClientId,NewQoS,NewSeq,NewPid,S = #state{clients = Clients,
+%%                                                     monitored = Mon}) ->
+%%     ok.
 
-monitor_reg(Regs,ClientId,Pid) ->
+load_sub(S,SubRecord) ->
+    Clients = [{ClientId,#client_reg{qos = QoS,seq = Seq}} || {ClientId,QoS,Seq} <- SubRecord],
+    S#state{clients = Clients,monitored = orddict:new()}.
+
+monitor_reg(Mons,ClientId,Pid) ->
     Ref = monitor(process,Pid),
-    {Ref,orddict:store(Pid,{ClientId,Ref},Regs)}.
+    {Ref,orddict:store(Ref,ClientId,Mons)}.
 
-demonitor_reg(Regs,Pid) ->
-    {ok,{ClientId,Ref}} = orddict:find(Pid,Regs),
-    demonitor(Ref),
+demonitor_reg(Mons,Ref) ->
+    demonitor(Ref,[flush]),
+    {ok,ClientId} = orddict:find(Ref,Mons),
     {ClientId,orddict:erase(Ref)}.
 
