@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, subscribe/4, unsubscribe/3, get_live_clients/1]).
+-export([start_link/2, subscribe/4, unsubscribe/3, get_live_clients/1, new/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -60,11 +60,19 @@ start_link(Filter,Mod) ->
 subscribe(Pid,ClientId,QoS,Seq) ->
     gen_server:call(Pid,{sub,ClientId,QoS,Seq}).
 
+-spec(unsubscribe(Pid::pid(),ClientId::client_id(),Seq::non_neg_integer())
+        -> ok).
 unsubscribe(Pid,ClientId,Seq) ->
     gen_server:call(Pid,{unsub,ClientId,Seq}).
 
+-spec(get_live_clients(Pid::pid()) ->
+    [{ClientId::client_id(),QoS::qos(),Pid::pid()}]).
 get_live_clients(Pid) ->
     gen_server:call(Pid,get_live_clients).
+
+%% Hides the supervisor
+new(Filter) ->
+    ?SUPERVISOR:start_sub(Filter).
 
 %%%===================================================================
 %%% gen_server callbacks
