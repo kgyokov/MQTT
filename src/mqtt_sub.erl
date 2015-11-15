@@ -118,12 +118,12 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients
     CurrentClient = orddict:find(ClientId,Clients),
     case CurrentClient of
         error ->
-            {NewRef,Mon1} = monitor_reg(Clients,ClientId,NewPid),
+            {NewRef,Mon1} = monitor_reg(Mon,ClientId,NewPid),
             NewVal = #client_reg{seq = NewSeq,
                                  qos = NewQoS,
                                  pid = NewPid,
                                  monref = NewRef},
-            Clients1 = orddict:update(ClientId,NewVal,Clients),
+            Clients1 = orddict:store(ClientId,NewVal,Clients),
             NewState = S#state{monitored = Mon1,
                                clients = Clients1},
             {reply,ok,NewState};
@@ -138,7 +138,7 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients
                 #client_reg{pid = NewPid} ->
                     %% replace existing QoS
                     NewReg = CurReg#client_reg{qos = NewQoS,seq = NewSeq},
-                    NewState = S#state{clients = orddict:update(ClientId,NewReg,Clients)},
+                    NewState = S#state{clients = orddict:store(ClientId,NewReg,Clients)},
                     {reply,ok,NewState};
                 #client_reg{monref = OldRef, pid = OldPid} when OldPid =/= NewPid ->
                     %% replace existing Pid
@@ -148,7 +148,7 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients
                                          qos = NewQoS,
                                          pid = NewPid,
                                          monref = NewRef},
-                    NewClients = orddict:update(ClientId,NewReg,Clients),
+                    NewClients = orddict:store(ClientId,NewReg,Clients),
                     NewState = S#state{clients = NewClients,
                                        monitored = Mon2},
                     {reply,ok,NewState}
@@ -268,6 +268,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+add_client(S = #state{monitored = Mon,clients = Clients},{ClientId,NewQoS,NewSeq},NewPid) ->
+    {NewRef,Mon2} = monitor_reg(Mon,ClientId,NewPid),
+    NewReg = #client_reg{seq = NewSeq,
+                         qos = NewQoS,
+                         pid = NewPid,
+                         monref = NewRef},
+    NewClients = orddict:store(ClientId,NewReg,Clients),
+    S#state{clients = NewClients,monitored = Mon2}.
+
 
 load_sub(S,SubRecord) ->
     Clients = [{ClientId,#client_reg{qos = QoS,seq = Seq}} || {ClientId,QoS,Seq} <- SubRecord],
@@ -280,5 +289,5 @@ monitor_reg(Mons,ClientId,Pid) ->
 demonitor_reg(Mons,Ref) ->
     demonitor(Ref,[flush]),
     {ok,ClientId} = orddict:find(Ref,Mons),
-    {ClientId,orddict:erase(Ref)}.
+    {ClientId,orddict:erase(Ref,Mons)}.
 

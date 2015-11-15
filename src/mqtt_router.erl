@@ -10,7 +10,7 @@
 -module(mqtt_router).
 -author("Kalin").
 
--opaque client_reg() :: ({client_id(),qos(),pid()}).
+-opaque client_reg() :: {client_id(),qos(),pid()}.
 
 -define(BATCH_SIZE,20).
 
@@ -50,8 +50,8 @@ global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
 
 split_into_node_batches(Regs,MsgQoS) ->
     %% @todo: determine min QoS
-    RegsWQoS = [{ClientId,min(SubQoS,MsgQoS),Pid} || {ClientId,SubQoS,Pid}<- Regs],
-    {QoS_0,QoS_Rel} = lists:partition(RegsWQoS,fun({_,QoS,_}) -> QoS =:= ?QOS_0 end),
+    RegsWQoS = [{ClientId,min(SubQoS,MsgQoS),Pid} || {ClientId,SubQoS,Pid} <- Regs],
+    {QoS_0,QoS_Rel} = lists:partition(fun({_,QoS,_}) -> QoS =:= ?QOS_0 end,RegsWQoS),
     {batch_up(QoS_0),batch_up(QoS_Rel)}.
 
 batch_up(ClientRegs) ->
@@ -72,7 +72,7 @@ split_into_batches(Len,L,B) when length(L) =< Len ->
     [L|B].
 
 group_by_node(Regs) ->
-    NodeRegs = [{node(Pid), Reg} || Reg = {Pid,_,_} <- Regs],
+    NodeRegs = [{node(Pid), Reg} || Reg = {_,_,Pid} <- Regs],
     Groups = lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end, dict:new(), NodeRegs),
     dict:to_list(Groups).
 
@@ -116,7 +116,7 @@ persist_message(_CTRPacket) ->
 -spec get_client_regs(binary()) ->
     [client_reg()].
 get_client_regs(Topic) ->
-    ClientRegs = [fun mqtt_sub:get_live_clients/1 || _ <- mqtt_sub_repo:get_matching_subs(Topic)],
+    ClientRegs = [ mqtt_sub:get_live_clients(Sub) || {_Filter,Sub} <- mqtt_sub_repo:get_matching_subs(Topic)],
     lists:flatten(ClientRegs).
 
 
@@ -141,5 +141,4 @@ get_sub(Filter) ->
         error  ->
             {ok,Pid} = mqtt_sub:new(Filter),
             Pid
-    end,
-    Pid.
+    end.

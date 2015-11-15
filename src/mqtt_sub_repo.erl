@@ -167,7 +167,7 @@ get_matching_subs(Topic) ->
     Spec = [{
         #mqtt_sub{filter = '$1', pid = '$2', _ = '_'},
         [{'=:=', '$1', P}],
-        ['$2']
+        ['$1','$2']
     } || P <- Patterns],
     mnesia:dirty_select(?SUB_RECORD, Spec).
 
@@ -187,11 +187,11 @@ claim(Filter,Pid) ->
     mnesia_do(Fun).
 
 get_sub(Filter) ->
-    Spec = {
+    Spec = [{
         #mqtt_sub{filter = '$1', pid = '$2', _ = '_'},
         [{'=:=', '$1', Filter}],
         ['$2']
-    },
+    }],
     case mnesia:dirty_select(?SUB_RECORD, Spec) of
         [] -> error;
         [Pid] -> {ok,Pid}
