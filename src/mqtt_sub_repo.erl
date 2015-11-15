@@ -14,7 +14,10 @@
 -include_lib("stdlib/include/qlc.hrl").
 
 %% API
--export([create_tables/2, add_sub/3, remove_sub/2, get_matches/1, wait_for_tables/0]).
+-export([create_tables/2, wait_for_tables/0,
+    add_sub/3, remove_sub/2,
+    get_matches/1, get_matching_subs/1,
+    clear/1, load/1, get_sub/1]).
 
 -ifdef(TEST).
     -export([clear_tables/0,delete_tables/0]).
@@ -28,9 +31,8 @@
 -record(mqtt_sub, {
     filter,
     subs,
-    topic,
-    client_id,
-    qos
+    pid,
+    seq = 1
 }).
 
 
@@ -99,12 +101,31 @@ remove_sub(ClientId, Filter) ->
                     case orddict:is_key(ClientId,Subs) of
                         true ->
                             ok = mnesia:write(S#mqtt_sub{subs = orddict:erase(ClientId,Subs)});
-                        false -> ok
+                        false ->
+                            ok
                     end
             end
         end,
     mnesia_do(Fun).
 
+
+load(Filter) ->
+    load(self(),Filter).
+
+load(Pid,Filter) ->
+    Fun =
+        fun() ->
+            R =
+                case mnesia:read(?SUB_RECORD, Filter, write) of
+                    [] ->   new(Filter);
+                    [S]->   S
+                end,
+            NewSeq = R#mqtt_sub.seq,
+            mnesia:write(R#mqtt_sub{pid = Pid,seq = NewSeq+1}),
+            R#mqtt_sub.subs
+        end,
+    Subs = mnesia_do(Fun),
+    orddict:to_list(Subs).
 
 %% @doc
 %% Gets a list of ALL subscriptions matching a topic, selecting the one with the highest QoS
@@ -135,8 +156,50 @@ get_matches(Topic) ->
         orddict:new(), AllSubs),
     orddict:to_list(Merged).
 
+
+%% @doc
+%% Gets the Pids of the Subs matching the given topic
+%% @end
+-spec get_matching_subs(Topic::topic()) -> [{Filter::binary(),Pid::pid()}].
+
+get_matching_subs(Topic) ->
+    Patterns = mqtt_topic:explode(Topic),
+    Spec = [{
+        #mqtt_sub{filter = '$1', pid = '$2', _ = '_'},
+        [{'=:=', '$1', P}],
+        ['$2']
+    } || P <- Patterns],
+    mnesia:dirty_select(?SUB_RECORD, Spec).
+
+clear(Filter) ->
+    claim(Filter,undefined).
+
+claim(Filter,Pid) ->
+    Fun =
+        fun() ->
+            case mnesia:read(?SUB_RECORD,Filter,write) of
+                [] ->
+                    ok = mnesia:write(#mqtt_sub{filter = Filter,pid = Pid});
+                [S = #mqtt_sub{pid = OldPid}] when OldPid =/= Pid ->
+                    ok = mnesia:write(S#mqtt_sub{pid = Pid})
+            end
+        end,
+    mnesia_do(Fun).
+
+get_sub(Filter) ->
+    Spec = {
+        #mqtt_sub{filter = '$1', pid = '$2', _ = '_'},
+        [{'=:=', '$1', Filter}],
+        ['$2']
+    },
+    case mnesia:dirty_select(?SUB_RECORD, Spec) of
+        [] -> error;
+        [Pid] -> {ok,Pid}
+    end.
+
+
 %% ======================================================================
-%% Misc
+%% PRIVATE Misc
 %% ======================================================================
 
 mnesia_do(Fun) ->
