@@ -40,8 +40,8 @@
 subscribe(S = #session_out{subs = Subs},NewSubs) ->
     %% Maintain a flat list of subscriptions
     %% @todo: Optimize/deduplicate
-    Subs1 = lists:foldr(fun({Topic,QoS},Acc) ->
-                                orddict:store(Topic,QoS,Acc)
+    Subs1 = lists:foldr(fun({Filter,QoS},Acc) ->
+                                orddict:store(Filter,QoS,Acc)
                               end,
                              Subs, NewSubs),
     %% @todo: Deduplicate
@@ -52,8 +52,8 @@ subscribe(S = #session_out{subs = Subs},NewSubs) ->
 %% @end
 unsubscribe(S = #session_out{subs = Subs},OldSubs) ->
     S#session_out{subs =
-                  lists:foldr(fun(Topic,Acc) ->
-                                orddict:erase(Topic,Acc)
+                  lists:foldr(fun(Filter,Acc) ->
+                                orddict:erase(Filter,Acc)
                               end,
                               Subs, OldSubs)}.
 
@@ -168,7 +168,7 @@ append_retained(SO,NewSubs,Retained) ->
     {SO3,PkToSend}.
 
 get_subs(#session_out{subs = Subs}) ->
-    Subs.
+    orddict:to_list(Subs).
 
 %% =========================================================================
 %% RECOVERY

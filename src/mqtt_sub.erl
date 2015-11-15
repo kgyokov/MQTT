@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, subscribe/4, unsubscribe/3, get_live_clients/1, new/1]).
+-export([start_link/2, subscribe_self/4, unsubscribe/3, get_live_clients/1, new/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -24,7 +24,7 @@
     terminate/2,
     code_change/3]).
 
--define(SERVER, ?MODULE).
+-define(SUPERVISOR, mqtt_sub_sup).
 
 -record(state, {
     repo        ::module(),
@@ -55,9 +55,9 @@
 start_link(Filter,Mod) ->
     gen_server:start_link(?MODULE, [Filter,Mod], []).
 
--spec(subscribe(Pid::pid(),ClientId::client_id(),QoS::qos(),Seq::non_neg_integer())
+-spec(subscribe_self(Pid::pid(),ClientId::client_id(),QoS::qos(),Seq::non_neg_integer())
         -> ok).
-subscribe(Pid,ClientId,QoS,Seq) ->
+subscribe_self(Pid,ClientId,QoS,Seq) ->
     gen_server:call(Pid,{sub,ClientId,QoS,Seq}).
 
 -spec(unsubscribe(Pid::pid(),ClientId::client_id(),Seq::non_neg_integer())
@@ -248,7 +248,7 @@ handle_info(_Info, State) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
 terminate(_Reason, #state{filter = Filter,repo = Repo}) ->
-    repo = Repo:clear_pid(Filter).
+    Repo:clear(Filter).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -268,10 +268,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
-%% handle_sub(ClientId,NewQoS,NewSeq,NewPid,S = #state{clients = Clients,
-%%                                                     monitored = Mon}) ->
-%%     ok.
 
 load_sub(S,SubRecord) ->
     Clients = [{ClientId,#client_reg{qos = QoS,seq = Seq}} || {ClientId,QoS,Seq} <- SubRecord],
