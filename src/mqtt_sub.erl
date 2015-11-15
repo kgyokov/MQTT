@@ -166,7 +166,11 @@ handle_call({unsub,ClientId,NewSeq}, _From, S = #state{clients = Clients,
                #client_reg{monref = MonRef, seq = Seq} when NewSeq >= Seq ->
                    {_,Mon1} = demonitor_reg(Mon,MonRef),
                    Clients1 = orddict:erase(ClientId,Clients),
-                   {reply,ok,S#state{monitored = Mon1,clients = Clients1}};
+                   NewState = S#state{monitored = Mon1,clients = Clients1},
+                   case orddict:size(Clients1) of
+                       0 -> {reply,ok,NewState};
+                       _ -> {stop,no_clients,ok,NewState}
+                   end;
                 _ ->
                     {reply,ok,S}
             end
