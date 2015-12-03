@@ -50,7 +50,7 @@ init() ->
     wait_for_tables(Nodes).
 
 wait_for_tables(_Nodes) ->
-    [Mod:wait_for_tables() || Mod <- get_tables()].
+    [Mod:wait_for_tables() || Mod <- get_repos()].
 
 install(Nodes) ->
     install(Nodes,1).
@@ -62,11 +62,11 @@ install(Nodes,Frags) ->
     rpc:multicall(Nodes, application, ensure_started, [mnesia]),
     error_logger:info_msg("Mnesia started on all nodes"),
 
-    [Mod:create_tables(Nodes,Frags) || Mod <- get_tables()],
+    [Mod:create_tables(Nodes,Frags) || Mod <- get_repos()],
 
     error_logger:info_msg("Installation complete").
 
-get_tables() ->
+get_repos() ->
     [
         mqtt_sub_repo,
         mqtt_reg_repo,

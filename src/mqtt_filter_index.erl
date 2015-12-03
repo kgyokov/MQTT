@@ -69,7 +69,6 @@ get_matching_topics(Filters) ->
             ['$2']
         }|| Filter <- Filters],
     mnesia:dirty_select(?IDX_TABLE,Ms).
-    %%mnesia:dirty_select(?IDX_TABLE,[{#mqtt_filter_idx{filter = Filter, topic = '$1'},[],['$1']}]).
 
 
 %% ======================================================================

@@ -58,13 +58,10 @@ start_link() ->
     ignore |
     {error, Reason :: term()}).
 init([]) ->
-
     SupFlags = {simple_one_for_one, 10, 600},
-
-    AChild = {mqtt_sub, {mqtt_sub, start_link, []},
+    Child = {mqtt_sub, {mqtt_sub, start_link, []},
         transient, 2000, worker, [mqtt_sub]},
-
-    {ok, {SupFlags, [AChild]}}.
+    {ok, {SupFlags, [Child]}}.
 
 start_sub(Filter) ->
     supervisor:start_child(?MODULE,[Filter,?SUB_REPO]).
