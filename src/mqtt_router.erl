@@ -29,11 +29,9 @@ global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
                                  content = Content,seq = Seq}) ->
     mqtt_topic_repo:enqueue(Topic,Msg),
     Regs = get_client_regs(Topic),
-
     {QoS_0_PerNode,QoS_Rel_PerNode} = split_into_node_batches(Regs,MsgQoS),
     %% @todo: determine min QoS
 
-    error_logger:info_msg("To enqueue ~p for topic ~p",[Msg,Topic]),
     CTRPacket = {Topic,Content,Seq},
     %% Send out QoS messages, do NOT wait for response
     [cast_msg(NodeRegs ,CTRPacket) || NodeRegs <- QoS_0_PerNode],
@@ -48,33 +46,6 @@ global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
         _   -> error({failed_delivery,FailedRegs})
     end.
 
-split_into_node_batches(Regs,MsgQoS) ->
-    %% @todo: determine min QoS
-    RegsWQoS = [{ClientId,min(SubQoS,MsgQoS),Pid} || {ClientId,SubQoS,Pid} <- Regs],
-    {QoS_0,QoS_Rel} = lists:partition(fun({_,QoS,_}) -> QoS =:= ?QOS_0 end,RegsWQoS),
-    {batch_up(QoS_0),batch_up(QoS_Rel)}.
-
-batch_up(ClientRegs) ->
-    RegsPerNode = group_by_node(ClientRegs),
-    lists:flatmap(fun({Node,NodeRegs}) ->
-                    [{Node,Batch} || Batch <-split_into_batches(?BATCH_SIZE,NodeRegs)]
-                  end,
-        RegsPerNode).
-
-split_into_batches(Len,L) ->
-    split_into_batches(Len,L,[]).
-
-split_into_batches(Len,L,B) when length(L) > Len ->
-    {H,T} = lists:split(Len,L),
-    split_into_batches(Len,T,[H|B]);
-
-split_into_batches(Len,L,B) when length(L) =< Len ->
-    [L|B].
-
-group_by_node(Regs) ->
-    NodeRegs = [{node(Pid), Reg} || Reg = {_,_,Pid} <- Regs],
-    Groups = lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end, dict:new(), NodeRegs),
-    dict:to_list(Groups).
 
 cast_msg({Node,Regs},CTRPacket) ->
     rpc:cast(Node,?MODULE,cast_msg_local,[Regs,CTRPacket]).
@@ -101,10 +72,6 @@ fwd_message(Reg = {_,QoS,Pid},CTRPacket) ->
         exit:{noproc, _} -> {noproc,Reg}
     end.
 
-persist_message(_CTRPacket) ->
-    ok.
-
-
 %%%===================================================================
 %%% Wrap mqtt_sub and mqtt_sub_repo interaction
 %%%===================================================================
@@ -116,13 +83,25 @@ persist_message(_CTRPacket) ->
 -spec get_client_regs(binary()) ->
     [client_reg()].
 get_client_regs(Topic) ->
-    ClientRegs = [ mqtt_sub:get_live_clients(Sub) || {_Filter,Sub} <- mqtt_sub_repo:get_matching_subs(Topic)],
-    lists:flatten(ClientRegs).
+    Regs = [mqtt_sub:get_live_clients(Sub) || Sub <- get_matching_subs(Topic)],
+    Regs1 = lists:flatten(Regs),
+    Dedups = highest_qos_per_client(Regs1),
+    [{ClientId,QoS,Pid}|| {ClientId,{QoS,Pid}} <- dict:to_list(Dedups)].
+
+highest_qos_per_client(Regs) ->
+    lists:foldr(fun({ClientId,QoS,Pid}, D) ->
+        dict:update(ClientId,
+            fun ({QoS_Old,_})       when QoS_Old < QoS -> {QoS,Pid};
+                (Old = {QoS_Old,_}) when QoS_Old >= QoS -> Old
+            end,
+            {QoS,Pid},D) end,
+        dict:new(), Regs).
 
 
 subscribe(Filter,ClientId,QoS,Seq) ->
     Pid = get_sub(Filter),
     mqtt_sub:subscribe_self(Pid,ClientId,QoS,Seq).
+
 
 unsubscribe(Filter,ClientId,Seq) ->
     Pid = get_sub(Filter),
@@ -135,10 +114,62 @@ refresh_subs(ClientId,Seq,Subs) ->
          Pid
      end || {Filter,QoS} <- Subs].
 
+
+%% ========================================================================
+%% Private functions -
+%% ========================================================================
+
+split_into_node_batches(Regs,MsgQoS) ->
+    %% @todo: determine min QoS
+    RegsWQoS = [{ClientId,min(SubQoS,MsgQoS),Pid} || {ClientId,SubQoS,Pid} <- Regs],
+    {QoS_0,QoS_Rel} = lists:partition(fun({_,QoS,_}) -> QoS =:= ?QOS_0 end,RegsWQoS),
+    {batch_up(QoS_0),batch_up(QoS_Rel)}.
+
+batch_up(ClientRegs) ->
+    RegsPerNode = group_by_node(ClientRegs),
+    lists:flatmap(fun({Node,NodeRegs}) ->
+        [{Node,Batch} || Batch <-split_into_batches(?BATCH_SIZE,NodeRegs)]
+    end,
+        RegsPerNode).
+
+split_into_batches(Len,L) ->
+    split_into_batches(Len,L,[]).
+
+split_into_batches(Len,L,B) when length(L) > Len ->
+    {H,T} = lists:split(Len,L),
+    split_into_batches(Len,T,[H|B]);
+
+split_into_batches(Len,L,B) when length(L) =< Len ->
+    [L|B].
+
+group_by_node(Regs) ->
+    NodeRegs = [{node(Pid), Reg} || Reg = {_,_,Pid} <- Regs],
+    Groups = lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end, dict:new(), NodeRegs),
+    dict:to_list(Groups).
+
+
+
+%% ========================================================================
+%% Private functions
+%% ========================================================================
+
 get_sub(Filter) ->
     case mqtt_sub_repo:get_sub(Filter) of
-        {ok,Pid} -> Pid;
-        error  ->
-            {ok,Pid} = mqtt_sub:new(Filter),
-            Pid
+        {ok,Pid} -> maybe_create_new_sub(Filter,Pid);
+        error  -> create_new_sub(Filter)
     end.
+
+get_matching_subs(Topic) ->
+    [ maybe_create_new_sub(Filter,Sub)
+        || {Filter,Sub} <- mqtt_sub_repo:get_matching_subs(Topic)].
+
+maybe_create_new_sub(Filter,Pid) ->
+    case is_pid(Pid) andalso is_process_alive(Pid) of
+        true -> Pid;
+        false -> create_new_sub(Filter)
+    end.
+
+create_new_sub(Filter) ->
+    error_logger:info_msg("Crearing new sub for ~p~n", [Filter]),
+    {ok,Pid} = mqtt_sub:new(Filter),
+    Pid.

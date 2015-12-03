@@ -284,7 +284,7 @@ handle_cast(_Request, State) ->
 
 
 handle_info({async_init,ClientId}, S = #state{is_persistent = IsPersistent}) ->
-    error_logger:info_msg("Registerin as ~p", [ClientId]),
+    error_logger:info_msg("Registering as ~p", [ClientId]),
     {Result,NewSeq} = mqtt_reg_repo:register(ClientId),
     %% Close duplicate registered Pids
     case Result of
@@ -299,7 +299,7 @@ handle_info({async_init,ClientId}, S = #state{is_persistent = IsPersistent}) ->
                             SO;
                         true  ->
                             %% Clear exsiting subscriptions
-                            [mqtt_router:unsubscribe(Filter,ClientId,S#state.seq)
+                            [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
                                 || {Filter,_} <- mqtt_session:get_subs(SO)],
                             SO1 = mqtt_session:new(),
                             %% save empty session
@@ -373,6 +373,37 @@ code_change(_OldVsn, State, _Extra) ->
 %%         end,
 %%     S#state{session = SO2}.
 
+
+perform_registrations(S = #state{is_persistent = IsPersistent}, ClientId) ->
+    error_logger:info_msg("Registering as ~p", [ClientId]),
+    {Result,NewSeq} = mqtt_reg_repo:register(ClientId),
+    %% Close duplicate registered Pids
+    case Result of
+        ok ->   ok;
+        {dup_detected,DupPid} -> close_duplicate(DupPid)
+    end,
+    %% Either load an existing session of create a new one
+    SO2 =
+        case mqtt_session_repo:load(ClientId) of
+            {error,not_found} -> mqtt_session:new();
+            SO -> if  IsPersistent ->
+                SO;
+                      true  ->
+                          %% Clear exsiting subscriptions
+                          [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
+                              || {Filter,_} <- mqtt_session:get_subs(SO)],
+                          SO1 = mqtt_session:new(),
+                          %% save empty session
+                          mqtt_session_repo:save(ClientId,SO1),
+                          SO1
+                  end
+        end,
+    %% Recover messages in flight and re-send them
+    [send_to_client(S, Packet) || Packet <- mqtt_session:msg_in_flight(SO2)],
+    %% Refresh the subscriptions
+    mqtt_router:refresh_subs(ClientId,NewSeq,mqtt_session:get_subs(SO2)),
+    {noreply, S#state{seq = NewSeq,session = SO2}}.
+
 send_to_client(#state{sender = Sender}, Packet) ->
     send_to_client(Sender, Packet);
 
@@ -381,8 +412,8 @@ send_to_client(Sender, Packet) ->
 
 maybe_clear_session(#state{session = SO,client_id = ClientId,is_persistent = IsPers,seq = Seq}) ->
     if  not IsPers ->
-            Subs = mqtt_session:get_subs(SO),
-            [mqtt_router:unsubscribe(ClientId,Filter,Seq)|| {Filter,_QoS}  <- Subs],ok;
+            [mqtt_router:unsubscribe(ClientId,Filter,Seq) ||
+                {Filter,_QoS}  <- mqtt_session:get_subs(SO)],ok;
         true -> ok
     end.
 

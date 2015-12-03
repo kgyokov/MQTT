@@ -120,8 +120,8 @@ load(Pid,Filter) ->
                     [] ->   new(Filter);
                     [S]->   S
                 end,
-            NewSeq = R#mqtt_sub.seq,
-            mnesia:write(R#mqtt_sub{pid = Pid,seq = NewSeq+1}),
+            NewSeq = R#mqtt_sub.seq + 1,
+            mnesia:write(R#mqtt_sub{pid = Pid,seq = NewSeq}),
             R#mqtt_sub.subs
         end,
     Subs = mnesia_do(Fun),
@@ -167,9 +167,9 @@ get_matching_subs(Topic) ->
     Spec = [{
         #mqtt_sub{filter = '$1', pid = '$2', _ = '_'},
         [{'=:=', '$1', P}],
-        ['$1','$2']
+        [['$1','$2']]
     } || P <- Patterns],
-    mnesia:dirty_select(?SUB_RECORD, Spec).
+    [{F,P}|| [F,P]<- mnesia:dirty_select(?SUB_RECORD, Spec)].
 
 clear(Filter) ->
     claim(Filter,undefined).
@@ -181,7 +181,8 @@ claim(Filter,Pid) ->
                 [] ->
                     ok = mnesia:write(#mqtt_sub{filter = Filter,pid = Pid});
                 [S = #mqtt_sub{pid = OldPid}] when OldPid =/= Pid ->
-                    ok = mnesia:write(S#mqtt_sub{pid = Pid})
+                    ok = mnesia:write(S#mqtt_sub{pid = Pid});
+                _ -> ok
             end
         end,
     mnesia_do(Fun).
@@ -205,8 +206,8 @@ get_sub(Filter) ->
 mnesia_do(Fun) ->
     mnesia:activity(transaction,Fun,[],mnesia_frag).
 
-new(Topic) ->
-    #mqtt_sub{filter = Topic, subs = orddict:new()}.
+new(Filter) ->
+    #mqtt_sub{filter = Filter, subs = orddict:new()}.
 
 
 %% ======================================================================
