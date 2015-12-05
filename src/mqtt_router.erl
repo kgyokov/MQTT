@@ -17,7 +17,12 @@
 -include("mqtt_internal_msgs.hrl").
 
 %% API
--export([global_route/1, fwd_message/2, call_msg_local/2, cast_msg_local/2, subscribe/4, unsubscribe/3, refresh_subs/3]).
+-export([global_route/1, fwd_message/2, call_msg_local/2, cast_msg_local/2,
+    subscribe/4, unsubscribe/3, refresh_subs/3]).
+
+-ifdef(TEST).
+    -export([get_batches_to_send/2]).
+-endif.
 
 %% @doc
 %% Takes a message and:
@@ -27,12 +32,17 @@
 %% @end
 global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
                                  content = Content,seq = Seq}) ->
+    %% Side effects
     mqtt_topic_repo:enqueue(Topic,Msg),
-    Regs = get_client_regs(Topic),
-    {QoS_0_PerNode,QoS_Rel_PerNode} = split_into_node_batches(Regs,MsgQoS),
+    Regs = get_registered_clients(Topic),
+
+    %% Pure
     %% @todo: determine min QoS
+    {QoS_0_PerNode,QoS_Rel_PerNode} = get_batches_to_send(Regs,MsgQoS),
 
     CTRPacket = {Topic,Content,Seq},
+
+    %% Side effects
     %% Send out QoS messages, do NOT wait for response
     [cast_msg(NodeRegs ,CTRPacket) || NodeRegs <- QoS_0_PerNode],
     %% Send out QoS 1/2 messages to registered processes and wait for response
@@ -80,23 +90,12 @@ fwd_message(Reg = {_,QoS,Pid},CTRPacket) ->
 %% Get the Pids of connected clients matching the topic
 %%
 %% @end
--spec get_client_regs(binary()) ->
+-spec get_registered_clients(binary()) ->
     [client_reg()].
-get_client_regs(Topic) ->
-    Regs = [mqtt_sub:get_live_clients(Sub) || Sub <- get_matching_subs(Topic)],
-    Regs1 = lists:flatten(Regs),
-    Dedups = highest_qos_per_client(Regs1),
-    [{ClientId,QoS,Pid}|| {ClientId,{QoS,Pid}} <- dict:to_list(Dedups)].
-
-highest_qos_per_client(Regs) ->
-    lists:foldr(fun({ClientId,QoS,Pid}, D) ->
-        dict:update(ClientId,
-            fun ({QoS_Old,_})       when QoS_Old < QoS -> {QoS,Pid};
-                (Old = {QoS_Old,_}) when QoS_Old >= QoS -> Old
-            end,
-            {QoS,Pid},D) end,
-        dict:new(), Regs).
-
+get_registered_clients(Topic) ->
+    lists:flatten(
+        [mqtt_sub:get_live_clients(Sub) || Sub <- get_matching_subs(Topic)]
+    ).
 
 subscribe(Filter,ClientId,QoS,Seq) ->
     Pid = get_sub(Filter),
@@ -116,22 +115,37 @@ refresh_subs(ClientId,Seq,Subs) ->
 
 
 %% ========================================================================
-%% Private functions -
+%% Private functions - side effect free
 %% ========================================================================
 
-split_into_node_batches(Regs,MsgQoS) ->
-    %% @todo: determine min QoS
-    RegsWQoS = [{ClientId,min(SubQoS,MsgQoS),Pid} || {ClientId,SubQoS,Pid} <- Regs],
-    {QoS_0,QoS_Rel} = lists:partition(fun({_,QoS,_}) -> QoS =:= ?QOS_0 end,RegsWQoS),
-    {batch_up(QoS_0),batch_up(QoS_Rel)}.
+get_batches_to_send(Regs,MsgQoS) ->
+    Regs1 = dedup_registered_clients(Regs),
+    Regs2 = [{ClientId,min(SubQoS,MsgQoS),Pid} || {ClientId,SubQoS,Pid} <- Regs1],
+    {QoS_0,QoS_Rel} = lists:partition(fun({_,QoS,_}) -> QoS =:= ?QOS_0 end,Regs2),
+    {batch_per_node(QoS_0), batch_per_node(QoS_Rel)}.
 
-batch_up(ClientRegs) ->
+dedup_registered_clients(Regs) ->
+    Dedups = highest_qos_per_client(Regs),
+    [{ClientId,QoS,Pid}|| {ClientId,{QoS,Pid}} <- dict:to_list(Dedups)].
+
+highest_qos_per_client(Regs) ->
+    lists:foldr(fun({ClientId,QoS,Pid}, D) ->
+        dict:update(ClientId,
+            fun ({QoS_Old,_})       when QoS_Old < QoS -> {QoS,Pid};
+                (Old = {QoS_Old,_}) when QoS_Old >= QoS -> Old
+            end,
+            {QoS,Pid},D) end,
+        dict:new(), Regs).
+
+batch_per_node(ClientRegs) ->
     RegsPerNode = group_by_node(ClientRegs),
     lists:flatmap(fun({Node,NodeRegs}) ->
         [{Node,Batch} || Batch <-split_into_batches(?BATCH_SIZE,NodeRegs)]
     end,
         RegsPerNode).
 
+
+%% @todo: Move to a utility module/library
 split_into_batches(Len,L) ->
     split_into_batches(Len,L,[]).
 
@@ -170,6 +184,6 @@ maybe_create_new_sub(Filter,Pid) ->
     end.
 
 create_new_sub(Filter) ->
-    error_logger:info_msg("Crearing new sub for ~p~n", [Filter]),
+    error_logger:info_msg("Creating new sub for ~p~n", [Filter]),
     {ok,Pid} = mqtt_sub:new(Filter),
     Pid.

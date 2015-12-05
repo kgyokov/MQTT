@@ -280,10 +280,6 @@ handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = true}, S) ->
 %% Valid complete packet!
 handle_packet(Packet = #'CONNECT'{},
               S = #state{connect_state = connecting}) ->
-
-    %%=======================================================================
-    %% @todo: validate connect packet
-    %%=======================================================================
     NewState =
             try
                 S1 = authorize(Packet,S),
@@ -296,7 +292,7 @@ handle_packet(Packet = #'CONNECT'{},
     {noreply,NewState};
 
 %% Catch- all case
-handle_packet(Packet, S = #state{ connect_state = connecting})
+handle_packet(Packet, S = #state{connect_state = connecting})
     when not is_record(Packet, 'CONNECT') ->
     prevent_connection(S, 'CONNECT_expected');
 
