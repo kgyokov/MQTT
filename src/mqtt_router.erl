@@ -178,7 +178,7 @@ get_matching_subs(Topic) ->
         || {Filter,Sub} <- mqtt_sub_repo:get_matching_subs(Topic)].
 
 maybe_create_new_sub(Filter,Pid) ->
-    case is_pid(Pid) andalso is_process_alive(Pid) of
+    case is_pid(Pid) andalso rpc:pinfo(Pid,status) =/= undefined of
         true -> Pid;
         false -> create_new_sub(Filter)
     end.
