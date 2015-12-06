@@ -29,10 +29,10 @@
 -define(SUB_RECORD, mqtt_sub).
 
 -record(mqtt_sub, {
-    filter,
-    subs,
-    pid,
-    seq = 1
+    filter  ::binary(),
+    subs    ::any(),
+    pid     ::pid(),
+    seq = 1 ::integer()
 }).
 
 
@@ -89,7 +89,7 @@ append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
 %%
 %% @end
 
--spec remove_sub(ClientId::client_id(),Filter::binary()) -> any().
+-spec remove_sub(ClientId::client_id(),Filter::binary()) -> ok.
 
 remove_sub(ClientId, Filter) ->
     Fun =
@@ -109,9 +109,16 @@ remove_sub(ClientId, Filter) ->
     mnesia_do(Fun).
 
 
+
+%% @doc
+%% Locks a given Filter to a process and loads a list of subscriptions for that filter
+%% @end
+
+-spec load(Filter::binary()) -> [{ClientId::client_id(),QoS::qos()}].
 load(Filter) ->
     load(self(),Filter).
 
+-spec load(Pid::pid,Filter::binary()) -> [{ClientId::client_id(),QoS::qos()}].
 load(Pid,Filter) ->
     Fun =
         fun() ->
@@ -225,7 +232,7 @@ delete_tables() ->
 -endif.
 
 wait_for_tables() ->
-    mnesia:wait_for_tables(?SUB_RECORD,5000).
+    ok = mnesia:wait_for_tables([?SUB_RECORD],5000).
 
 %% @doc
 %%

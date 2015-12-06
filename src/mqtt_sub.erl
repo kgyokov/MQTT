@@ -119,6 +119,7 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients
     case CurrentClient of
         error ->
             S1 = store_client_reg(S,{ClientId,NewQoS,NewSeq},NewPid),
+            mqtt_sub_repo:add_sub(ClientId,S#state.filter,NewQoS),
             {reply,ok,S1};
         {ok,CurReg} ->
             case CurReg of
@@ -136,6 +137,7 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients
                         ClientId,
                         CurReg#client_reg{qos = NewQoS,seq = NewSeq},
                         Clients)},
+                    mqtt_sub_repo:add_sub(ClientId,S#state.filter,NewQoS),
                     {reply,ok,S1};
                 #client_reg{monref = OldRef, pid = OldPid} when OldPid =/= NewPid ->
                     %% replace existing Pid
@@ -158,6 +160,7 @@ handle_call({unsub,ClientId,NewSeq}, _From, S = #state{clients = Clients,
                    Clients1 = orddict:erase(ClientId,Clients),
                    S1 = S#state{monref_idx = Mon1,
                                 clients = Clients1},
+                   mqtt_sub_repo:remove_sub(ClientId,S#state.filter),
                    case orddict:size(Clients1) of
                        0 -> {reply,ok,S1}; %% {stop,no_clients,ok,NewState};
                        _ -> {reply,ok,S1}
@@ -279,35 +282,35 @@ store_client_reg(S = #state{monref_idx = Mon,clients = Clients},{ClientId,NewQoS
     Clients1 = orddict:store(ClientId,NewReg,Clients),
     S#state{clients = Clients1, monref_idx = Mon1}.
 
-remove_sub(S = #state{monref_idx = Mon,clients = Clients},ClientId) ->
-    case orddict:find(ClientId,Clients) of
-        error ->
-            S;
-        {ok,#client_reg{monref = MonRef}} ->
-            Clients1 = orddict:erase(ClientId,Clients),
-            Mon1 = case MonRef of
-                        undefined -> Mon;
-                        _ ->
-                            demonitor(MonRef,[flush]),
-                            orddict:erase(MonRef,Mon)
-                   end,
-            S#state{clients = Clients1,monref_idx = Mon1}
-    end.
-
-process_down(S = #state{monref_idx = Mon,clients = Clients},MonRef) ->
-    case orddict:find(MonRef,Mon) of
-        error -> S;
-        {ok,ClientId} ->
-            Mon1 = orddict:erase(MonRef,Mon),
-            Clients1 = orddict:update(ClientId,
-                                        fun(Reg) -> Reg#client_reg{pid = undefined,monref = undefined} end,
-                                    Clients),
-            S#state{monref_idx = Mon1,clients = Clients1}
-    end.
-
-
-replace_sub(S = #state{monref_idx = Mon,clients = Clients},{ClientId,NewQoS,NewSeq},NewPid) ->
-    ok.
+%% remove_sub(S = #state{monref_idx = Mon,clients = Clients},ClientId) ->
+%%     case orddict:find(ClientId,Clients) of
+%%         error ->
+%%             S;
+%%         {ok,#client_reg{monref = MonRef}} ->
+%%             Clients1 = orddict:erase(ClientId,Clients),
+%%             Mon1 = case MonRef of
+%%                         undefined -> Mon;
+%%                         _ ->
+%%                             demonitor(MonRef,[flush]),
+%%                             orddict:erase(MonRef,Mon)
+%%                    end,
+%%             S#state{clients = Clients1,monref_idx = Mon1}
+%%     end.
+%%
+%% process_down(S = #state{monref_idx = Mon,clients = Clients},MonRef) ->
+%%     case orddict:find(MonRef,Mon) of
+%%         error -> S;
+%%         {ok,ClientId} ->
+%%             Mon1 = orddict:erase(MonRef,Mon),
+%%             Clients1 = orddict:update(ClientId,
+%%                                         fun(Reg) -> Reg#client_reg{pid = undefined,monref = undefined} end,
+%%                                     Clients),
+%%             S#state{monref_idx = Mon1,clients = Clients1}
+%%     end.
+%%
+%%
+%% replace_sub(S = #state{monref_idx = Mon,clients = Clients},{ClientId,NewQoS,NewSeq},NewPid) ->
+%%     ok.
 
 
 

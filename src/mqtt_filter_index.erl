@@ -89,7 +89,7 @@ create_tables(Nodes,_NFragments) ->
     end.
 
 wait_for_tables() ->
-    mnesia:wait_for_tables(?IDX_TABLE,5000).
+    ok = mnesia:wait_for_tables([?IDX_TABLE],5000).
 
 -ifdef(TEST).
 

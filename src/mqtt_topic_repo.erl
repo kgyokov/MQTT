@@ -157,7 +157,7 @@ create_tables(Nodes,NFragments) ->
     end.
 
 wait_for_tables()->
-    mnesia:wait_for_tables(?TOPIC_RECORD,5000).
+    ok = mnesia:wait_for_tables([?TOPIC_RECORD],5000).
 
 
 
