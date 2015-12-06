@@ -119,7 +119,7 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients
     case CurrentClient of
         error ->
             S1 = store_client_reg(S,{ClientId,NewQoS,NewSeq},NewPid),
-            mqtt_sub_repo:add_sub(ClientId,S#state.filter,NewQoS),
+            mqtt_sub_repo:save_sub(ClientId,S#state.filter,NewQoS),
             {reply,ok,S1};
         {ok,CurReg} ->
             case CurReg of
@@ -137,7 +137,7 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients
                         ClientId,
                         CurReg#client_reg{qos = NewQoS,seq = NewSeq},
                         Clients)},
-                    mqtt_sub_repo:add_sub(ClientId,S#state.filter,NewQoS),
+                    mqtt_sub_repo:save_sub(ClientId,S#state.filter,NewQoS),
                     {reply,ok,S1};
                 #client_reg{monref = OldRef, pid = OldPid} when OldPid =/= NewPid ->
                     %% replace existing Pid

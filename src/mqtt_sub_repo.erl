@@ -15,7 +15,7 @@
 
 %% API
 -export([create_tables/2, wait_for_tables/0,
-    add_sub/3, remove_sub/2,
+    save_sub/3, remove_sub/2,
     get_matches/1, get_matching_subs/1,
     clear/1, load/1, get_sub/1]).
 
@@ -59,9 +59,9 @@
 %%
 %% @end
 
--spec add_sub(ClientId::client_id(),Filter::binary(),QoS::qos()) -> any().
+-spec save_sub(ClientId::client_id(),Filter::binary(),QoS::qos()) -> any().
 
-add_sub(ClientId, Filter, QoS) ->
+save_sub(ClientId, Filter, QoS) ->
     Fun =
         fun() ->
             R =
@@ -74,13 +74,13 @@ add_sub(ClientId, Filter, QoS) ->
                 {ok, QoS} ->
                     {ok,existing};
                 _  ->
-                    append_sub(R,ClientId,QoS),
+                    persist_sub(R,ClientId,QoS),
                     {ok,new}
             end
         end,
     mnesia_do(Fun).
 
-append_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
+persist_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
     mnesia:write(R#mqtt_sub{subs = orddict:store(ClientId,QoS,Subs)}).
 
 
