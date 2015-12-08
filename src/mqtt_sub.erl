@@ -25,6 +25,7 @@
     code_change/3]).
 
 -define(SUPERVISOR, mqtt_sub_sup).
+-define(REPO, mqtt_sub_repo).
 
 -record(state, {
     repo        ::module(),
@@ -113,13 +114,15 @@ init([Filter, Repo]) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients,
+handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{filter = Filter,
+                                                               clients = Clients,
                                                                monref_idx = Mon}) ->
+    NewSub = {ClientId,NewQoS,NewSeq,NewPid},
     CurrentClient = orddict:find(ClientId,Clients),
     case CurrentClient of
         error ->
-            S1 = store_client_reg(S,{ClientId,NewQoS,NewSeq},NewPid),
-            mqtt_sub_repo:save_sub(ClientId,S#state.filter,NewQoS),
+            S1 = set_sub(S,NewSub),
+            mqtt_sub_repo:save_sub(Filter,NewSub),
             {reply,ok,S1};
         {ok,CurReg} ->
             case CurReg of
@@ -137,12 +140,13 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{clients = Clients
                         ClientId,
                         CurReg#client_reg{qos = NewQoS,seq = NewSeq},
                         Clients)},
-                    mqtt_sub_repo:save_sub(ClientId,S#state.filter,NewQoS),
+                    mqtt_sub_repo:save_sub(Filter,NewSub),
                     {reply,ok,S1};
                 #client_reg{monref = OldRef, pid = OldPid} when OldPid =/= NewPid ->
                     %% replace existing Pid
                     S1 = S#state{monref_idx = maybe_demonitor_reg(OldRef,Mon)},
-                    S2 = store_client_reg(S1,{ClientId,NewQoS,NewSeq},NewPid),
+                    S2 = set_sub(S1,NewSub),
+                    mqtt_sub_repo:save_sub(Filter,NewSub),
                     {reply,ok,S2}
             end
     end;
@@ -160,7 +164,7 @@ handle_call({unsub,ClientId,NewSeq}, _From, S = #state{clients = Clients,
                    Clients1 = orddict:erase(ClientId,Clients),
                    S1 = S#state{monref_idx = Mon1,
                                 clients = Clients1},
-                   mqtt_sub_repo:remove_sub(ClientId,S#state.filter),
+                   mqtt_sub_repo:remove_sub(S#state.filter,ClientId),
                    case orddict:size(Clients1) of
                        0 -> {reply,ok,S1}; %% {stop,no_clients,ok,NewState};
                        _ -> {reply,ok,S1}
@@ -220,6 +224,7 @@ handle_info({'DOWN', MonRef, _, _, _}, S = #state{clients = Clients,
                                 end,
                                 Clients),
                 Mon1 = orddict:erase(MonRef,Mon),
+                mqtt_sub_repo:save_sub(S#state.filter,{ClientId,?QOS_0,1,undefined}),
                 S#state{monref_idx = Mon1,clients = Clients1};
             error -> S
         end,
@@ -272,7 +277,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-store_client_reg(S = #state{monref_idx = Mon,clients = Clients},{ClientId,NewQoS,NewSeq},NewPid) ->
+set_sub(S = #state{monref_idx = Mon,clients = Clients},{ClientId,NewQoS,NewSeq,NewPid}) ->
     MonRef = monitor(process,NewPid),
     Mon1 = orddict:store(MonRef,ClientId,Mon),
     NewReg = #client_reg{seq = NewSeq,
@@ -315,8 +320,10 @@ store_client_reg(S = #state{monref_idx = Mon,clients = Clients},{ClientId,NewQoS
 
 
 load_sub(S,SubRecord) ->
-    Clients = [{ClientId,#client_reg{qos = QoS,seq = Seq}} || {ClientId,QoS,Seq} <- SubRecord],
-    S#state{clients = Clients, monref_idx = orddict:new()}.
+    lists:foldr(fun({ClientId,QoS,ClientPid}) ->
+                    set_sub(S,{ClientId,QoS,1,ClientPid})
+                end,
+        S,SubRecord).
 
 
 maybe_demonitor_reg(undefined,Mons) ->

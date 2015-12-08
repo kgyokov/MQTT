@@ -15,7 +15,7 @@
 
 %% API
 -export([create_tables/2, wait_for_tables/0,
-    save_sub/3, remove_sub/2,
+    save_sub/2, remove_sub/2,
     get_matches/1, get_matching_subs/1,
     clear/1, load/1, get_sub/1]).
 
@@ -56,12 +56,19 @@
 
 %% @doc
 %% Appends a new subscription OR replaces an existing one with a new QoS
-%%
 %% @end
 
--spec save_sub(ClientId::client_id(),Filter::binary(),QoS::qos()) -> any().
+-spec save_sub(ClientId::client_id(),
+    {
+        Filter::binary(),
+        QoS::qos(),
+        Seq::integer(),
+        ClientPid::pid()}
+) ->
+    {ok,Result::any()}.
 
-save_sub(ClientId, Filter, QoS) ->
+save_sub(Filter,{ClientId,QoS,Seq,ClientPid}) ->
+    ClientReg = {QoS,Seq,ClientPid},
     Fun =
         fun() ->
             R =
@@ -71,17 +78,17 @@ save_sub(ClientId, Filter, QoS) ->
                 end,
             #mqtt_sub{subs = Subs} = R,
             case orddict:find(ClientId,Subs) of
-                {ok, QoS} ->
+                {ok, ClientReg} ->
                     {ok,existing};
                 _  ->
-                    persist_sub(R,ClientId,QoS),
+                    persist_sub(R,ClientId,ClientReg),
                     {ok,new}
             end
         end,
     mnesia_do(Fun).
 
-persist_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
-    mnesia:write(R#mqtt_sub{subs = orddict:store(ClientId,QoS,Subs)}).
+persist_sub(R =  #mqtt_sub{subs = Subs},ClientId,ClientReg) ->
+    mnesia:write(R#mqtt_sub{subs = orddict:store(ClientId,ClientReg,Subs)}).
 
 
 %% @doc
@@ -89,9 +96,9 @@ persist_sub(R =  #mqtt_sub{subs = Subs}, ClientId,QoS) ->
 %%
 %% @end
 
--spec remove_sub(ClientId::client_id(),Filter::binary()) -> ok.
+-spec remove_sub(Filter::binary(),ClientId::client_id()) -> ok.
 
-remove_sub(ClientId, Filter) ->
+remove_sub(Filter,ClientId) ->
     Fun =
         fun() ->
             case mnesia:read(?SUB_RECORD,Filter,write) of
@@ -114,11 +121,11 @@ remove_sub(ClientId, Filter) ->
 %% Locks a given Filter to a process and loads a list of subscriptions for that filter
 %% @end
 
--spec load(Filter::binary()) -> [{ClientId::client_id(),QoS::qos()}].
+-spec load(Filter::binary()) -> [{ClientId::client_id(),QoS::qos(),Seq::integer(),ClientPid::pid()}].
 load(Filter) ->
     load(self(),Filter).
 
--spec load(Pid::pid,Filter::binary()) -> [{ClientId::client_id(),QoS::qos()}].
+-spec load(Pid::pid,Filter::binary()) -> [{ClientId::client_id(),QoS::qos(),Seq::integer(),ClientPid::pid()}].
 load(Pid,Filter) ->
     Fun =
         fun() ->
@@ -132,7 +139,7 @@ load(Pid,Filter) ->
             R#mqtt_sub.subs
         end,
     Subs = mnesia_do(Fun),
-    orddict:to_list(Subs).
+    [{ClientId,QoS,Seq,ClientPid} || {ClientId,{QoS,Seq,ClientPid}} <- orddict:to_list(Subs)].
 
 %% @doc
 %% Gets a list of ALL subscriptions matching a topic, selecting the one with the highest QoS
@@ -140,7 +147,7 @@ load(Pid,Filter) ->
 %%
 %% @end
 
--spec get_matches(Topic::topic()) -> [{ClientId::client_id(),QoS::qos()}].
+-spec get_matches(Topic::topic()) -> [{ClientId::client_id(),QoS::qos(),ClientPid::pid()}].
 
 get_matches(Topic) ->
     Patterns = mqtt_topic:explode(Topic),
