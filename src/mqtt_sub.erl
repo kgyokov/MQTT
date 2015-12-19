@@ -34,11 +34,12 @@
     monref_idx  ::any()  %% dictionary of (MonitorRef,ClientId}
 }).
 
--record(client_reg, {
-    qos         ::qos(),
-    monref      ::any(),
-    pid         ::pid(),
-    seq         ::non_neg_integer()
+-record(client_sub, {
+    qos         ::qos(), %% QoS for this client subscription
+    monref      ::any(), %% monitor reference for the process handling the client
+    pid         ::pid(), %% Process id of the process handling the client
+    client_seq  ::non_neg_integer() %% the version number of the client process registration
+                                    %% (incremented every time a new client process is spawned)
 }).
 
 %%%===================================================================
@@ -126,23 +127,23 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{filter = Filter,
             {reply,ok,S1};
         {ok,CurReg} ->
             case CurReg of
-                #client_reg{pid = OldPid, seq = CurSeq} when CurSeq > NewSeq ->
+                #client_sub{pid = OldPid, client_seq = CurSeq} when CurSeq > NewSeq ->
                     if OldPid =:= NewPid; OldPid =:= undefined ->
                             {reply,ok,S}; %%ignore old messages from this Pid
                         true ->
                             {reply,duplicate,S} %% this is an old process
                     end;
-                #client_reg{pid = NewPid,qos = NewQoS} ->
+                #client_sub{pid = NewPid,qos = NewQoS} ->
                     {reply,ok,S}; %% nothing to change
-                #client_reg{pid = NewPid} ->
+                #client_sub{pid = NewPid} ->
                     mqtt_sub_repo:save_sub(Filter,NewSub),
                     %% replace existing QoS and Seq
                     S1 = S#state{clients = orddict:store(
                         ClientId,
-                        CurReg#client_reg{qos = NewQoS,seq = NewSeq},
+                        CurReg#client_sub{qos = NewQoS, client_seq = NewSeq},
                         Clients)},
                     {reply,ok,S1};
-                #client_reg{monref = OldRef, pid = OldPid} when OldPid =/= NewPid ->
+                #client_sub{monref = OldRef, pid = OldPid} when OldPid =/= NewPid ->
                     mqtt_sub_repo:save_sub(Filter,NewSub),
                     %% replace existing Pid
                     S1 = S#state{monref_idx = maybe_demonitor_reg(OldRef,Mon)},
@@ -159,13 +160,13 @@ handle_call({unsub,ClientId,NewSeq}, _From, S = #state{clients = Clients,
             {reply,ok,S};
         {ok,ExistingReg} ->
             case ExistingReg of
-               #client_reg{monref = MonRef, seq = Seq} when NewSeq >= Seq ->
+               #client_sub{monref = MonRef, client_seq = Seq} when NewSeq >= Seq ->
                    mqtt_sub_repo:remove_sub(S#state.filter,ClientId),
                    Mon1 = maybe_demonitor_reg(MonRef,Mon),
                    Clients1 = orddict:erase(ClientId,Clients),
                    S1 = S#state{monref_idx = Mon1,clients = Clients1},
                    case orddict:size(Clients1) of
-                       0 -> {reply,ok,S1}; %% {stop,no_clients,ok,NewState};
+                       0 -> {stop,no_clients,ok,S1};
                        _ -> {reply,ok,S1}
                    end;
                 _ ->
@@ -176,7 +177,7 @@ handle_call({unsub,ClientId,NewSeq}, _From, S = #state{clients = Clients,
 handle_call(get_live_clients, _From, S = #state{clients = Clients}) ->
     ClientPids = [
         {ClientId,QoS,Pid} ||
-        {ClientId,#client_reg{pid = Pid,qos = QoS}} <- orddict:to_list(Clients), Pid =/= undefined],
+        {ClientId,#client_sub{pid = Pid,qos = QoS}} <- orddict:to_list(Clients), Pid =/= undefined],
     {reply, ClientPids, S};
 
 handle_call(_Request, _From, State) ->
@@ -220,7 +221,7 @@ handle_info({'DOWN', MonRef, _, _, _}, S = #state{filter = Filter,
                 mqtt_sub_repo:clear_sub_pid(Filter,ClientId),
                 Clients1 = orddict:update(ClientId,
                                 fun(Reg) ->
-                                    Reg#client_reg{monref = undefined,
+                                    Reg#client_sub{monref = undefined,
                                                    pid = undefined}
                                 end,
                                 Clients),
@@ -277,7 +278,7 @@ code_change(_OldVsn, State, _Extra) ->
 set_sub(S = #state{monref_idx = Mon,clients = Clients},{ClientId,NewQoS,NewSeq,NewPid}) ->
     MonRef = monitor(process,NewPid),
     Mon1 = orddict:store(MonRef,ClientId,Mon),
-    NewReg = #client_reg{seq = NewSeq,
+    NewReg = #client_sub{client_seq = NewSeq,
                          qos = NewQoS,
                          pid = NewPid,
                          monref = MonRef},
