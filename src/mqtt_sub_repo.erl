@@ -15,7 +15,7 @@
 
 %% API
 -export([create_tables/2, wait_for_tables/0,
-    save_sub/2, remove_sub/2,
+    save_sub/2, remove_sub/2, clear_sub_pid/2,
     get_matches/1, get_matching_subs/1,
     clear/1, load/1, get_sub/1]).
 
@@ -84,6 +84,20 @@ save_sub(Filter,{ClientId,QoS,Seq,ClientPid}) ->
                     persist_sub(R,ClientId,ClientReg),
                     {ok,new}
             end
+        end,
+    mnesia_do(Fun).
+
+clear_sub_pid(Filter,ClientId) ->
+    Fun =
+        fun() ->
+            R =
+                case mnesia:read(?SUB_RECORD, Filter, write) of
+                    [] ->   new(Filter);
+                    [S]->   S
+                end,
+            #mqtt_sub{subs = Subs} = R,
+            R#mqtt_sub{subs = orddict:erase(ClientId,Subs)},
+            ok
         end,
     mnesia_do(Fun).
 

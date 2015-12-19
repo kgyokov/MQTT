@@ -121,8 +121,8 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{filter = Filter,
     CurrentClient = orddict:find(ClientId,Clients),
     case CurrentClient of
         error ->
-            S1 = set_sub(S,NewSub),
             mqtt_sub_repo:save_sub(Filter,NewSub),
+            S1 = set_sub(S,NewSub),
             {reply,ok,S1};
         {ok,CurReg} ->
             case CurReg of
@@ -135,18 +135,18 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{filter = Filter,
                 #client_reg{pid = NewPid,qos = NewQoS} ->
                     {reply,ok,S}; %% nothing to change
                 #client_reg{pid = NewPid} ->
+                    mqtt_sub_repo:save_sub(Filter,NewSub),
                     %% replace existing QoS and Seq
                     S1 = S#state{clients = orddict:store(
                         ClientId,
                         CurReg#client_reg{qos = NewQoS,seq = NewSeq},
                         Clients)},
-                    mqtt_sub_repo:save_sub(Filter,NewSub),
                     {reply,ok,S1};
                 #client_reg{monref = OldRef, pid = OldPid} when OldPid =/= NewPid ->
+                    mqtt_sub_repo:save_sub(Filter,NewSub),
                     %% replace existing Pid
                     S1 = S#state{monref_idx = maybe_demonitor_reg(OldRef,Mon)},
                     S2 = set_sub(S1,NewSub),
-                    mqtt_sub_repo:save_sub(Filter,NewSub),
                     {reply,ok,S2}
             end
     end;
@@ -160,11 +160,10 @@ handle_call({unsub,ClientId,NewSeq}, _From, S = #state{clients = Clients,
         {ok,ExistingReg} ->
             case ExistingReg of
                #client_reg{monref = MonRef, seq = Seq} when NewSeq >= Seq ->
+                   mqtt_sub_repo:remove_sub(S#state.filter,ClientId),
                    Mon1 = maybe_demonitor_reg(MonRef,Mon),
                    Clients1 = orddict:erase(ClientId,Clients),
-                   S1 = S#state{monref_idx = Mon1,
-                                clients = Clients1},
-                   mqtt_sub_repo:remove_sub(S#state.filter,ClientId),
+                   S1 = S#state{monref_idx = Mon1,clients = Clients1},
                    case orddict:size(Clients1) of
                        0 -> {reply,ok,S1}; %% {stop,no_clients,ok,NewState};
                        _ -> {reply,ok,S1}
@@ -212,11 +211,13 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_info({'DOWN', MonRef, _, _, _}, S = #state{clients = Clients,
+handle_info({'DOWN', MonRef, _, _, _}, S = #state{filter = Filter,
+                                                  clients = Clients,
                                                   monref_idx = Mon}) ->
     S1  =
         case orddict:find(MonRef,Mon) of
             {ok,ClientId} ->
+                mqtt_sub_repo:clear_sub_pid(Filter,ClientId),
                 Clients1 = orddict:update(ClientId,
                                 fun(Reg) ->
                                     Reg#client_reg{monref = undefined,
@@ -224,19 +225,15 @@ handle_info({'DOWN', MonRef, _, _, _}, S = #state{clients = Clients,
                                 end,
                                 Clients),
                 Mon1 = orddict:erase(MonRef,Mon),
-                mqtt_sub_repo:save_sub(S#state.filter,{ClientId,?QOS_0,1,undefined}),
                 S#state{monref_idx = Mon1,clients = Clients1};
             error -> S
         end,
     {noreply, S1};
 
 handle_info(async_init, S = #state{filter = Filter,repo = Repo}) ->
-    error_logger:info_msg("Starting Sub with id ~p, state ~p",[self(),S]),
     SubState = Repo:load(Filter),
-    S1 = load_sub(S,SubState),
+    S1 = recover(S,SubState),
     {noreply,S1};
-%%     Clients = [{ClientId,#client_reg{qos = QoS,seq = Seq}} || {ClientId,QoS,Seq} <- Subs],
-%%     {noreply, S#state{clients = Clients,monitored = orddict:new()}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -318,12 +315,8 @@ set_sub(S = #state{monref_idx = Mon,clients = Clients},{ClientId,NewQoS,NewSeq,N
 %%     ok.
 
 
-
-load_sub(S,SubRecord) ->
-    lists:foldr(fun({ClientId,QoS,ClientPid}) ->
-                    set_sub(S,{ClientId,QoS,1,ClientPid})
-                end,
-        S,SubRecord).
+recover(S,SubRecord) ->
+    lists:foldr(fun set_sub/2,S,SubRecord).
 
 
 maybe_demonitor_reg(undefined,Mons) ->
