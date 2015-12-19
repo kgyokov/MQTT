@@ -210,11 +210,13 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
     Filters = [Filter || {Filter,_} <- NewSubs],
     error_logger:info_msg("Filters: ~p~n",[Filters]),
     %% Add subscriptions to in-memory session
-    [mqtt_sub_repo:add_sub(ClientId,Filter,QoS) || {Filter,QoS} <- NewSubs],
+    [mqtt_router:subscribe(Filter,ClientId,QoS,S#state.seq) || {Filter,QoS} <- NewSubs],
     Retained = mqtt_topic_repo:get_retained(Filters),
     error_logger:info_msg("Got Retained: ~p~n",[Retained]),
+
     SO1 = mqtt_session:subscribe(SO,NewSubs),
     {SO2,PkToSend} = mqtt_session:append_retained(SO1,NewSubs,Retained),
+
     Persist(SO2),
     %% Send any that need to be sent
     error_logger:info_msg("Retained Messages: ~p~n",[PkToSend]),
@@ -226,7 +228,7 @@ handle_call({unsub,OldSubs}, _From,  S = #state{session = SO,
                                                 client_id = ClientId,
                                                 persist = Persist}) ->
     SO1 = mqtt_session:unsubscribe(SO,OldSubs),
-    [mqtt_sub_repo:remove_sub(ClientId,Topic) || Topic <- OldSubs],
+    [mqtt_router:unsubscribe(Filter,ClientId,S#state.seq) || Filter <- OldSubs],
     Persist(SO1),
     {reply,ok,S#state{session = SO1}};
 
@@ -282,7 +284,7 @@ handle_cast(_Request, State) ->
 
 
 handle_info({async_init,ClientId}, S = #state{is_persistent = IsPersistent}) ->
-    error_logger:info_msg("Registerin as ~p", [ClientId]),
+    error_logger:info_msg("Registering as ~p", [ClientId]),
     {Result,NewSeq} = mqtt_reg_repo:register(ClientId),
     %% Close duplicate registered Pids
     case Result of
@@ -297,16 +299,18 @@ handle_info({async_init,ClientId}, S = #state{is_persistent = IsPersistent}) ->
                             SO;
                         true  ->
                             %% Clear exsiting subscriptions
-                            [mqtt_sub_repo:remove_sub(ClientId,Filter)
-                             || {Filter,_} <- mqtt_session:get_subs(SO)],
+                            [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
+                                || {Filter,_} <- mqtt_session:get_subs(SO)],
                             SO1 = mqtt_session:new(),
                             %% save empty session
                             mqtt_session_repo:save(ClientId,SO1),
                             SO1
                     end
           end,
-    %% Recover msessages in flight and re-send them
+    %% Recover messages in flight and re-send them
     [send_to_client(S, Packet) || Packet <- mqtt_session:msg_in_flight(SO2)],
+    %% Refresh the subscriptions
+    mqtt_router:refresh_subs(ClientId,NewSeq,mqtt_session:get_subs(SO2)),
     {noreply, S#state{seq = NewSeq,session = SO2}};
 
 handle_info(_Info, State) ->
@@ -369,16 +373,47 @@ code_change(_OldVsn, State, _Extra) ->
 %%         end,
 %%     S#state{session = SO2}.
 
+
+perform_registrations(S = #state{is_persistent = IsPersistent}, ClientId) ->
+    error_logger:info_msg("Registering as ~p", [ClientId]),
+    {Result,NewSeq} = mqtt_reg_repo:register(ClientId),
+    %% Close duplicate registered Pids
+    case Result of
+        ok ->   ok;
+        {dup_detected,DupPid} -> close_duplicate(DupPid)
+    end,
+    %% Either load an existing session of create a new one
+    SO2 =
+        case mqtt_session_repo:load(ClientId) of
+            {error,not_found} -> mqtt_session:new();
+            SO -> if  IsPersistent ->
+                SO;
+                      true  ->
+                          %% Clear exsiting subscriptions
+                          [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
+                              || {Filter,_} <- mqtt_session:get_subs(SO)],
+                          SO1 = mqtt_session:new(),
+                          %% save empty session
+                          mqtt_session_repo:save(ClientId,SO1),
+                          SO1
+                  end
+        end,
+    %% Recover messages in flight and re-send them
+    [send_to_client(S, Packet) || Packet <- mqtt_session:msg_in_flight(SO2)],
+    %% Refresh the subscriptions
+    mqtt_router:refresh_subs(ClientId,NewSeq,mqtt_session:get_subs(SO2)),
+    {noreply, S#state{seq = NewSeq,session = SO2}}.
+
 send_to_client(#state{sender = Sender}, Packet) ->
     send_to_client(Sender, Packet);
 
 send_to_client(Sender, Packet) ->
     mqtt_sender:send_packet(Sender, Packet).
 
-maybe_clear_session(#state{session = SO,client_id = ClientId,is_persistent = IsPers}) ->
+maybe_clear_session(#state{session = SO,client_id = ClientId,is_persistent = IsPers,seq = Seq}) ->
     if  not IsPers ->
-            Subs = mqtt_session:get_subs(SO),
-            [mqtt_sub_repo:remove_sub(ClientId,Filter) || {Filter,_QoS}  <- Subs],ok;
+            [mqtt_router:unsubscribe(ClientId,Filter,Seq) ||
+                {Filter,_QoS}  <- mqtt_session:get_subs(SO)],ok;
         true -> ok
     end.
 

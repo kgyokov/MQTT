@@ -72,7 +72,7 @@ create_tables(Nodes,NFragments) ->
     end.
 
 wait_for_tables()->
-    mnesia:wait_for_tables(?REG_TABLE,5000).
+    ok = mnesia:wait_for_tables([?REG_TABLE],5000).
 
 
 %% @doc

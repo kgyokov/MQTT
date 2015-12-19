@@ -47,7 +47,7 @@ mnesia_do(Fun) ->
 %%-------------------------------------------------------------------
 
 wait_for_tables() ->
-    mnesia:wait_for_tables(?SESSION_RECORD,30000).
+    ok = mnesia:wait_for_tables([?SESSION_RECORD],30000).
 
 create_tables([],NFragments) ->
     create_tables([node()],NFragments);
