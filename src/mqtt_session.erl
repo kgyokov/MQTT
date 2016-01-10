@@ -83,7 +83,7 @@ forward_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
                         undefined
                end,
     Session1 = Session#session_out{refs = gb_sets:add(Ref,Refs)},
-    NewSession = (case QoS of
+    Session2 = case QoS of
                       ?QOS_1 ->
                           #session_out{qos1 = QosQueue} = Session1,
                           Session1#session_out{qos1 = orddict:store(PacketId,CTRPacket,QosQueue),
@@ -94,9 +94,9 @@ forward_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
                                                packet_seq = NewPacketSeq};
                       ?QOS_0 ->
                           Session
-                  end),
+                  end,
 %%       #session_out{refs = gb_sets:add(Ref,Refs)},
-    {ok,NewSession,PacketId}.
+    {ok,Session2,PacketId}.
 
 append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
     Session#session_out{refs = gb_sets:del_element(Ref,Refs)}.
@@ -135,8 +135,7 @@ message_pub_comp(Session,PacketId)  ->
     end.
 
 append_retained(SO,NewSubs,Retained) ->
-    error_logger:info_msg("append_retained called with: ~p, ~p,~n",[NewSubs,Retained]),
-    SO1 = mqtt_session:subscribe(SO,NewSubs),
+    SO1 = subscribe(SO,NewSubs),
     %% Get the retained messages
     Msgs =
     [   begin
@@ -149,22 +148,15 @@ append_retained(SO,NewSubs,Retained) ->
         fun(Msg,SOAcc) ->
             {Topic,Content,Ref,QoS} = Msg,
             CTRPacket = {Topic,Content,Ref},
-            case mqtt_session:append_msg(SOAcc,CTRPacket,QoS) of
+            case append_msg(SOAcc,CTRPacket,QoS) of
                 duplicate ->            {duplicate,SOAcc};
                 {ok,SO2,PacketId} ->    {{ok,CTRPacket,QoS,PacketId},SO2}
             end
         end,
         SO1,Msgs),
-    error_logger:info_msg("Results: ~p~n",[Results]),
-    PkToSend = lists:filtermap(
-        fun(Result) ->
-            case Result of
-                {ok,CTRPacket,QoS,PacketId} ->
-                    {true, mqtt_session:to_publish(CTRPacket,true,QoS,PacketId,false)};
-                _ ->
-                    false
-            end
-        end, Results),
+    PkToSend =
+        [to_publish(CTRPacket,true,QoS,PacketId,false)
+            || {ok,CTRPacket,QoS,PacketId} <- Results],
     {SO3,PkToSend}.
 
 get_subs(#session_out{subs = Subs}) ->
@@ -183,13 +175,13 @@ msg_in_flight(Session) ->
 retry_in_flight(#session_out{qos1 = UnAck1,
                              qos2 = UnAck2,
                              qos2_rec = Rec}) ->
-    list_to_pub_packets(UnAck1,?QOS_1) ++
-    list_to_pub_packets(UnAck2,?QOS_2) ++
+    dict_to_pub_packets(UnAck1,?QOS_1) ++
+    dict_to_pub_packets(UnAck2,?QOS_2) ++
 %%     [to_publish(CTRPacket,false,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
 %%     [to_publish(CTRPacket,false,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
     [to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)].
 
-list_to_pub_packets(List,QoS) ->
+dict_to_pub_packets(List,QoS) ->
     [to_publish(CTRPacket,false,QoS,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(List)].
 
 to_publish({Topic,Content,_Ref},Retain,QoS,PacketId,Dup) ->

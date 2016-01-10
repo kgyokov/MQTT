@@ -2,7 +2,10 @@
 %%% @author Kalin
 %%% @copyright (C) 2015, <COMPANY>
 %%% @doc
-%%%
+%%% Handles subscriptions for a particular filter.
+%%% Loads subscribed Clients and (potentially) their Pids from a Database at initialization time.
+%%% Monitors the Pids of those Clients and disposes of them when the Clients go down.
+%%% When a Client process comes back up, it is expected to re-subscribe
 %%% @end
 %%% Created : 06. Nov 2015 10:05 PM
 %%%-------------------------------------------------------------------
@@ -52,10 +55,10 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec(start_link(Filter::binary(),Mod::module()) ->
+-spec(start_link(Filter::binary(),Repo::module()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(Filter,Mod) ->
-    gen_server:start_link(?MODULE, [Filter,Mod], []).
+start_link(Filter,Repo) ->
+    gen_server:start_link(?MODULE, [Filter,Repo], []).
 
 -spec(subscribe_self(Pid::pid(),ClientId::client_id(),QoS::qos(),Seq::non_neg_integer())
         -> ok).
@@ -128,11 +131,11 @@ handle_call({sub,ClientId,NewQoS,NewSeq},{NewPid,_},S = #state{filter = Filter,
         {ok,CurReg} ->
             case CurReg of
                 #client_sub{pid = OldPid, client_seq = CurSeq} when CurSeq > NewSeq ->
-                    if OldPid =:= NewPid; OldPid =:= undefined ->
-                            {reply,ok,S}; %%ignore old messages from this Pid
-                        true ->
-                            {reply,duplicate,S} %% this is an old process
-                    end;
+                    Resp = if OldPid =:= NewPid; OldPid =:= undefined ->
+                                        ok; %%ignore old messages from this Pid
+                                true -> duplicate %% this is an old process
+                            end,
+                    {reply,Resp,S};
                 #client_sub{pid = NewPid,qos = NewQoS} ->
                     {reply,ok,S}; %% nothing to change
                 #client_sub{pid = NewPid} ->

@@ -214,14 +214,16 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
     Retained = mqtt_topic_repo:get_retained(Filters),
     error_logger:info_msg("Got Retained: ~p~n",[Retained]),
 
+    %%@todo: handle race conditions between subscribing and getting retained messages
     SO1 = mqtt_session:subscribe(SO,NewSubs),
     {SO2,PkToSend} = mqtt_session:append_retained(SO1,NewSubs,Retained),
+    QosResults = [{ok,QoS} || {_,QoS} <- NewSubs], %% @todo: do we even need this?
 
-    Persist(SO2),
-    %% Send any that need to be sent
+    %% Side effects
     error_logger:info_msg("Retained Messages: ~p~n",[PkToSend]),
+    %% Persist the session and send to client
+    Persist(SO2),
     [send_to_client(Sender,Package)|| Package <- PkToSend],
-    QosResults = [{ok,QoS} || {_,QoS} <- NewSubs],
     {reply,QosResults,S#state{session = SO2}};
 
 handle_call({unsub,OldSubs}, _From,  S = #state{session = SO,
@@ -284,8 +286,9 @@ handle_cast(_Request, State) ->
 
 
 handle_info({async_init,ClientId}, S = #state{is_persistent = IsPersistent}) ->
+    %%todo: should this be async? Do we want to send a CONNACK before clearing the session???
     error_logger:info_msg("Registering as ~p", [ClientId]),
-    {Result,NewSeq} = mqtt_reg_repo:register(ClientId),
+    {Result,NewSeq} = mqtt_reg_repo:register_self(ClientId),
     %% Close duplicate registered Pids
     case Result of
         ok ->   ok;
@@ -331,8 +334,7 @@ handle_info(_Info, State) ->
     State :: #state{}) -> term()).
 
 terminate(_Reason,S) ->
-    cleanup(S),
-    S.
+    cleanup(S).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -376,7 +378,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 perform_registrations(S = #state{is_persistent = IsPersistent}, ClientId) ->
     error_logger:info_msg("Registering as ~p", [ClientId]),
-    {Result,NewSeq} = mqtt_reg_repo:register(ClientId),
+    {Result,NewSeq} = mqtt_reg_repo:register_self(ClientId),
     %% Close duplicate registered Pids
     case Result of
         ok ->   ok;
@@ -412,7 +414,7 @@ send_to_client(Sender, Packet) ->
 
 maybe_clear_session(#state{session = SO,client_id = ClientId,is_persistent = IsPers,seq = Seq}) ->
     if  not IsPers ->
-            [mqtt_router:unsubscribe(ClientId,Filter,Seq) ||
+            [mqtt_router:unsubscribe(Filter,ClientId,Seq) ||
                 {Filter,_QoS}  <- mqtt_session:get_subs(SO)],ok;
         true -> ok
     end.

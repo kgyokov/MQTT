@@ -18,7 +18,7 @@
 -author("Kalin").
 
 %% API
--export([register/2, unregister/2, get_registration/1, create_tables/2, wait_for_tables/0, register/1, unregister/1]).
+-export([register/2, unregister/2, get_registration/1, create_tables/2, wait_for_tables/0, register_self/1, unregister/1]).
 
 
 -record(client_reg, {
@@ -78,7 +78,7 @@ wait_for_tables()->
 %% @doc
 %% Call register/2 for the current process
 %% @end
-register(ClientId) ->
+register_self(ClientId) ->
     ?MODULE:register(self(),ClientId).
 
 %%
