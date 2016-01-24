@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([pushl/2, pushr/2, is_empty/1, headl/1, taill/1, concat/2, measure/2]).
+-export([pushl/2, pushr/2, is_empty/1, headl/1, taill/1, concat/2, measure/1]).
 
 
 -define(SUSP(Expr), fun() -> Expr end).
