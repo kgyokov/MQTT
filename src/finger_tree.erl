@@ -12,14 +12,11 @@
 %% API
 -export([pushl/2, pushr/2, is_empty/1, headl/1, taill/1, concat/2, measure/2]).
 
-%%
-%% Monoid behavior
-%%
-%%-callback identity(T) -> T.
-%%-callback binary_op(T,T) -> T.
 
 -define(SUSP(Expr), fun() -> Expr end).
 -define(FORCE(Expr),Expr()).
+
+-define(MOD,finger_tree_monoid@).
 
 -type tree_node(E) ::
 {node2,E,E}
@@ -68,10 +65,8 @@ reducer(Fun,{node3,A,B,C},Z)    -> Fun(A,Fun(B,Fun(C,Z)));
 reducer(_Fun,empty,Z)           -> Z;
 reducer(Fun,{single,X},Z)       -> Fun(X,Z);
 reducer(Fun,{deep,PR,M,SF},Z)   ->
-%%    R1 = reducer(Fun,SF,Z),
-%%    R2 = reducer(reducer(Fun,))
     Fun1 = fun(A,B) -> reducer(Fun,A,B)  end,
-    Fun2 = fun(A,B) -> reducer(Fun2,A,B) end,
+    Fun2 = fun(A,B) -> reducer(Fun1,A,B) end,
     Fun1(PR,Fun2(M,Fun1(SF,Z)));
 
 reducer(Fun,L,Z) when is_list(L) -> lists:foldr(Fun,Z,L).
@@ -84,7 +79,7 @@ reducel(_Fun,Z,empty)           -> Z;
 reducel(Fun,Z,{single,X})       -> Fun(Z,X);
 reducel(Fun,Z,{deep,PR,M,SF})   ->
     Fun1 = fun(A,B) -> reducel(Fun,A,B)  end,
-    Fun2 = fun(A,B) -> reducel(Fun2,A,B) end,
+    Fun2 = fun(A,B) -> reducel(Fun1,A,B) end,
     Fun1(Fun2(Fun1(Z,PR),M),SF);
 
 reducel(Fun,Z,L) when is_list(L) ->
@@ -98,7 +93,7 @@ reducel(Fun,Z,L) when is_list(L) ->
 -spec to_tree([E]) -> finger_tree(E).
 -spec to_list(finger_tree(E)) -> [E].
 to_tree(L) when is_list(L) -> lists:foldl(fun pushr/2,empty,L).
-to_list(T) -> reducer(fun(H,T) -> [H|T] end,T,[]).
+to_list(T) -> reducer(fun(H,XS) -> [H|XS] end,T,[]).
 
 
 %%
@@ -130,7 +125,7 @@ taill(T) ->
     {_,T} = viewl(T),
     T.
 
--spec is_empty(finger_tree(E)) -> true|false.
+-spec is_empty(finger_tree(any())) -> true|false.
 is_empty(T) ->
     case viewl(T) of
         nil     -> true;
@@ -170,32 +165,32 @@ concat(XS,TS) -> app3(XS,[],TS).
 
 %%
 %% This might work much better with Elixir protocols, because we can define the Monoid {Id,As} using a protocol
-%%
+%% instead of passing it around like crazy. Parameterized modules also would have worked :-(
 
-node2(A,B,Mo = {_,As,_}) ->
-    V = measure(A,Mo),
-    V1 = measure(B,Mo),
-    {node2,As(V,V1),A,B}.
+node2(A,B) ->
+    V = measure(A),
+    V1 = measure(B),
+    {node2,?MOD:as(V,V1),A,B}.
 
-node3(A,B,C,Mo = {_,As,_})  ->
-    V = measure(A,Mo),
-    V1 = measure(B,Mo),
-    V2 = measure(C,Mo),
-    V3 = As(As(V,V1),V2),
+node3(A,B,C)  ->
+    V = measure(A),
+    V1 = measure(B),
+    V2 = measure(C),
+    V3 = ?MOD:as(?MOD:as(V,V1),V2),
     {node3,V3,A,B,C}.
 
-deep(PR,M,SF,Mo = {_,As,_}) ->
-    V = measure(PR,Mo),
-    V1 = measure(M,Mo),
-    V2 = measure(SF,Mo),
-    V3 = As(As(V,V1),V2),
+deep(PR,M,SF) ->
+    V = measure(PR),
+    V1 = measure(M),
+    V2 = measure(SF),
+    V3 = ?MOD:as(?MOD:as(V,V1),V2),
     {deep,V3,PR,M,SF}.
 
-measure({node2,V,_,_},_Mo)          -> V;
-measure({node3,V,_,_,_},_Mo)        -> V;
-measure(D,{Id,As,M}) when is_list(D)-> reducel(fun(Z,E) -> As(Z,M(E)) end,Id,D);
-measure(empty,{Id,_,_})             -> Id;
-measure({single,X},Mo)              -> measure(X,Mo);
-measure({deep,V,_,_,_},_Mo)         -> V;
-measure(X,{_,_,M})                  -> M(X).
 
+measure({node2,V,_,_})          -> V;
+measure({node3,V,_,_,_})        -> V;
+measure(D) when is_list(D)      -> reducel(fun(Z,E) -> ?MOD:as(Z,?MOD:measure(E)) end,?MOD:id(),D);
+measure(empty)                  -> ?MOD:id();
+measure({single,X})             -> measure(X);
+measure({deep,V,_,_,_})         -> V;
+measure(X)                      -> ?MOD:measure(X).
