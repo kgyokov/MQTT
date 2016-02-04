@@ -37,7 +37,7 @@
 %% @doc
 %% Adds new subscriptions to the session data
 %% @end
-subscribe(S = #session_out{subs = Subs},NewSubs) ->
+subscribe(NewSubs,S = #session_out{subs = Subs}) ->
     %% Maintain a flat list of subscriptions
     %% @todo: Optimize/deduplicate
     Subs1 = lists:foldr(fun({Filter,QoS},Acc) ->
@@ -50,12 +50,9 @@ subscribe(S = #session_out{subs = Subs},NewSubs) ->
 %% @doc
 %% Removed existing subscriptions from the session data
 %% @end
-unsubscribe(S = #session_out{subs = Subs},OldSubs) ->
-    S#session_out{subs =
-                  lists:foldr(fun(Filter,Acc) ->
-                                orddict:erase(Filter,Acc)
-                              end,
-                              Subs, OldSubs)}.
+unsubscribe(OldSubs,S = #session_out{subs = Subs}) ->
+    Subs1= lists:foldr(fun orddict:erase/2,Subs, OldSubs),
+    S#session_out{subs = Subs1}.
 
 
 %% =========================================================================
@@ -65,15 +62,15 @@ unsubscribe(S = #session_out{subs = Subs},OldSubs) ->
 %% @doc
 %% Appends message for delivery
 %% @end
-append_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
+append_msg(CTRPacket = {_Topic,_Content,Ref},QoS,Session) ->
     #session_out{refs = Refs, subs = _Subs} = Session,
     case gb_sets:is_member(Ref,Refs) of
         false -> forward_msg(Session,CTRPacket,QoS);
         true  -> duplicate
     end.
 
-forward_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
-    #session_out{packet_seq = PacketSeq, refs = Refs} = Session,
+forward_msg(CTRPacket = {_Topic,_Content,Ref},QoS,SO) ->
+    #session_out{packet_seq = PacketSeq, refs = Refs} = SO,
 
     NewPacketSeq = PacketSeq+1,
     PacketId = if QoS =:= ?QOS_1;
@@ -82,7 +79,7 @@ forward_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
                   true ->
                         undefined
                end,
-    Session1 = Session#session_out{refs = gb_sets:add(Ref,Refs)},
+    Session1 = SO#session_out{refs = gb_sets:add(Ref,Refs)},
     Session2 = case QoS of
                       ?QOS_1 ->
                           #session_out{qos1 = QosQueue} = Session1,
@@ -93,49 +90,49 @@ forward_msg(Session,CTRPacket = {_Topic,_Content,Ref},QoS) ->
                           Session1#session_out{qos2 = orddict:store(PacketId,CTRPacket,QosQueue),
                                                packet_seq = NewPacketSeq};
                       ?QOS_0 ->
-                          Session
+                          SO
                   end,
 %%       #session_out{refs = gb_sets:add(Ref,Refs)},
     {ok,Session2,PacketId}.
 
-append_message_comp(Session = #session_out{refs = Refs}, Ref) ->
-    Session#session_out{refs = gb_sets:del_element(Ref,Refs)}.
+append_message_comp(Ref,SO = #session_out{refs = Refs}) ->
+    SO#session_out{refs = gb_sets:del_element(Ref,Refs)}.
 
-message_ack(Session,PacketId) ->
-    #session_out{qos1 = Msgs} = Session,
+message_ack(PacketId,SO) ->
+    #session_out{qos1 = Msgs} = SO,
     case orddict:find(PacketId,Msgs) of
         {ok,_} ->
             {ok,
-             Session#session_out{qos1 = orddict:erase(PacketId,Msgs)}};
+             SO#session_out{qos1 = orddict:erase(PacketId,Msgs)}};
         error ->
             duplicate
     end.
 
 
-message_pub_rec(Session,PacketId) ->
-    #session_out{qos2 = Msgs, qos2_rec = Ack} = Session,
+message_pub_rec(PacketId,SO) ->
+    #session_out{qos2 = Msgs, qos2_rec = Ack} = SO,
     case orddict:find(PacketId,Msgs) of
         {ok,_} ->
             {ok,
-             Session#session_out{qos2 = orddict:erase(PacketId,Msgs),
-                                 qos2_rec = gb_sets:add(PacketId,Ack)}};
+                SO#session_out{qos2 = orddict:erase(PacketId,Msgs),
+                               qos2_rec = gb_sets:add(PacketId,Ack)}};
         error ->
             duplicate
     end.
 
 
-message_pub_comp(Session,PacketId)  ->
-    #session_out{qos2_rec = Ack} = Session,
+message_pub_comp(PacketId,SO) ->
+    #session_out{qos2_rec = Ack} = SO,
     case gb_sets:is_member(PacketId,Ack) of
         true ->
             {ok,
-            Session#session_out{qos2_rec = gb_sets:delete(PacketId,Ack)}};
+                SO#session_out{qos2_rec = gb_sets:delete(PacketId,Ack)}};
         false ->
             duplicate
     end.
 
-append_retained(SO,NewSubs,Retained) ->
-    SO1 = subscribe(SO,NewSubs),
+append_retained(NewSubs,Retained,SO) ->
+    SO1 = subscribe(NewSubs,SO),
     %% Get the retained messages
     Msgs =
     [   begin
@@ -144,32 +141,32 @@ append_retained(SO,NewSubs,Retained) ->
         end
         ||{Topic,Content,Ref,MsgQoS} <- Retained],
     %% Apply them to session
-    {Results,SO3} = lists:mapfoldl(
-        fun(Msg,SOAcc) ->
-            {Topic,Content,Ref,QoS} = Msg,
-            CTRPacket = {Topic,Content,Ref},
-            case append_msg(SOAcc,CTRPacket,QoS) of
-                duplicate ->            {duplicate,SOAcc};
-                {ok,SO2,PacketId} ->    {{ok,CTRPacket,QoS,PacketId},SO2}
-            end
-        end,
-        SO1,Msgs),
+    {Results,SO2} = append_msgs(Msgs,SO1),
     PkToSend =
         [to_publish(CTRPacket,true,QoS,PacketId,false)
             || {ok,CTRPacket,QoS,PacketId} <- Results],
-    {SO3,PkToSend}.
+    {SO2,PkToSend}.
 
 get_subs(#session_out{subs = Subs}) ->
     orddict:to_list(Subs).
+
+append_msgs(Msgs,SO) ->
+    lists:mapfoldl(
+        fun({Topic,Content,Ref,QoS},SOAcc) ->
+            CTRPacket = {Topic,Content,Ref},
+            case append_msg(CTRPacket,QoS,SOAcc) of
+                duplicate            -> {duplicate,SOAcc};
+                {ok,SOAcc1,PacketId} -> {{ok,CTRPacket,QoS,PacketId},SOAcc1}
+            end
+        end,
+        SO,Msgs).
 
 %% =========================================================================
 %% RECOVERY
 %% =========================================================================
 
-msg_in_flight(Session) ->
-    retry_in_flight(Session)
-    %% recover_queued(Session)
-.
+msg_in_flight(SO) ->
+    retry_in_flight(SO).
 
 %% Retries messages persisted in session
 retry_in_flight(#session_out{qos1 = UnAck1,
@@ -177,12 +174,10 @@ retry_in_flight(#session_out{qos1 = UnAck1,
                              qos2_rec = Rec}) ->
     dict_to_pub_packets(UnAck1,?QOS_1) ++
     dict_to_pub_packets(UnAck2,?QOS_2) ++
-%%     [to_publish(CTRPacket,false,?QOS_1,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(UnAck1)] ++
-%%     [to_publish(CTRPacket,false,?QOS_2,PacketId, true)  || {PacketId,CTRPacket}  <- orddict:to_list(UnAck2)] ++
     [to_pubrel(PacketId) || {PacketId,PacketId}  <- gb_sets:to_list(Rec)].
 
-dict_to_pub_packets(List,QoS) ->
-    [to_publish(CTRPacket,false,QoS,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(List)].
+dict_to_pub_packets(Dict,QoS) ->
+    [to_publish(CTRPacket,false,QoS,PacketId, true) || {PacketId,CTRPacket}  <- orddict:to_list(Dict)].
 
 to_publish({Topic,Content,_Ref},Retain,QoS,PacketId,Dup) ->
     #'PUBLISH'{content = Content,packet_id = PacketId,

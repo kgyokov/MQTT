@@ -158,7 +158,7 @@ handle_call({push_reliable,CTRPacket,QoS}, _From,S = #state{session = SO,
     when QoS =:= 1; QoS =:= 2 ->
     error_logger:info_msg("Pushing packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
     {Result,SO2} =
-        case mqtt_session:append_msg(SO,CTRPacket,QoS) of
+        case mqtt_session:append_msg(CTRPacket,QoS,SO) of
             duplicate ->            %% do nothing
                 {duplicate,SO};
             {ok,SO1,PacketId} ->    %% side effects
@@ -170,22 +170,22 @@ handle_call({push_reliable,CTRPacket,QoS}, _From,S = #state{session = SO,
     {reply,Result,S#state{session = SO2}};
 
 handle_call({append_comp,Ref}, _From,  S = #state{session = SO}) ->
-    SO1 = mqtt_session:append_message_comp(SO,Ref),
+    SO1 = mqtt_session:append_message_comp(Ref,SO),
     {reply,ok,S#state{session = SO1}};
 
 handle_call({ack,PacketId}, _From,  S = #state{session = SO,
                                                persist = Persist}) ->
     SO2 =
-    case mqtt_session:message_ack(SO,PacketId) of
-        {ok,SO1}  ->    Persist(SO1);
-        duplicate ->    SO
-    end,
+        case mqtt_session:message_ack(PacketId,SO) of
+            {ok,SO1}  ->    Persist(SO1);
+            duplicate ->    SO
+        end,
     {reply,ok,S#state{session = SO2}};
 
 handle_call({pub_rec,PacketId}, _From,  S = #state{session = SO,
                                                    persist = Persist}) ->
     SO2 =
-        case mqtt_session:message_pub_rec(SO,PacketId) of
+        case mqtt_session:message_pub_rec(PacketId,SO) of
             {ok,SO1}  ->    Persist(SO1);
             duplicate ->    SO
         end,
@@ -197,7 +197,7 @@ handle_call({pub_rec,PacketId}, _From,  S = #state{session = SO,
 handle_call({pub_comp,PacketId}, _From,  S = #state{session = SO,
                                                     persist = Persist}) ->
     SO2 =
-        case mqtt_session:message_pub_comp(SO,PacketId) of
+        case mqtt_session:message_pub_comp(PacketId,SO) of
             {ok,SO1}  ->    Persist(SO1);
             duplicate ->    SO
         end,
@@ -215,8 +215,8 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
     error_logger:info_msg("Got Retained: ~p~n",[Retained]),
 
     %%@todo: handle race conditions between subscribing and getting retained messages
-    SO1 = mqtt_session:subscribe(SO,NewSubs),
-    {SO2,PkToSend} = mqtt_session:append_retained(SO1,NewSubs,Retained),
+    SO1 = mqtt_session:subscribe(NewSubs,SO),
+    {SO2,PkToSend} = mqtt_session:append_retained(NewSubs,Retained,SO1),
     QosResults = [{ok,QoS} || {_,QoS} <- NewSubs], %% @todo: do we even need this?
 
     %% Side effects
@@ -229,7 +229,7 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
 handle_call({unsub,OldSubs}, _From,  S = #state{session = SO,
                                                 client_id = ClientId,
                                                 persist = Persist}) ->
-    SO1 = mqtt_session:unsubscribe(SO,OldSubs),
+    SO1 = mqtt_session:unsubscribe(OldSubs,SO),
     [mqtt_router:unsubscribe(Filter,ClientId,S#state.seq) || Filter <- OldSubs],
     Persist(SO1),
     {reply,ok,S#state{session = SO1}};
@@ -411,6 +411,15 @@ send_to_client(#state{sender = Sender}, Packet) ->
 
 send_to_client(Sender, Packet) ->
     mqtt_sender:send_packet(Sender, Packet).
+
+clear_session(#state{session = SO,client_id = ClientId,is_persistent = IsPers,seq = Seq},NewSeq) ->
+    %% Clear exsiting subscriptions
+    [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
+        || {Filter,_} <- mqtt_session:get_subs(SO)],
+    SO1 = mqtt_session:new(),
+    %% save empty session
+    mqtt_session_repo:save(ClientId,SO1),
+    SO1.
 
 maybe_clear_session(#state{session = SO,client_id = ClientId,is_persistent = IsPers,seq = Seq}) ->
     if  not IsPers ->
