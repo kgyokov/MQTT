@@ -65,7 +65,7 @@ unsubscribe(OldSubs,S = #session_out{subs = Subs}) ->
 append_msg(CTRPacket = {_Topic,_Content,Ref},QoS,Session) ->
     #session_out{refs = Refs, subs = _Subs} = Session,
     case gb_sets:is_member(Ref,Refs) of
-        false -> forward_msg(Session,CTRPacket,QoS);
+        false -> forward_msg(CTRPacket,QoS,Session);
         true  -> duplicate
     end.
 
@@ -93,7 +93,7 @@ forward_msg(CTRPacket = {_Topic,_Content,Ref},QoS,SO) ->
                           SO
                   end,
 %%       #session_out{refs = gb_sets:add(Ref,Refs)},
-    {ok,Session2,PacketId}.
+    {ok,PacketId,Session2}.
 
 append_message_comp(Ref,SO = #session_out{refs = Refs}) ->
     SO#session_out{refs = gb_sets:del_element(Ref,Refs)}.
@@ -145,7 +145,7 @@ append_retained(NewSubs,Retained,SO) ->
     PkToSend =
         [to_publish(CTRPacket,true,QoS,PacketId,false)
             || {ok,CTRPacket,QoS,PacketId} <- Results],
-    {SO2,PkToSend}.
+    {PkToSend,SO2}.
 
 get_subs(#session_out{subs = Subs}) ->
     orddict:to_list(Subs).

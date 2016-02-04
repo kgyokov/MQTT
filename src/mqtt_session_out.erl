@@ -216,7 +216,7 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
 
     %%@todo: handle race conditions between subscribing and getting retained messages
     SO1 = mqtt_session:subscribe(NewSubs,SO),
-    {SO2,PkToSend} = mqtt_session:append_retained(NewSubs,Retained,SO1),
+    {PkToSend,SO2} = mqtt_session:append_retained(NewSubs,Retained,SO1),
     QosResults = [{ok,QoS} || {_,QoS} <- NewSubs], %% @todo: do we even need this?
 
     %% Side effects
