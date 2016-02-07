@@ -161,7 +161,7 @@ handle_call({push_reliable,CTRPacket,QoS}, _From,S = #state{session = SO,
         case mqtt_session:append_msg(CTRPacket,QoS,SO) of
             duplicate ->            %% do nothing
                 {duplicate,SO};
-            {ok,SO1,PacketId} ->    %% side effects
+            {ok,PacketId,SO1} ->    %% side effects
                 Persist(SO1),
                 Packet = mqtt_session:to_publish(CTRPacket,false,QoS,PacketId,false),
                 send_to_client(Sender,Packet),
