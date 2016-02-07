@@ -11,7 +11,7 @@
 -author("Kalin").
 
 %% API
--export([store/3, get_min/1, remove/2, new/0]).
+-export([store/3, get_min/1, remove/2, new/0, get_val/2, is_empty/1]).
 
 
 new() ->
@@ -19,6 +19,12 @@ new() ->
         gb_trees:empty(),   %% A tree of Vals. Each Val can have several keys associated with it
         dict:new()    %% A tree of Keys, Every key has one corresponding Val associated with it
     }.
+
+get_val(Key,{_,ByKey}) ->
+    case dict:find(Key,ByKey) of
+        error -> none;
+        {ok,Val} -> {ok,Val}
+    end.
 
 remove(Key,{ByVal,ByKey}) ->
     case dict:find(Key,ByKey) of
@@ -41,6 +47,9 @@ store(Key,Val,{ByVal,ByKey}) ->
             ByVal2 = add_key_to_val_idx(Key,Val,ByVal1),
             {ByKey1,ByVal2}
     end.
+
+is_empty({ByVal,_ByKey}) ->
+    gb_trees:is_empty(ByVal).
 
 get_min({ByVal,_ByKey}) ->
     case gb_trees:is_empty(ByVal) of
