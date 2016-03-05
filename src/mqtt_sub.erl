@@ -14,6 +14,8 @@
 
 -include("mqtt_internal_msgs.hrl").
 
+-define(MONOID,sequence_monoid).
+
 -behaviour(gen_server).
 
 %% API
@@ -49,8 +51,8 @@
     monref_idx      ::any(),    %% dictionary of (MonitorRef,ClientId}
     packet_seq      ::non_neg_integer(),%% A sequence number assigned to each Message from a topic covered by this filter.
                                     %% This process assigns incremental integers to each new message
-    queue ::any(), %% Shared queue of messages
-    min_acks        ::any() %% maintains the minimum message seq processed by any opf the clients
+    queue   ::any(),   %% Shared queue of messages
+    garbage ::any()    %% garbage from the queue
 }).
 
 -record(sub, {
@@ -161,7 +163,6 @@ init([Filter, Repo]) ->
                 live_subs = dict:new(),
                 dead_subs = dict:new(),
                 packet_seq = Seq,
-                min_acks = min_val_tree:new(),
                 queue = shared_queue:new(Seq),
                 repo = Repo}}.
 
@@ -223,23 +224,24 @@ handle_call({sub,ClientId,QoS,CSeq},{Pid,_},S = #state{filter = Filter,
             end
     end;
 
-handle_call({unsub,ClientId,Seq}, _From, S = #state{live_subs = Subs}) ->
-    case dict:find(ClientId, Subs) of
+handle_call({unsub,ClientId,Seq}, _From, S = #state{live_subs = Subs,
+                                                    queue = SQ,
+                                                    garbage = Garbage}) ->
+    case dict:find(ClientId,Subs) of
         error ->
             {reply,ok,S};
         {ok, Reg} ->
             case Reg of
                 #sub{monref = MonRef,client_seq = OldSeq} when Seq >= OldSeq ->
                     mqtt_sub_repo:remove_sub(S#state.filter,ClientId),
-                    #state{monref_idx = Mon, min_acks = MAck} = S,
+                    #state{monref_idx = Mon} = S,
                     Mon1 = maybe_demonitor_reg(MonRef,Mon),
                     Subs1 = dict:erase(ClientId,Subs),
-                    Min = min_val_tree:min(MAck),
-                    MAcks1 = min_val_tree:remove(ClientId, MAck),
-                    Min1 = min_val_tree:min(MAcks1),
+                    {MoreGarbage,SQ1} = shared_queue:remove(ClientId,SQ),
                     S1 = S#state{monref_idx = Mon1,
                                  live_subs = Subs1,
-                                 min_acks = MAcks1},
+                                 queue = SQ1,
+                                 garbage = ?MONOID:as(Garbage,MoreGarbage)},
                     case dict:size(Subs1) of
                         0 -> {stop, no_subs,ok,S1};
                         _ -> {reply,ok,S1}
@@ -366,7 +368,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_new_packet(Packet,QoS,_From,S = #state{live_subs = Subs,
                                               queue = SQ}) ->
 
-    SQ1 = shared_queue:pushr(Packet,SQ),
+    SQ1 = shared_queue:pushr({QoS,Packet},SQ),
     Max = shared_queue:max_seq(SQ1),
     {PushTo,Subs1} = dict:fold(fun(ClientId,Sub,AccIn = {PushToAcc,SubsAcc}) ->
                                     case maybe_update_waiting_sub(Max,Sub) of
@@ -410,8 +412,9 @@ handle_request_for_more(ClientId,FromSeq,WSize,S = #state{live_subs = Subs,
      end,
     {ok,{reply,ok},S1}.
 
-handle_ack(ClientId,AckSeq,S = #state{queue = SQ}) ->
-    S#state{queue = shared_queue:move(ClientId,AckSeq,SQ)}.
+handle_ack(ClientId,AckSeq,S = #state{queue = SQ,garbage = Garbage}) ->
+    {MoreGarbage,SQ1} = shared_queue:move(ClientId,AckSeq,SQ),
+    S#state{queue = SQ1,garbage = ?MONOID:as(Garbage,MoreGarbage)}.
 
 
 %%maybe_process_pending1(PSeq,Ack,Wnd,Sub = #sub{last_sent = LSent,
@@ -454,7 +457,7 @@ send_packet_to_clients(CPids,Packet,QoS) ->
 send_packets_to_client(CPid,Ps,QoS) ->
     [send_packet(CPid,P,QoS) || P <- Ps].
 
-send_packet(CPid,P,QoS)   -> CPid ! {push,P,QoS}.
+send_packet(CPid,P,QoS) -> CPid ! {push,P,QoS}.
 
 %%send_packets(Range,CPid,#state{filter = Filter, queue = SQ}) ->
 %%    Ps = get_packets(Range,Filter,SQ),
@@ -467,20 +470,17 @@ send_packet(CPid,P,QoS)   -> CPid ! {push,P,QoS}.
 %% Setting Subscriptions
 %% ===================================================================
 
-set_sub({CId,QoS,CSeq,PSeq,Pid},S = #state{monref_idx = Mons,
-                                           live_subs = C,
-                                           min_acks = MSeq}) ->
-    MSeq1 = min_val_tree:store(CId,PSeq,MSeq),
-    M = monitor(process, Pid),
-    Mons1 = dict:store(M, CId, Mons),
-    Reg = #sub{client_seq = CSeq,
+set_sub({ClientId,QoS,ClientSeq,FromSeq,Pid},S = #state{monref_idx = Mons,
+                                                        live_subs = Subs,
+                                                        queue = SQ}) ->
+    M = monitor(process,Pid),
+    Reg = #sub{client_seq = ClientSeq,
                qos = QoS,
                pid = Pid,
                monref = M},
-    C1 = dict:store(CId,Reg,C),
-    S#state{live_subs = C1,
-            monref_idx = Mons1,
-            min_acks = MSeq1}.
+    S#state{live_subs = dict:store(ClientId,Reg,Subs),
+            monref_idx = dict:store(M, ClientId, Mons),
+            queue = shared_queue:add(ClientId,FromSeq,SQ)}.
 
 maybe_remove_downed(MonRef,S = #state{filter = Filter,
                                       live_subs = Subs,
@@ -498,6 +498,10 @@ maybe_remove_downed(MonRef,S = #state{filter = Filter,
 
 recover(S,SubRecord) ->
     lists:foldl(fun set_sub/2,S,SubRecord).
+
+maybe_clean_garbage(Garbage) ->
+    %%@todo: perform cleanup
+    ok.
 
 maybe_demonitor_reg(undefined,Mons) ->
     Mons;
