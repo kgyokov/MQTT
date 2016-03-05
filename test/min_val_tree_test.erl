@@ -24,7 +24,12 @@ all_test_() ->
             fun min_is_updated_after_removing_all_keys_for_old_min/0,
             fun min_stays_same_if_not_all_keys_removed/0,
             fun min_stays_same_if_not_all_keys_removed/0,
-            fun min_stays_same_if_inrelated_key_removed/0
+            fun min_stays_same_if_inrelated_key_removed/0,
+            fun cannot_update_w_lower_value/0,
+            fun split_empty_tree/0,
+            fun split_tree_smaller_than_num/0,
+            fun split_tree_w_zero/0,
+            fun split_tree_general_case/0
         ].
 
 min_is_correct_after_several_inserts() ->
@@ -54,13 +59,13 @@ min_is_none_after_removal_of_all_elements() ->
     ]),
     ToRemove = [c,a,b,c],
     T1 = remove_keys(ToRemove,T),
-    ?assertEqual(min_val_tree:get_min(T1),none).
+    ?assertEqual(min_val_tree:min(T1),none).
 
 removal_on_empty_does_not_error() ->
     T = min_val_tree:new(),
     ToRemove = [a,b,c],
     T1 = remove_keys(ToRemove,T),
-    ?assertEqual(none, min_val_tree:get_min(T1)).
+    ?assertEqual(none, min_val_tree:min(T1)).
 
 min_is_updated_after_removing_all_keys_for_old_min() ->
     Pairs =
@@ -74,7 +79,7 @@ min_is_updated_after_removing_all_keys_for_old_min() ->
     T = store_pairs(Pairs),
     ToRemove = [n,y],
     T1 = remove_keys(ToRemove,T),
-    ?assertEqual(min_val_tree:get_min(T1),{ok,3}).
+    ?assertEqual(min_val_tree:min(T1),{ok,3}).
 
 min_stays_same_if_not_all_keys_removed() ->
     Pairs =
@@ -88,10 +93,9 @@ min_stays_same_if_not_all_keys_removed() ->
     T = store_pairs(Pairs),
     ToRemove = [n],
     T1 = remove_keys(ToRemove,T),
-    ?assertEqual(min_val_tree:get_min(T1),{ok,1}).
+    ?assertEqual(min_val_tree:min(T1),{ok,1}).
 
 min_stays_same_if_inrelated_key_removed() ->
-    min_val_tree:new(),
     Pairs =
         [
             {a,5},
@@ -102,7 +106,63 @@ min_stays_same_if_inrelated_key_removed() ->
     T1 = store_pairs(Pairs),
     ToRemove = [b],
     T2 =remove_keys(ToRemove,T1),
-    ?assertEqual(min_val_tree:get_min(T2),{ok,1}).
+    ?assertEqual(min_val_tree:min(T2),{ok,1}).
+
+
+cannot_update_w_lower_value() ->
+    Pairs =
+        [
+            {a,5},
+            {b,3},
+            {c,7}
+        ],
+    T1 = store_pairs(Pairs),
+    T2 = min_val_tree:store(a,1,T1),
+    ?assertEqual(min_val_tree:min(T2),{ok,3}),
+    ?assertEqual(min_val_tree:get_val(a,T2),{ok,5}).
+
+split_empty_tree() ->
+    T1 = min_val_tree:new(),
+    {L,T2} = min_val_tree:split(2,T1),
+    ?assertEqual(length(L),0),
+    ?assert(min_val_tree:is_empty(T2)).
+
+split_tree_smaller_than_num() ->
+    Pairs =
+        [
+            {a,5},
+            {b,3},
+            {c,7}
+        ],
+    T1 = store_pairs(Pairs),
+    {L,T2} = min_val_tree:split(5,T1),
+    ?assertEqual(3,length(L)),
+    ?assert( min_val_tree:is_empty(T2)).
+
+split_tree_w_zero() ->
+    Pairs =
+        [
+            {a,5},
+            {b,3},
+            {c,7}
+        ],
+    T1 = store_pairs(Pairs),
+    {L,T2} = min_val_tree:split(0,T1),
+    ?assertEqual(0,length(L)),
+    ?assert(not min_val_tree:is_empty(T2)).
+
+split_tree_general_case() ->
+    Pairs =
+        [
+            {a,5},
+            {b,3},
+            {d,2},
+            {c,7}
+        ],
+    T1 = store_pairs(Pairs),
+    {L,T2} = min_val_tree:split(2,T1),
+    ?assertEqual([{d,2},{b,3}],L),
+    ?assertEqual({ok,5},min_val_tree:min(T2)).
 
 %% ===========================================================================
 %% HELPERS
@@ -119,7 +179,7 @@ remove_keys(ToRemove,T) ->
 
 store_pairs_and_test_min(Pairs,ExpectedMin) ->
     T1 = store_pairs(Pairs),
-    Min = min_val_tree:get_min(T1),
+    Min = min_val_tree:min(T1),
     ?assertEqual(Min,ExpectedMin).
 
 
