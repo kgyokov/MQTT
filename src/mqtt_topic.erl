@@ -18,15 +18,9 @@
 %% e.g. [ /A/B/+ , /A/B/C ] can be reduced to [/A/B/+]
 %% @end
 min_cover(Filters) ->
-    min_cover([],Filters).
+    lists:foldl(fun merge_max/2,[],Filters).
 
-min_cover(Maximals,[]) ->
-    Maximals;
-
-min_cover(Maximals,[H|T]) ->
-    min_cover(merge_max(Maximals,H),T).
-
-merge_max(Maximals,NewMax) ->
+merge_max(NewMax,Maximals) ->
     DedupL = [ Max || Max <- Maximals, not is_covered_by(Max,NewMax) ],
     case lists:any(fun(Max) -> is_covered_by(NewMax,Max) end, DedupL) of
         true    -> DedupL;
@@ -35,13 +29,23 @@ merge_max(Maximals,NewMax) ->
 
 
 %% @doc
-%% Picks a matching filter with highest QoS.
+%% Picks the lowest matching filter with highest QoS, then closest filter.
 %% @end
 best_match(Subs,Topic) ->
-    Matches = lists:filter(fun({Filter,_}) -> is_covered_by(Topic,Filter) end, Subs),
-    case lists:sort(fun({_,QoS1},{_,QoS2}) -> QoS1 >= QoS2 end, Matches) of
-        [H|_] -> {ok,H};
-        []    -> error
+    Matches = [ Sub || {Filter,_} = Sub <- Subs, is_covered_by(Topic,Filter)],
+    case Matches of
+        [] -> error;
+        [H|T] ->
+            BestMatch =
+                lists:foldl(
+                    fun(El = {Filter,QoS},Acc = {AccFilter,AccQoS}) ->
+                        case QoS > AccQoS orelse QoS =:= AccQoS andalso is_covered_by(Filter,AccFilter) of
+                            true -> El;
+                            false -> Acc
+                        end
+                    end,
+                    H,T),
+            {ok,BestMatch}
     end.
 
 %% normalize(<<Pattern/binary>>) ->
@@ -69,7 +73,7 @@ eliminate_w(T) ->
     T.
 
 is_covered_by({Pattern1,QoS1},{Pattern2,QoS2}) ->
-    is_covered_by(Pattern1,Pattern2) andalso QoS2 >= QoS1;
+    QoS2 >= QoS1 andalso is_covered_by(Pattern1,Pattern2);
 
 %% @doc
 %% Tells us if the Cover covers the Pattern.
@@ -90,6 +94,7 @@ seg_is_covered_by(_,["#"])      -> true;  %%  '#' definitely covers '_' (everyth
 seg_is_covered_by([],[_|_])     -> false; %% else if the pattern is longer than the potential match, there is no match
 seg_is_covered_by([_|_],[])     -> false; %% else if the patter is shorter than the potential match
 seg_is_covered_by([],[])        -> true;  %% if the pattern is as long as the potential match, THIS IS a match
+
 
 %% # > + > char
 seg_is_covered_by([PH|PT],[CH|CT])->
@@ -123,12 +128,12 @@ seg_is_covered_by([PH|PT],[CH|CT])->
 %% @end
 
 -spec explode(binary()|list(binary())) -> [binary()].
-explode(<<TopicLevels/binary>>)->
+explode(<<TopicLevels/binary>>) ->
     explode(split(TopicLevels));
 
 explode(TopicLevels) when is_list(TopicLevels) ->
     RawList = [ list_to_binary(lists:reverse(RL)) || RL <- explode([],TopicLevels)],
-    Set = sets:from_list(RawList),
+    Set = sets:from_list(RawList), %% deduplicate
     [<<"#">>|sets:to_list(Set)].
 
 explode(ParentLevels,["/"|T]) ->
