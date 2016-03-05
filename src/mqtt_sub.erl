@@ -18,11 +18,14 @@
 
 %% API
 -export([start_link/2,
+    %% Subs
     subscribe_self/4,
     cancel/3,
-    request_more/4,
-    push/3,
     get_live_clients/1,
+    %% Packets
+    request_more/4,
+    ack/3,
+    push/3,
     new/1]).
 
 %% gen_server callbacks
@@ -122,7 +125,10 @@ push(Pid,Packet,QoS) ->
     gen_server:call(Pid,{push,Packet,QoS}).
 
 request_more(Pid,ClientId,FromSeq,WSize) ->
-    gen_server:call(Pid,{request_more,ClientId,FromSeq,WSize}).
+    gen_server:cast(Pid,{request_more,ClientId,FromSeq,WSize}).
+
+ack(Pid,ClientId,AckSeq) ->
+    gen_server:cast(Pid,{ack,ClientId,AckSeq}).
 
 %% Hides the supervisor
 new(Filter) ->
@@ -270,6 +276,20 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_cast(async_init, S = #state{filter = Filter,repo = Repo}) ->
+    SubState = Repo:load(Filter),
+    S1 = recover(S,SubState),
+    {noreply,S1};
+
+handle_cast({request_more,ClientId,FromSeq,WSize}, S) ->
+    handle_request_for_more(ClientId,FromSeq,WSize,S),
+    {noreply,S};
+
+handle_cast({ack,ClientId,AckSeq}, S) ->
+    handle_ack(ClientId,AckSeq,S),
+    {noreply,S};
+
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -291,11 +311,6 @@ handle_cast(_Request, State) ->
 handle_info({'DOWN', MonRef, _, _, _}, S) ->
     S1 = maybe_remove_downed(MonRef,S),
     {noreply, S1};
-
-handle_info(async_init, S = #state{filter = Filter,repo = Repo}) ->
-    SubState = Repo:load(Filter),
-    S1 = recover(S,SubState),
-    {noreply,S1};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -352,9 +367,9 @@ handle_new_packet(Packet,QoS,_From,S = #state{live_subs = Subs,
                                               queue = SQ}) ->
 
     SQ1 = shared_queue:pushr(Packet,SQ),
-    PSeq1 = shared_queue:max_seq(SQ1),
+    Max = shared_queue:max_seq(SQ1),
     {PushTo,Subs1} = dict:fold(fun(ClientId,Sub,AccIn = {PushToAcc,SubsAcc}) ->
-                                    case maybe_update_waiting_sub(PSeq1,Sub) of
+                                    case maybe_update_waiting_sub(Max,Sub) of
                                         {ok,Sub1 = #sub{pid = Pid}} ->
                                             SubsAcc1 = dict:update(ClientId,Sub1,SubsAcc),
                                             {[Pid|PushToAcc],SubsAcc1};
@@ -362,41 +377,37 @@ handle_new_packet(Packet,QoS,_From,S = #state{live_subs = Subs,
                                     end
                               end,
                     {[],Subs},Subs),
-    S1 = S#state{packet_seq = PSeq1,
-                 live_subs = Subs1,
+    S1 = S#state{live_subs = Subs1,
                  queue = SQ1},
     send_packet_to_clients(PushTo,Packet,QoS),
-    {reply,{ok,PSeq1},S1}.
+    {reply,{ok,Max},S1}.
 
 
 %% @doc
 %% Updates a sub if the new packet sequence is [Last Sent ... Requested] window
 %% @end
-maybe_update_waiting_sub(PSeq,Sub = #sub{requested = Req})
-    when PSeq =< Req ->
-    Sub1 = Sub#sub{last_sent = PSeq},
+maybe_update_waiting_sub(Max,Sub = #sub{requested = Req})
+    when Max =< Req ->
+    Sub1 = Sub#sub{last_sent = Max},
     %%Range = {LSent,PSeq},
     %%{ok,Sub1,Range};
     {ok,Sub1};
 
 maybe_update_waiting_sub(_,_) -> ignore.
 
-handle_request_for_more(ClientId,RequestFrom,WSize,S = #state{live_subs = Subs,
-                                                              queue = SQ}) ->
+handle_request_for_more(ClientId,FromSeq,WSize,S = #state{live_subs = Subs,
+                                                          queue = SQ}) ->
     S1 = case dict:find(ClientId,Subs) of
-            {ok,Sub = #sub{pid = Pid}} ->
-                PSeq = shared_queue:max_seq(SQ),
-                {ok,Sub1,{From,To}} = packet_range_to_send(PSeq,WSize,Sub),
-                ActualFrom = max(From,shared_queue:min_seq(SQ)),
-                ActualTo = min(To,shared_queue:max_seq(SQ)),
-                Packets = shared_queue:read(ActualFrom,ActualTo,SQ),
-                S2 = S#state{live_subs = dict:update(ClientId,Sub1,Subs)},
-                %%queue = shared_queue:move(ClientId,ActualTo,SQ)},
-                send_packets(Packets,Pid,S2),
-                S2;
-            error ->
-                S
-         end,
+        {ok,Sub = #sub{pid = Pid}} ->
+            MaxSeq = shared_queue:max_seq(SQ),
+            {ok,Sub1,{From,To}} = packet_range_to_send(MaxSeq,FromSeq,WSize,Sub),
+            Packets = shared_queue:read(From,To,SQ),
+            S2 = S#state{live_subs = dict:update(ClientId,Sub1,Subs)},
+            send_packets_to_client(Pid,Packets,S2),
+            S2;
+        error ->
+            S
+     end,
     {ok,{reply,ok},S1}.
 
 handle_ack(ClientId,AckSeq,S = #state{queue = SQ}) ->
@@ -411,21 +422,27 @@ handle_ack(ClientId,AckSeq,S = #state{queue = SQ}) ->
 %%    maybe_process_pending(PSeq,LAck1,Req1,Sub).
 
 %% @doc
+%% Invariants:
+%% LastSent =< LastReq
+%%
+%%
+%%
+%%
+%%
+%% @end
+
+%% @doc
 %% Determine the sequence range of packets to send depending on the size of the Client's Window
 %% @end
-packet_range_to_send(PSeq,WSize,Sub = #sub{last_sent = LastSent,
-                                           requested = Req}) ->
-    %% sanitize inputs
-%%    LAck1 = max(Ack,LAck),
-%%    Req1 = max(Req,LAck+WSize),
-    Req1 = max(Req,LastSent+WSize),
-    SendUntil = min(Req,PSeq),
-    Sub1 = Sub#sub{last_sent = SendUntil,
-                   requested = Req1},
-    Range = {LastSent,SendUntil},
-    {ok,Sub1,Range};
+packet_range_to_send(Max,From,WSize,Sub = #sub{last_sent = LastSent,
+                                               requested = LastReq}) ->
+    LastReq1 = max(LastReq,From+WSize),
+    SendTo = min(LastReq1,Max),
+    Sub1 = Sub#sub{last_sent = SendTo,
+                   requested = LastReq1},
+    Range = {LastSent,SendTo},
+    {ok,Sub1,Range}.
 
-packet_range_to_send(_,_,_) -> ignore.
 
 %% ===================================================================
 %% Packet Sending
@@ -434,15 +451,17 @@ packet_range_to_send(_,_,_) -> ignore.
 send_packet_to_clients(CPids,Packet,QoS) ->
     [send_packet(CPid,Packet,QoS) || CPid <- CPids].
 
-send_packets(Range,CPid,#state{filter = Filter, queue = SQ}) ->
-    Ps = get_packets(Range,Filter,SQ),
-    [send_packet(CPid,P,QoS) || {P,QoS} <- Ps].
+send_packets_to_client(CPid,Ps,QoS) ->
+    [send_packet(CPid,P,QoS) || P <- Ps].
 
-send_packet(CPid,P,?QOS_0)   -> mqtt_session_out:push_qos0(CPid,P);
-send_packet(CPid,P,QoS)      -> mqtt_session_out:push_reliable(CPid,P,QoS).
+send_packet(CPid,P,QoS)   -> CPid ! {push,P,QoS}.
 
-get_packets({From,To},_Filter,SQ) when To > From-> ok;
-get_packets(_,_,_) -> [].
+%%send_packets(Range,CPid,#state{filter = Filter, queue = SQ}) ->
+%%    Ps = get_packets(Range,Filter,SQ),
+%%    [send_packet(CPid,P,QoS) || {P,QoS} <- Ps].
+
+%%send_packet(CPid,P,?QOS_0)   -> mqtt_session_out:push_qos0(CPid,P);
+%%send_packet(CPid,P,QoS)      -> mqtt_session_out:push_reliable(CPid,P,QoS).
 
 %% ===================================================================
 %% Setting Subscriptions
