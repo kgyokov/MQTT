@@ -45,11 +45,11 @@ add(ClientId,Seq,SQ = #shared_q{client_seqs = Offsets,cur_seq = CurSeq}) ->
     ActualSeq = max(min_val_tree:min(Offsets),min(CurSeq,Seq)),
     SQ#shared_q{client_seqs = min_val_tree:store(ClientId,ActualSeq,Offsets)}.
 
-
 maybe_truncate(NewOffsets, SQ = #shared_q{queue = Q}) ->
     MinClientSeq = min_val_tree:min(NewOffsets),
-    {_,Q1} = sequence_monoid:split(fun(Seq) -> Seq >= MinClientSeq end,Q),
-    SQ#shared_q{queue = Q1,client_seqs = NewOffsets}.
+    {Garbage,Q1} = sequence_monoid:split_by_seq(fun(Seq) -> Seq >= MinClientSeq end,Q),
+    {sequence_monoid:ms(Garbage),
+     SQ#shared_q{queue = Q1,client_seqs = NewOffsets}}.
 
 min_seq(#shared_q{client_seqs = Offsets}) -> min_val_tree:min(Offsets).
 
