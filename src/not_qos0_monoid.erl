@@ -14,7 +14,11 @@
 %% API
 -export([id/0, as/2, ms/1]).
 
-id() -> false.
-as(NotQoS0_1,NotQoS0_2) -> NotQoS0_1 orelse NotQoS0_2.
-ms(QoS) -> QoS =/= 0.
+id() -> 0.
+as(NotQoS0_1,NotQoS0_2) -> NotQoS0_1 + NotQoS0_2.
+ms(QoS) ->
+    case QoS of
+        0 -> 0;
+        _ -> 1
+    end.
 

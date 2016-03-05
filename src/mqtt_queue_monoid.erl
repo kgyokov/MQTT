@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 05. Mar 2016 12:23 AM
 %%%-------------------------------------------------------------------
--module(composable_monoid).
+-module(mqtt_queue_monoid).
 -author("Kalin").
 
 -behavior(gen_monoid).
