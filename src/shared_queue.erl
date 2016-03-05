@@ -56,7 +56,7 @@ min_seq(#shared_q{client_seqs = Offsets}) -> min_val_tree:min(Offsets).
 max_seq(#shared_q{cur_seq = Seq}) -> Seq.
 
 read(MinSeq,MaxSeq, #shared_q{queue = Q}) ->
-    {_,Rest} =      sequence_monoid:split(fun(Seq) -> Seq >= MinSeq end, Q),
-    {Interval,_} =  sequence_monoid:split(fun(Seq) -> Seq =< MaxSeq end, Rest),
+    {_,Rest} =      sequence_monoid:split(fun({Seq,_}) -> Seq >= MinSeq end, Q),
+    {Interval,_} =  sequence_monoid:split(fun({Seq,_}) -> Seq =< MaxSeq end, Rest),
     sequence_monoid:to_list(Interval).
 

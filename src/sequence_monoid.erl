@@ -17,5 +17,7 @@
 %% API
 
 id() -> 0.
-as(A,B) -> max(A,B).
-ms({Seq,_El}) -> Seq.
+as({Seq1,NotQoS0_1},{Seq2,NotQoS0_2}) ->
+    { max(Seq1,Seq2),NotQoS0_1 andalso NotQoS0_2}.
+ms({Seq,{QoS,_El}}) ->
+    {Seq,QoS =/= 0}.
