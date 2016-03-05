@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([new/1, pushr/2, move/3, min_seq/1, max_seq/1, read/3, remove/2]).
+-export([new/1, pushr/2, move/3, min_seq/1, max_seq/1, read/3, remove/2, add/2, add/3]).
 
 -record(shared_q,{
     cur_seq :: non_neg_integer(), %% Sequence number of the latest item added to the queue
@@ -36,6 +36,15 @@ move(ClientId,ToSeq,SQ = #shared_q{client_seqs = Offsets}) ->
 remove(ClientId,SQ = #shared_q{client_seqs = Offsets}) ->
     Offsets1 = min_val_tree:remove(ClientId,Offsets),
     maybe_truncate(Offsets1,SQ).
+
+add(ClientId,SQ = #shared_q{cur_seq = CurSeq}) ->
+    add(ClientId,CurSeq,SQ).
+
+add(ClientId,Seq,SQ = #shared_q{client_seqs = Offsets,cur_seq = CurSeq}) ->
+    %%@todo: Should we sanitize the input???
+    ActualSeq = max(min_val_tree:min(Offsets),min(CurSeq,Seq)),
+    SQ#shared_q{client_seqs = min_val_tree:store(ClientId,ActualSeq,Offsets)}.
+
 
 maybe_truncate(NewOffsets, SQ = #shared_q{queue = Q}) ->
     MinClientSeq = min_val_tree:min(NewOffsets),
