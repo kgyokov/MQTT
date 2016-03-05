@@ -9,8 +9,6 @@
 -author("Kalin").
 -include("mqtt_packets.hrl").
 
--type subscription() :: {Topic::topic(),QoS::qos()}.
-
 -record(mqtt_message,{
 	topic           ::topic(),
 	content         ::binary(),

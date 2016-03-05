@@ -20,8 +20,9 @@
 -type client_id() ::binary().
 -type qos()       ::?QOS_0 | ?QOS_1 | ?QOS_2.
 -type topic()     ::binary().
+-type content()   ::binary().
 
-
+-type subscription() :: {Topic::topic(),QoS::qos()}.
 
 %%%%%%%%%%%%%%%%%%%%%%%
 %% Connections
@@ -83,7 +84,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%
 -record('SUBSCRIBE', {
     packet_id       ::packet_id(),
-    subscriptions   ::[{TopicFilter::binary(),QoS::qos()}]
+    subscriptions   ::[subscription()]
 }).
 %%-record(subscription, {topic_filter,qos}).
 
