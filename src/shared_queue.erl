@@ -12,6 +12,8 @@
 %% API
 -export([new/1, pushr/2, move/3, min_seq/1, max_seq/1, read/3, remove/2, add/2, add/3]).
 
+-define(SEQ_MONOID,sequence_monoid).
+
 -record(shared_q,{
     cur_seq :: non_neg_integer(), %% Sequence number of the latest item added to the queue
     %% incremented with each new item
@@ -48,7 +50,7 @@ add(ClientId,Seq,SQ = #shared_q{client_seqs = Offsets,cur_seq = CurSeq}) ->
 maybe_truncate(NewOffsets, SQ = #shared_q{queue = Q}) ->
     MinClientSeq = min_val_tree:min(NewOffsets),
     {Garbage,Q1} = sequence_monoid:split_by_seq(fun(Seq) -> Seq >= MinClientSeq end,Q),
-    {sequence_monoid:ms(Garbage),
+    {sequence_monoid:measure(Garbage),
      SQ#shared_q{queue = Q1,client_seqs = NewOffsets}}.
 
 min_seq(#shared_q{client_seqs = Offsets}) -> min_val_tree:min(Offsets).
