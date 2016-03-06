@@ -189,8 +189,7 @@ handle_call({sub,ClientId,QoS,CSeq},{Pid,_},S = #state{filter = Filter,
                                                        live_subs = Subs,
                                                        monref_idx = Mon,
                                                        retained = Retained}) ->
-    Client = dict:find(ClientId,Subs),
-    case Client of
+    case  dict:find(ClientId,Subs) of
         error ->
             NewSub = {ClientId,CSeq,QoS,Pid},
             mqtt_sub_repo:save_sub(Filter,NewSub),
@@ -238,7 +237,7 @@ handle_call({unsub,ClientId,Seq}, _From, S = #state{filter = Filter,
     case dict:find(ClientId,Subs) of
         error ->
             {reply,ok,S};
-        {ok, Sub} ->
+        {ok,Sub} ->
             case Sub of
                 #sub{monref = MonRef,client_seq = OldSeq} when Seq >= OldSeq ->
                     mqtt_sub_repo:remove_sub(Filter,ClientId),
