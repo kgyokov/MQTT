@@ -372,6 +372,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 
 handle_new_packet(Packet,QoS,_From,S = #state{live_subs = Subs,
+                                              retained = Ret,
                                               queue = SQ}) ->
 
     SQ1 = shared_queue:pushr({QoS,Packet},SQ),
@@ -385,8 +386,10 @@ handle_new_packet(Packet,QoS,_From,S = #state{live_subs = Subs,
                                     end
                               end,
                     {[],Subs},Subs),
+    Ret1 = maybe_store_retained(Packet,Ret),
     S1 = S#state{live_subs = Subs1,
-                 queue = SQ1},
+                 queue = SQ1,
+                 retained = Ret1},
     send_packet_to_clients(SendTo,Packet,QoS),
     {reply,{ok,Max},S1}.
 
@@ -406,16 +409,16 @@ maybe_update_waiting_sub(_,_) -> ignore.
 handle_request_for_more(ClientId,FromSeq,WSize,S = #state{live_subs = Subs,
                                                           queue = SQ}) ->
     S1 = case dict:find(ClientId,Subs) of
-        {ok,Sub = #sub{pid = Pid}} ->
-            MaxSeq = shared_queue:max_seq(SQ),
-            {ok,{From,To},Sub1} = packet_range_to_send(MaxSeq,FromSeq,WSize,Sub),
-            Packets = shared_queue:read(From,To,SQ),
-            S2 = S#state{live_subs = dict:update(ClientId,Sub1,Subs)},
-            send_packets_to_client(Pid,Packets,S2),
-            S2;
-        error ->
-            S
-     end,
+            {ok,Sub = #sub{pid = Pid}} ->
+                MaxSeq = shared_queue:max_seq(SQ),
+                {ok,{From,To},Sub1} = packet_range_to_send(MaxSeq,FromSeq,WSize,Sub),
+                Packets = shared_queue:read(From,To,SQ),
+                S2 = S#state{live_subs = dict:update(ClientId,Sub1,Subs)},
+                send_packets_to_client(Pid,Packets,S2),
+                S2;
+            error ->
+                S
+        end,
     {ok,{reply,ok},S1}.
 
 handle_ack(ClientId,AckSeq,S = #state{queue = SQ,garbage = Garbage}) ->
@@ -517,6 +520,10 @@ maybe_remove_downed(MonRef,S = #state{filter = Filter,
             S#state{monref_idx = Mon1,live_subs = Subs1};
         error -> S
     end.
+
+maybe_store_retained(#packet{retain = false},Ret)                -> Ret;
+maybe_store_retained(#packet{topic = Topic, content = <<>>},Ret) -> dict:erase(Topic,Ret);
+maybe_store_retained(Packet = #packet{topic = Topic},Ret)        -> dict:store(Topic,Packet,Ret).
 
 recover(SubRecord,S) ->
     lists:foldl(fun recover_sub/2,S,SubRecord).
