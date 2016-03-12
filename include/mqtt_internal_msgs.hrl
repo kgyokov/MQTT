@@ -29,3 +29,11 @@
     qos         ::qos()
 }).
 
+-record(packet,{
+    topic       ::topic(),
+    content     ::content(),
+    retain      ::boolean(),
+    qos         ::qos(),
+    ref         ::any()
+}).
+

@@ -25,8 +25,8 @@
     close_duplicate/1,
     close/1,
     push_reliable_comp/3,
-    new/4
-]).
+    new/4,
+    subscription_created/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -45,6 +45,7 @@
     client_id,
     seq,
     session,
+    subs = orddict:new(),
     is_persistent,
     persist
 }).
@@ -80,12 +81,12 @@ push_reliable(Pid, CTRPacket,QoS) ->
 %% @end
 %%--------------------------------------------------------------------
 close_duplicate(Pid) ->
-    gen_server:cast(Pid, {force_close, duplicate}).
+    gen_server:cast(Pid,{force_close, duplicate}).
 
 close(Pid) ->
-    gen_server:call(Pid, close).
+    gen_server:call(Pid,close).
 
-push_reliable_comp(Pid, CTRPacket,QoS) ->
+push_reliable_comp(Pid,CTRPacket,QoS) ->
     gen_server:call(Pid,{push_reliable_comp,CTRPacket,QoS}).
 
 message_ack(Pid,PacketId) ->
@@ -102,6 +103,14 @@ subscribe(Pid,NewSubs) ->
 
 unsubscribe(Pid,OldSubs) ->
     gen_server:call(Pid,{unsub,OldSubs}).
+
+%%---------------------------------------------------------------------
+%% @doc
+%% Callback when a subscription has been created
+%% @end
+%%---------------------------------------------------------------------
+subscription_created(Pid,Sub) ->
+    gen_server:call(Pid,{sub_created,Sub}).
 
 %% cleanup(Pid) ->
 %%     gen_server:call(Pid,cleanup).
@@ -152,32 +161,31 @@ init([ConnPid,ClientId,CleanSession]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call({push_reliable,CTRPacket,QoS}, _From,S = #state{session = SO,
-                                                            sender = Sender,
-                                                            persist = Persist})
-    when QoS =:= 1; QoS =:= 2 ->
-    error_logger:info_msg("Pushing packet ~p with QoS = ~p~n",[CTRPacket,QoS]),
+handle_call({push,CTRPacket}, _From,S = #state{session = SO,
+                                               sender = Sender,
+                                               persist = Persist}) ->
     {Result,SO2} =
-        case mqtt_session:append_msg(CTRPacket,QoS,SO) of
+        case mqtt_session:push_msg(CTRPacket,SO) of
             duplicate ->            %% do nothing
                 {duplicate,SO};
-            {ok,PacketId,SO1} ->    %% side effects
+            {full,SO1} ->
+                Persist(SO1);
+            {ok,Packet,SO1} ->    %% side effects
                 Persist(SO1),
-                Packet = mqtt_session:to_publish(CTRPacket,false,QoS,PacketId,false),
                 send_to_client(Sender,Packet),
                 {ok,SO1}
         end,
     {reply,Result,S#state{session = SO2}};
 
-handle_call({append_comp,Ref}, _From,  S = #state{session = SO}) ->
-    SO1 = mqtt_session:append_message_comp(Ref,SO),
-    {reply,ok,S#state{session = SO1}};
-
 handle_call({ack,PacketId}, _From,  S = #state{session = SO,
-                                               persist = Persist}) ->
+                                               persist = Persist,
+                                               client_id = ClientId}) ->
     SO2 =
         case mqtt_session:message_ack(PacketId,SO) of
-            {ok,SO1}  ->    Persist(SO1);
+            {ok,Notifs,SO1}  ->
+                Persist(SO1),
+                request_more(ClientId,Notifs),
+                SO1;
             duplicate ->    SO
         end,
     {reply,ok,S#state{session = SO2}};
@@ -186,7 +194,7 @@ handle_call({pub_rec,PacketId}, _From,  S = #state{session = SO,
                                                    persist = Persist}) ->
     SO2 =
         case mqtt_session:message_pub_rec(PacketId,SO) of
-            {ok,SO1}  ->    Persist(SO1);
+            {ok,PubRec,SO1}  ->    Persist(SO1),SO1;
             duplicate ->    SO
         end,
     %% ALWAYS respond with PubRel
@@ -194,43 +202,36 @@ handle_call({pub_rec,PacketId}, _From,  S = #state{session = SO,
     send_to_client(S,Packet),
     {reply,ok,S#state{session = SO2}};
 
-handle_call({pub_comp,PacketId}, _From,  S = #state{session = SO,
+handle_call({pub_comp,PacketId}, _From,  S = #state{client_id = ClientId,
+                                                    session = SO,
                                                     persist = Persist}) ->
     SO2 =
         case mqtt_session:message_pub_comp(PacketId,SO) of
-            {ok,SO1}  ->    Persist(SO1);
-            duplicate ->    SO
+            {ok,Notifs,SO1}  ->
+                Persist(SO1),
+                request_more(ClientId,Notifs),
+                SO1;
+            duplicate -> SO
         end,
     {reply,ok,S#state{session = SO2}};
 
 handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
-                                              sender = Sender,
                                               client_id = ClientId,
-                                              persist = Persist}) ->
-    Filters = [Filter || {Filter,_} <- NewSubs],
-    error_logger:info_msg("Filters: ~p~n",[Filters]),
-    %% Add subscriptions to in-memory session
-    [mqtt_router:subscribe(Filter,ClientId,QoS,S#state.seq) || {Filter,QoS} <- NewSubs],
-    Retained = mqtt_topic_repo:get_retained(Filters),
-    error_logger:info_msg("Got Retained: ~p~n",[Retained]),
-
-    %%@todo: handle race conditions between subscribing and getting retained messages
+                                              persist = Persist,
+                                              seq = Seq}) ->
     SO1 = mqtt_session:subscribe(NewSubs,SO),
-    {PkToSend,SO2} = mqtt_session:append_retained(NewSubs,Retained,SO1),
-    QosResults = [{ok,QoS} || {_,QoS} <- NewSubs], %% @todo: do we even need this?
-
-    %% Side effects
-    error_logger:info_msg("Retained Messages: ~p~n",[PkToSend]),
-    %% Persist the session and send to client
-    Persist(SO2),
-    [send_to_client(Sender,Package)|| Package <- PkToSend],
-    {reply,QosResults,S#state{session = SO2}};
+    QoSResults = [{ok,QoS} || {_,QoS} <- NewSubs], %% @todo: do we even need this?
+    Persist(SO1),
+    _Results = psubscribe(ClientId,Seq,NewSubs),
+    {reply,QoSResults,S#state{session = SO1}};
 
 handle_call({unsub,OldSubs}, _From,  S = #state{session = SO,
                                                 client_id = ClientId,
+                                                seq = Seq,
                                                 persist = Persist}) ->
     SO1 = mqtt_session:unsubscribe(OldSubs,SO),
-    [mqtt_router:unsubscribe(Filter,ClientId,S#state.seq) || Filter <- OldSubs],
+    Filters = [Filter || {Filter,_} <- OldSubs],
+    punsubscribe(ClientId,Seq,Filters),
     Persist(SO1),
     {reply,ok,S#state{session = SO1}};
 
@@ -258,7 +259,7 @@ handle_call(Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_cast({push_0,CTRPacket}, S) ->
-    Packet = mqtt_session:to_publish(CTRPacket,false,0,undefined,false),
+    Packet = mqtt_session:to_publish(CTRPacket,0,undefined,false),
     send_to_client(S,Packet),
     {noreply,S};
 
@@ -301,19 +302,19 @@ handle_info({async_init,ClientId}, S = #state{is_persistent = IsPersistent}) ->
               SO -> if  IsPersistent ->
                             SO;
                         true  ->
-                            %% Clear exsiting subscriptions
-                            [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
-                                || {Filter,_} <- mqtt_session:get_subs(SO)],
+                            Filters = [Filter || {Filter,_} <- mqtt_session:get_subs(SO)],
+                            punsubscribe(ClientId,NewSeq,Filters),
                             SO1 = mqtt_session:new(),
-                            %% save empty session
                             mqtt_session_repo:save(ClientId,SO1),
                             SO1
                     end
           end,
     %% Recover messages in flight and re-send them
     [send_to_client(S, Packet) || Packet <- mqtt_session:msg_in_flight(SO2)],
+    Subs = mqtt_session:get_subs(SO2),
+    psubscribe(ClientId,NewSeq,Subs),
     %% Refresh the subscriptions
-    mqtt_router:refresh_subs(ClientId,NewSeq,mqtt_session:get_subs(SO2)),
+    %%mqtt_router:refresh_subs(ClientId,NewSeq,mqtt_session:get_subs(SO2)),
     {noreply, S#state{seq = NewSeq,session = SO2}};
 
 handle_info(_Info, State) ->
@@ -354,57 +355,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%% apply_to_session(S = #state{session = SO,
-%%                             is_persistent = IsPersistent,
-%%                             sender = Sender},Fun) ->
-%%     SO2 =
-%%         case Fun(SO) of
-%%             {persist,SO1} ->
-%%                 maybe_persist(SO1,IsPersistent),
-%%                 SO1;
-%%             {persist,SO1,Packets} ->
-%%                 maybe_persist(SO1,IsPersistent),
-%%                 [send_to_client(Sender,Packet)|| Packet <-Packets],
-%%                 SO1;
-%%             {ok,SO1,Packets} ->
-%%                 maybe_persist(SO1,IsPersistent),
-%%                 [send_to_client(Sender,Packet)|| Packet <-Packets],
-%%                 SO1;
-%%             duplicate ->
-%%                 SO
-%%         end,
-%%     S#state{session = SO2}.
+psubscribe(ClientId,Seq,Subs) ->
+    rpc:pmap({?MODULE,subscribe_self},[ClientId,Seq],Subs).
 
+punsubscribe(ClientId,Seq,Filters) ->
+    rpc:pmap({?MODULE,unsubscribe_self},[ClientId,Seq],Filters).
 
-perform_registrations(S = #state{is_persistent = IsPersistent}, ClientId) ->
-    error_logger:info_msg("Registering as ~p", [ClientId]),
-    {Result,NewSeq} = mqtt_reg_repo:register_self(ClientId),
-    %% Close duplicate registered Pids
-    case Result of
-        ok ->   ok;
-        {dup_detected,DupPid} -> close_duplicate(DupPid)
-    end,
-    %% Either load an existing session of create a new one
-    SO2 =
-        case mqtt_session_repo:load(ClientId) of
-            {error,not_found} -> mqtt_session:new();
-            SO -> if  IsPersistent ->
-                SO;
-                      true  ->
-                          %% Clear exsiting subscriptions
-                          [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
-                              || {Filter,_} <- mqtt_session:get_subs(SO)],
-                          SO1 = mqtt_session:new(),
-                          %% save empty session
-                          mqtt_session_repo:save(ClientId,SO1),
-                          SO1
-                  end
-        end,
-    %% Recover messages in flight and re-send them
-    [send_to_client(S, Packet) || Packet <- mqtt_session:msg_in_flight(SO2)],
-    %% Refresh the subscriptions
-    mqtt_router:refresh_subs(ClientId,NewSeq,mqtt_session:get_subs(SO2)),
-    {noreply, S#state{seq = NewSeq,session = SO2}}.
+subscribe_self({Filter,QoS},ClientId,Seq) ->
+    mqtt_router:subscribe(Filter,ClientId,QoS,Seq).
+
+unsubscribe_self(Filter,ClientId,Seq) ->
+    mqtt_router:unsubscribe(Filter,ClientId,Seq).
 
 send_to_client(#state{sender = Sender}, Packet) ->
     send_to_client(Sender, Packet);
@@ -412,21 +373,32 @@ send_to_client(#state{sender = Sender}, Packet) ->
 send_to_client(Sender, Packet) ->
     mqtt_sender:send_packet(Sender, Packet).
 
-clear_session(#state{session = SO,client_id = ClientId,is_persistent = IsPers,seq = Seq},NewSeq) ->
-    %% Clear exsiting subscriptions
+request_more(ClientId,Notifs) ->
+    [mqtt_sub:request_more(Pid,ClientId,FromSeq,WSize) || [WSize,Pid,FromSeq] <- Notifs].
+
+clear_session(#state{session = SO,client_id = ClientId},NewSeq) ->
     [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
         || {Filter,_} <- mqtt_session:get_subs(SO)],
     SO1 = mqtt_session:new(),
-    %% save empty session
     mqtt_session_repo:save(ClientId,SO1),
     SO1.
 
-maybe_clear_session(#state{session = SO,client_id = ClientId,is_persistent = IsPers,seq = Seq}) ->
-    if  not IsPers ->
-            [mqtt_router:unsubscribe(Filter,ClientId,Seq) ||
-                {Filter,_QoS}  <- mqtt_session:get_subs(SO)],ok;
-        true -> ok
-    end.
+
+maybe_clear_session(#state{is_persistent = true}) -> ok;
+
+maybe_clear_session(#state{session = SO,client_id = ClientId,seq = Seq,is_persistent = false}) ->
+    [mqtt_router:unsubscribe(Filter,ClientId,Seq) ||
+        {Filter,_QoS}  <- mqtt_session:get_subs(SO)],
+    ok.
+
+apply_side_effects(SideEffects,SO) ->
+    [apply_se(SE,SO) ||SE <- SideEffects].
+
+apply_se({more,_Window},#state{client_id = _ClientId}) ->
+    ok;
+
+apply_se(persist,#state{persist = Persist,session = SO}) ->
+    Persist(SO).
 
 %% Termination handling
 cleanup(S = #state{client_id = ClientId}) ->

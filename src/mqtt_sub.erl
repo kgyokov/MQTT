@@ -52,7 +52,7 @@
     packet_seq      ::non_neg_integer(),%% A sequence number assigned to each Message from a topic covered by this filter.
                                     %% This process assigns incremental integers to each new message
     queue           ::any(),    %% Shared queue of messages
-    retained        ::dict(),   %% Dictionary of retained messages
+    retained        ::any(),   %% Dictionary of retained messages
     garbage         ::any()     %% garbage stats from the queue
 }).
 
@@ -65,8 +65,8 @@
                                         %% between different instances of a Client in case of race conditions)
     %% last_ack = 0  ::non_neg_integer(),  %% the filter-assigned sequence number of the last message processed by this client,
     last_sent = 0 ::non_neg_integer(),  %% the last message sent to the client
-    requested = 0 ::non_neg_integer(),   %% How many messages the client has requested
-    retained = undefined                %% the retained messages to send to the client
+    window = 0 ::non_neg_integer(),   %% How many messages the client has requested
+    retained_msgs = []                %% the retained messages to send to the client
 }).
 
 %%%===================================================================
@@ -166,6 +166,7 @@ init([Filter, Repo]) ->
                 dead_subs = dict:new(),
                 packet_seq = Seq,
                 queue = shared_queue:new(Seq),
+                retained = gb_trees:empty(),
                 repo = Repo}}.
 
 %%--------------------------------------------------------------------
@@ -187,16 +188,15 @@ init([Filter, Repo]) ->
 
 handle_call({sub,ClientId,QoS,CSeq},{Pid,_},S = #state{filter = Filter,
                                                        live_subs = Subs,
-                                                       monref_idx = Mon,
-                                                       retained = Retained}) ->
+                                                       monref_idx = Mon}) ->
     case  dict:find(ClientId,Subs) of
         error ->
             NewSub = {ClientId,CSeq,QoS,Pid},
             mqtt_sub_repo:save_sub(Filter,NewSub),
-            S1 = insert_sub(NewSub,S),
+            S1 = insert_new_sub(NewSub,S),
             {reply,ok,S1};
-        {ok, Reg} ->
-            case Reg of
+        {ok,Sub} ->
+            case Sub of
                 #sub{client_seq = CurSeq} when CurSeq > CSeq ->
                     %% Message from an old process. Ignore it!
                     %% This can happen in the following (unlikely, but theoretically possible) scenario:
@@ -214,10 +214,7 @@ handle_call({sub,ClientId,QoS,CSeq},{Pid,_},S = #state{filter = Filter,
                     %% Only replacing the QoS
                     NewSub = {ClientId,CSeq,QoS,Pid},
                     mqtt_sub_repo:save_sub(Filter,NewSub),
-                    Reg1 = Reg#sub{qos = QoS,
-                                   retained = Retained},
-                    Subs1 = dict:store(ClientId,Reg1,Subs),
-                    S1 = S#state{live_subs = Subs1},
+                    S1 = refresh_sub(ClientId,QoS,Sub,S),
                     {reply,ok,S1};
                 #sub{pid = OldPid,monref = OldRef} when OldPid =/= Pid ->
                     %% replacing the Pid and QoS
@@ -394,25 +391,13 @@ handle_new_packet(Packet,QoS,_From,S = #state{live_subs = Subs,
     {reply,{ok,Max},S1}.
 
 
-%% @doc
-%% Updates a sub if the new packet sequence is [Last Sent ... Requested] window
-%% @end
-maybe_update_waiting_sub(Max,Sub = #sub{requested = Req})
-    when Max =< Req ->
-    Sub1 = Sub#sub{last_sent = Max},
-    %%Range = {LSent,PSeq},
-    %%{ok,Sub1,Range};
-    {ok,Sub1};
-
-maybe_update_waiting_sub(_,_) -> ignore.
-
 handle_request_for_more(ClientId,FromSeq,WSize,S = #state{live_subs = Subs,
                                                           queue = SQ}) ->
     S1 = case dict:find(ClientId,Subs) of
             {ok,Sub = #sub{pid = Pid}} ->
                 MaxSeq = shared_queue:max_seq(SQ),
-                {ok,{From,To},Sub1} = packet_range_to_send(MaxSeq,FromSeq,WSize,Sub),
-                Packets = shared_queue:read(From,To,SQ),
+                {ok,{Ref,RetToSend},{From,To},Sub1} = packet_range_to_send(MaxSeq,FromSeq,WSize,Sub),
+                Packets = RetToSend ++ shared_queue:read(From,To,SQ),
                 S2 = S#state{live_subs = dict:update(ClientId,Sub1,Subs)},
                 send_packets_to_client(Pid,Packets,S2),
                 S2;
@@ -443,17 +428,7 @@ handle_ack(ClientId,AckSeq,S = #state{queue = SQ,garbage = Garbage}) ->
 %%
 %% @end
 
-%% @doc
-%% Determine the sequence range of packets to send depending on the size of the Client's Window
-%% @end
-packet_range_to_send(Max,From,WSize,Sub = #sub{last_sent = LastSent,
-                                               requested = LastReq}) ->
-    LastReq1 = max(LastReq,From+WSize),
-    SendTo = min(LastReq1,Max),
-    Sub1 = Sub#sub{last_sent = SendTo,
-                   requested = LastReq1},
-    Range = {LastSent,SendTo},
-    {ok,Range,Sub1}.
+
 
 
 handle_sub(ClientId,SO) ->
@@ -475,35 +450,80 @@ send_packets_to_client(CPid,Ps,QoS) ->
 send_packet(CPid,P,QoS) -> CPid ! {push,P,QoS}.
 
 %% ===================================================================
-%% Setting Subscriptions
+%% Subscriptions
 %% ===================================================================
 
-recover_sub({SubInfo,StartFrom},S) ->
-    set_sub(SubInfo,StartFrom,S).
+%% @doc
+%% Updates a sub if the new packet sequence is [Last Sent ... Requested] window
+%% @end
+maybe_update_waiting_sub(MaxSeq,Sub = #sub{retained_msgs = [],
+                                           window = Req})
+    when MaxSeq =< Req ->
+    Sub1 = Sub#sub{last_sent = MaxSeq},
+    {ok,Sub1};
 
-insert_sub(SubInfo,S = #state{queue = SQ}) ->
-    StartFrom = shared_queue:max_seq(SQ),
-    set_sub(SubInfo,StartFrom,S).
+maybe_update_waiting_sub(_,_) -> ignore.
 
-update_sub(SubInfo = {ClientId,_,_,_},S = #state{queue = SQ}) ->
-    StartFrom = shared_queue:whereis(ClientId,SQ),
-    set_sub(SubInfo,StartFrom,S).
+
+%% @doc
+%% Determine the sequence range of packets to send depending on the size of the Client's Window
+%% @end
+packet_range_to_send(Max,StartFrom,WSize,Sub = #sub{last_sent = LastSent,
+                                                    retained_msgs = {Ref,Offset, Msgs},
+                                                    window = LastReq}) ->
+    {RetToSend,RetRest} =
+        if length(Msgs) >= WSize -> lists:split(WSize,Msgs);
+            true ->   {Msgs,[]}
+        end,
+    LastReq1 = max(LastReq,StartFrom+WSize-length(RetToSend)),
+    SendTo = min(LastReq1,Max),
+    Range = {LastSent,SendTo},
+    Ret1 = {Ref,Offset+length(RetToSend),RetRest},
+    Sub1 = Sub#sub{last_sent = SendTo,
+                   window = LastReq1,
+                   retained_msgs = Ret1},
+    {ok,{Ref,RetToSend},Range,Sub1}.
+
 
 set_sub({ClientId,ClientSeq,QoS,Pid},StartFrom,S = #state{monref_idx = Mons,
                                                           live_subs = Subs,
                                                           queue = SQ,
                                                           retained = Ret}) ->
     MonRef = monitor(process,Pid),
-    Reg = #sub{client_seq = ClientSeq,
+    Sub = #sub{client_seq = ClientSeq,
                qos = QoS,
                pid = Pid,
                monref = MonRef,
-               last_sent = StartFrom,
-               requested = StartFrom,
-               retained = Ret},
-    S#state{live_subs = dict:store(ClientId,Reg,Subs),
+               last_sent = StartFrom, %% initialize the Sequence number of the next packet to send
+               window = StartFrom, %% The client's window could be 0, we will wait for a request from the client
+               retained_msgs = {make_ref(),0,gb_sets:to_list(Ret)}},
+    S#state{live_subs = dict:store(ClientId,Sub,Subs),
             monref_idx = dict:store(MonRef,ClientId,Mons),
             queue = shared_queue:add(ClientId,SQ)}.
+
+recover_sub({SubInfo,StartFrom},S) ->
+    set_sub(SubInfo,StartFrom,S).
+
+insert_new_sub(SubInfo,S = #state{queue = SQ}) ->
+    StartFrom = shared_queue:max_seq(SQ), %% start reading packets from the next one
+    set_sub(SubInfo,StartFrom,S).
+
+update_sub(SubInfo = {ClientId,_,_,_},S = #state{queue = SQ}) ->
+    StartFrom = shared_queue:whereis(ClientId,SQ),
+    set_sub(SubInfo,StartFrom,S).
+
+refresh_sub(ClientId,QoS,Sub,S = #state{retained = Ret,live_subs = Subs}) ->
+    Ret1 = {make_ref(),0,gb_sets:to_list(Ret)},
+    Sub1 = Sub#sub{qos = QoS, retained_msgs = Ret1},
+    S#state{live_subs = dict:store(ClientId,Sub1,Subs)}.
+
+maybe_store_retained(#packet{retain = false},Ret)                -> Ret;
+maybe_store_retained(#packet{topic = Topic, content = <<>>},Ret) -> gb_trees:delete(Topic,Ret);
+maybe_store_retained(Packet = #packet{topic = Topic},Ret)        -> gb_trees:enter(Topic,Packet,Ret).
+
+%% =====================================================================
+%% Monitoring and Recovery
+%% =====================================================================
 
 maybe_remove_downed(MonRef,S = #state{filter = Filter,
                                       live_subs = Subs,
@@ -520,10 +540,6 @@ maybe_remove_downed(MonRef,S = #state{filter = Filter,
             S#state{monref_idx = Mon1,live_subs = Subs1};
         error -> S
     end.
-
-maybe_store_retained(#packet{retain = false},Ret)                -> Ret;
-maybe_store_retained(#packet{topic = Topic, content = <<>>},Ret) -> dict:erase(Topic,Ret);
-maybe_store_retained(Packet = #packet{topic = Topic},Ret)        -> dict:store(Topic,Packet,Ret).
 
 recover(SubRecord,S) ->
     lists:foldl(fun recover_sub/2,S,SubRecord).
