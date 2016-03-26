@@ -10,221 +10,198 @@
 -module(mqtt_session).
 -author("Kalin").
 
-%%-include("mqtt_packets.hrl").
 -include("mqtt_internal_msgs.hrl").
 -include("mqtt_session.hrl").
 %% API
--export([push_msg/2,
-         push_msg_comp/2,
-         subscribe/2,
-         unsubscribe/2,
-         get_subs/1,
-         message_ack/2,
-         message_pub_rec/2,
-         message_pub_comp/2,
-         msg_in_flight/1,
-         new/0,
-         to_publish/4,
-         to_pubrel/1,
-         append_retained/2]).
+-export([
+    push/3,
+    subscribe/2,
+    unsubscribe/2,
+    get_subs/1,
+    pub_ack/2,
+    pub_rec/2,
+    pub_comp/2,
+    msg_in_flight/1,
+    new/0,
+    new/1,
+    to_publish/4,
+    to_pubrel/1]).
 
 -define(DEFAULT_MAX_WINDOW,20).
 
 
 -record(outgoing,{
+    subs                      ::any(),               %% Subscriptions
+    queue                     ::queue:queue(),
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     window_size               ::non_neg_integer(),   %% the max number of msgs in flight
-    buffer                    ::non_neg_integer(),   %% the min available window size before we request more packages
-    waiting_subs              ::[pid()],             %% waiting subs with more work to do
     packet_seq                ::non_neg_integer(),   %% The latest client-assigned packet id
     %% Incremented by 1 for every packet,
     %% (though that is not required by the protocol)
-    qos1,                      %% Unacknowledged QoS1 messages
-    qos2,                      %% Unacknowledged QoS2 messages
-    qos2_rec,
-    refs,                     %% Message in transit
-    subs                      %% Subscriptions
+    qos1,                       %% Unacknowledged QoS1 messages
+    qos2,                       %% Unacknowledged QoS2 messages
+    qos2_rec
 }).
+
+
 
 %% ================================================================================
 %% SUBSCRIPTIONS
 %% ================================================================================
 
 get_subs(#outgoing{subs = Subs}) ->
-    orddict:to_list(Subs).
+    [ {Filter,QoS,Seq} || {Filter,{QoS,Seq}} <- orddict:to_list(Subs)].
 
 %% @doc
 %% Adds new subscriptions to the session data
 %% @end
+-spec subscribe(NewSubs::[{binary(),qos(),{non_neg_integer(),non_neg_integer()}}],#outgoing{}) ->
+    #outgoing{}.
+
 subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
     %% @todo: Deduplicate
     Subs1 = lists:foldl(fun add_sub/2,Subs,NewSubs),
     S#outgoing{subs = Subs1}.
 
+
 add_sub({Filter,QoS,Seq},Subs) ->
     orddict:store(Filter,{QoS,Seq},Subs).
 
 %% @doc
-%% Removed existing subscriptions from the session data
+%% Removes existing subscriptions from the session data
+%% Also flushes the queue, although that is not really necessary according to the spec
+%% 3.10.4 - "It MAY continue to deliver any existing messages buffered for delivery to the Client"
 %% @end
-unsubscribe(OldSubs,S = #outgoing{subs = Subs}) ->
-    Subs1= lists:foldl(fun orddict:erase/2,Subs, OldSubs),
-    S#outgoing{subs = Subs1}.
+-spec unsubscribe([binary()],#outgoing{}) -> #outgoing{}.
+
+unsubscribe(OldSubs,S = #outgoing{subs = Subs,queue = Q}) ->
+    Subs1 = lists:foldl(fun orddict:erase/2,Subs,OldSubs),
+    S#outgoing{subs = Subs1, queue = flush_queue(OldSubs,Q)}.
+
+flush_queue(OldSubs,Q) ->
+    queue:filter(fun({Filter,_}) -> lists:member(Filter,OldSubs) end,Q).
 
 
 %% =========================================================================
 %% MESSAGES
 %% =========================================================================
 
--type tcr_packet() :: {topic(),content(),boolean(),any()}.
+push(Filter,Packet = #packet{ref = Ref},SO = #outgoing{subs = Subs}) ->
+    case should_accept(Filter,Ref,Subs) of
+        false -> {[],SO};
+        true ->
+            SO1 = SO#outgoing{subs = orddict:update(Filter,
+                                            fun({QoS,_}) -> {QoS,Ref} end,
+                                    Subs)},
+            maybe_enqueue(Packet,SO1)
+    end.
 
--spec push_msg(#packet{},#outgoing{}) ->
-    duplicate | {full,#outgoing{}} | {ok,#'PUBLISH'{},#outgoing{}}.
+maybe_enqueue(Msg,S = #outgoing{queue = Q,window_size = WSize}) when WSize =<0 ->
+    {[],S#outgoing{queue = queue:cons(Msg,Q)}};
 
-%% @doc
-%% Appends message for delivery
-%% @end
-push_msg(Packet = #packet{topic = Topic,
-                            ref = Ref,
-                            qos = MsgQoS},
-            SO = #outgoing{subs = Subs,
-                           refs = Refs}) ->
-    case is_duplicate(Ref,Refs) of
+maybe_enqueue(Msg,S = #outgoing{window_size = WSize}) ->
+    move_to_session(Msg,S#outgoing{window_size = WSize - 1}).
+
+move_to_session(Packet,SO = #outgoing{subs = Subs}) ->
+    Packet1 = set_actual_qos(Subs,Packet),
+    push_to_session(Packet1,SO).
+
+pull(S = #outgoing{queue = Q,window_size = WSize}) ->
+    case queue:is_empty(Q) of
+        true -> {[],S#outgoing{window_size = WSize+1}};
         false ->
-            {ok,{_,SubQos}} = mqtt_topic:best_match(Subs,Topic),
-            ActualQoS = min(MsgQoS,SubQos),
-            store_msg(Packet#packet{qos = ActualQoS},SO);
-        true  -> duplicate
+            S1 = S#outgoing{queue = queue:tail(Q)},
+            Msg = queue:head(Q),
+            move_to_session(Msg,S1)
     end.
 
-store_msg(Packet = #packet{qos =?QOS_0},SO) ->
+set_actual_qos(Subs,Packet = #packet{topic = Topic,
+                                     qos = MsgQoS}) ->
+    SubL = [{SubFilter,SubQoS} || {SubFilter,{SubQoS,_}} <-orddict:to_list(Subs)],
+    {ok,{_,SubQos}} = mqtt_topic:best_match(SubL,Topic),
+    ActualQoS = min(MsgQoS,SubQos),
+    Packet#packet{qos = ActualQoS}.
+
+should_accept(Filter,Ref,Subs) ->
+    case orddict:find(Filter,Subs) of
+        {ok,{_,Seq}} -> is_new_msg(Ref,Seq);
+        error -> false
+    end.
+
+is_new_msg({ret,Seq},{RetSeq,_}) -> Seq > RetSeq;
+is_new_msg({q,Seq},{_,QSeq}) -> Seq > QSeq.
+
+push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
     Pub = to_publish(Packet,?QOS_0,undefined,false),
-    {ok,Pub,SO};
+    {ToSend,SO1} = pull(SO),
+    {[Pub|ToSend],SO1};
 
-store_msg(Packet,SO = #outgoing{window_size = 0}) ->
-    #outgoing{waiting_subs = Waiting,
-              packet_seq = PSeq} = SO,
-    #packet{ref = Ref} = Packet,
-    Waiting1 = add_to_wait_list(Ref,PSeq,Waiting),
-    {full,SO#outgoing{waiting_subs = Waiting1}};
-
-store_msg(Packet = #packet{qos = QoS},SO) when QoS =:= ?QOS_1;
-                                               QoS =:= ?QOS_2  ->
-    #outgoing{packet_seq = PSeq,
-              refs = Refs,
-              window_size = WSize} = SO,
-    #packet{ref = Ref} = Packet,
-    PSeq1 = PSeq+1,
-    SO1 = add_to_queue(PSeq1,Packet,SO),
-    SO2 = SO1#outgoing{refs = add_ref(Ref,Refs),
-                       packet_seq = PSeq1,
-                       window_size = WSize -1},
+push_to_session(Packet = #packet{qos = QoS},SO) when QoS =:= ?QOS_1;
+                                                     QoS =:= ?QOS_2  ->
+    #outgoing{packet_seq = PSeq} = SO,
+    PSeq1 = PSeq + 1,
+    SO1 = add_to_outgoing(PSeq1,Packet,SO),
+    SO2 = SO1#outgoing{packet_seq = PSeq1},
     Pub = to_publish(Packet,QoS,PSeq1,false),
-    {ok,Pub,SO2}.
+    {[Pub],SO2}.
 
-add_to_wait_list(Ref,PSeq,Waiting) ->
-    min_val_tree:store(Ref,PSeq,Waiting).
-
-
-is_duplicate(Ref,Refs) ->
-    gb_sets:is_member(Ref,Refs).
-
-add_ref(Ref,Refs) ->
-    gb_sets:add(Ref,Refs).
-
-append_retained(Msgs,SO) ->
-    append_msg_many(Msgs,true,SO).
-
-append_msg_many(Msgs,Retain,SO) -> append_msg_many(Msgs,Retain,[],SO).
-
-append_msg_many([],_Retain,Results,SOAcc) -> {Results,SOAcc};
-
-append_msg_many([CTRPacket|T],Retain,Results,SOAcc) ->
-    case push_msg(CTRPacket,SOAcc) of
-        full -> {Results,SOAcc};
-        Result -> append_msg_many(T,Retain,[Result|Results],SOAcc)
-    end.
-
-add_to_queue(PSeq,CTRPacket = #packet{qos = ?QOS_1},SO) ->
+add_to_outgoing(PSeq,Packet = #packet{qos = ?QOS_1},SO) ->
     #outgoing{qos1 = QosQueue} = SO,
-    SO#outgoing{qos1 = orddict:store(PSeq,CTRPacket,QosQueue)};
+    SO#outgoing{qos1 = orddict:store(PSeq,Packet,QosQueue)};
 
-add_to_queue(PSeq,CTRPacket = #packet{qos = ?QOS_2},SO) ->
+add_to_outgoing(PSeq,Packet = #packet{qos = ?QOS_2},SO) ->
     #outgoing{qos2 = QosQueue} = SO,
-    SO#outgoing{qos2 = orddict:store(PSeq,CTRPacket,QosQueue)}.
-
-push_msg_comp(Ref,SO = #outgoing{refs = Refs}) ->
-    SO#outgoing{refs = gb_sets:del_element(Ref,Refs)}.
+    SO#outgoing{qos2 = orddict:store(PSeq,Packet,QosQueue)}.
 
 %% ==================================================================
 %% Message Acknowledgements
 %% ==================================================================
 
--spec message_ack(packet_id(),#outgoing{}) ->
-    duplicate | {ok,[{WSize::integer(),Filter::binary()}],#outgoing{}}.
+-spec pub_ack(packet_id(),#outgoing{}) ->
+    duplicate | {continue|wait,#outgoing{}}.
 
-message_ack(PacketId,SO = #outgoing{packet_seq = PSeq,
-                                    qos1 = QoS1Msgs,
-                                    window_size = WSize,
-                                    waiting_subs = Waiting}) ->
+pub_ack(PacketId,SO = #outgoing{packet_seq = PSeq,
+                                        qos1 = QoS1Msgs}) ->
     AckSeq = get_ack_seq(PacketId,PSeq),
     case orddict:find(AckSeq,QoS1Msgs) of
         {ok,_} ->
-            WSize1 = WSize+1,
-            {Notifs, Waiting1} = subs_to_notify(WSize1,Waiting),
-            SO1 = SO#outgoing{qos1 = orddict:erase(AckSeq,QoS1Msgs),
-                              waiting_subs = Waiting1,
-                              window_size = WSize1},
-            {ok,Notifs,SO1};
+            SO1 = SO#outgoing{qos1 = orddict:erase(AckSeq,QoS1Msgs)},
+            pull(SO1);
         error ->
-            duplicate
+            {[],SO}
     end.
 
 
-message_pub_rec(PacketId,SO) ->
+pub_rec(PacketId,SO) ->
     #outgoing{qos2 = Msgs,
               qos2_rec = Ack,
               packet_seq = PSeq} = SO,
     AckSeq = get_ack_seq(PacketId,PSeq),
-    case orddict:find(AckSeq,Msgs) of
-        {ok,_} ->
-            {ok,
-                SO#outgoing{qos2 = orddict:erase(AckSeq,Msgs),
-                               qos2_rec = ordsets:add_element(AckSeq,Ack)}
-            };
-        error ->
-            duplicate
-    end.
+    SO1 =
+        case orddict:find(AckSeq,Msgs) of
+            {ok,_} ->
+                {ok,
+                    SO#outgoing{qos2 = orddict:erase(AckSeq,Msgs),
+                                qos2_rec = ordsets:add_element(AckSeq,Ack)}
+                };
+            error -> SO
+        end,
+    {[to_pubrel(PacketId)],SO1}.
 
 
--spec message_pub_comp(packet_id(),#outgoing{}) ->
-    duplicate | {ok,[{WSize::integer(),Filter::binary()}],#outgoing{}}.
+-spec pub_comp(packet_id(),#outgoing{}) ->
+    {continue|wait,#outgoing{}}.
 
-message_pub_comp(PacketId,SO = #outgoing{packet_seq = PSeq,
-                                         qos2_rec = Ack,
-                                         window_size = WSize,
-                                         waiting_subs = Waiting}) ->
+pub_comp(PacketId,SO = #outgoing{packet_seq = PSeq,
+                                         qos2_rec = Ack}) ->
     AckSeq = get_ack_seq(PacketId,PSeq),
     case ordsets:is_element(AckSeq,Ack) of
         true ->
-            WSize1 = WSize+1,
-            {Notifs,Waiting1} = subs_to_notify(WSize1,Waiting),
-            SO1 = SO#outgoing{qos2_rec = ordsets:del_element(AckSeq,Ack),
-                              waiting_subs = Waiting1,
-                              window_size = WSize1},
-            {ok,Notifs,SO1};
+            SO1 = SO#outgoing{qos2_rec = ordsets:del_element(AckSeq,Ack)},
+            pull(SO1);
         false ->
-            duplicate
+            {[],SO}
     end.
-
-%% @doc
-%% Determines which Subscriptions to notify about and open window,
-%% and what window size to indicate to each subscription (currently hardcoded to 1)
-%% @end
-subs_to_notify(Wnd,Waiting) ->
-    {Refs,WSubs1} = min_val_tree:split(Wnd,Waiting),
-    Notifs = [{1,Ref}|| Ref <- Refs],
-    {Notifs,WSubs1}.
-
 
 %% =========================================================================
 %% RECOVERY
@@ -251,7 +228,10 @@ dict_to_pub_packets(Dict,QoS) ->
 set_to_pubrel_packets(Rec) ->
     [to_pubrel(PSeq) || {PSeq,PSeq}  <- ordsets:to_list(Rec)].
 
-to_publish(#packet{topic = Topic,content = Content,ref = Retain,qos = QoS},QoS,PSeq,Dup) ->
+to_publish(#packet{topic = Topic,
+                   content = Content,
+                   retain = Retain,
+                   qos = QoS},QoS,PSeq,Dup) ->
     #'PUBLISH'{content = Content,
                packet_id = get_packet_id(PSeq),
                qos = QoS,
@@ -277,11 +257,12 @@ new() -> new(?DEFAULT_MAX_WINDOW).
 new(MaxWnd) ->
     #outgoing{
         window_size = MaxWnd,
+        subs = orddict:new(),
+        queue = queue:new(),
+
         packet_seq = 0,
         qos1 = orddict:new(),
         qos2 = orddict:new(),
-        qos2_rec = ordsets:new(),
-        refs = gb_sets:new(),
-        subs = min_val_tree:new()
+        qos2_rec = ordsets:new()
     }.
 
