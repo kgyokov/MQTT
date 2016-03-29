@@ -50,12 +50,12 @@
 %% ================================================================================
 
 get_subs(#outgoing{subs = Subs}) ->
-    [ {Filter,QoS,Seq} || {Filter,{QoS,Seq}} <- orddict:to_list(Subs)].
+    [{Filter,QoS,Seq} || {Filter,{QoS,Seq}} <- orddict:to_list(Subs)].
 
 %% @doc
 %% Adds new subscriptions to the session data
 %% @end
--spec subscribe(NewSubs::[{binary(),qos(),{non_neg_integer(),non_neg_integer()}}],#outgoing{}) ->
+-spec subscribe(NewSubs::[{binary(),qos()}],#outgoing{}) ->
     #outgoing{}.
 
 subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
@@ -63,9 +63,8 @@ subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
     Subs1 = lists:foldl(fun add_sub/2,Subs,NewSubs),
     S#outgoing{subs = Subs1}.
 
-
-add_sub({Filter,QoS,Seq},Subs) ->
-    orddict:store(Filter,{QoS,Seq},Subs).
+add_sub({Filter,QoS},Subs) ->
+    orddict:store(Filter,{QoS,new_sub_seq()},Subs).
 
 %% @doc
 %% Removes existing subscriptions from the session data
@@ -127,9 +126,6 @@ should_accept(Filter,Ref,Subs) ->
         {ok,{_,Seq}} -> is_new_msg(Ref,Seq);
         error -> false
     end.
-
-is_new_msg({ret,Seq},{RetSeq,_}) -> Seq > RetSeq;
-is_new_msg({q,Seq},{_,QSeq}) -> Seq > QSeq.
 
 push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
     Pub = to_publish(Packet,?QOS_0,undefined,false),
@@ -265,4 +261,13 @@ new(MaxWnd) ->
         qos2 = orddict:new(),
         qos2_rec = ordsets:new()
     }.
+
+%%
+%% Seq functionality
+%%
+
+is_new_msg({ret,Seq},{RetSeq,_}) -> Seq > RetSeq;
+is_new_msg({q,Seq},{_,QSeq}) -> Seq > QSeq.
+
+new_sub_seq() -> {-1,-1}.
 
