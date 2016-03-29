@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([new/1, pushr/2, remove/2, add/2, add/3, move/3, whereis/2, min_seq/1, max_seq/1, read/3]).
+-export([new/1, pushr/2, remove/2, add/2, add/3, forward/3, whereis/2, min_seq/1, max_seq/1, read/3]).
 
 -define(SEQ_MONOID,sequence_monoid).
 
@@ -31,11 +31,11 @@ pushr(El,SQ = #shared_q{cur_seq = Seq,queue = Q}) ->
     Seq1 = Seq+1,
     SQ#shared_q{cur_seq = Seq1,queue = sequence_monoid:pushr_w_seq(Seq1,El,Q)}.
 
-move(ClientId,ToSeq,SQ = #shared_q{client_seqs = Offsets}) ->
+forward(ClientId,ToSeq,SQ = #shared_q{client_seqs = Offsets}) ->
     Offsets1 = min_val_tree:store(ClientId,ToSeq,Offsets),
     maybe_truncate(Offsets1,SQ).
 
-whereis(ClientId,SQ = #shared_q{client_seqs = Offsets}) ->
+whereis(ClientId,#shared_q{client_seqs = Offsets}) ->
     min_val_tree:get_val(ClientId,Offsets).
 
 remove(ClientId,SQ = #shared_q{client_seqs = Offsets}) ->
@@ -64,4 +64,5 @@ read(MinSeq,MaxSeq, #shared_q{queue = Q}) ->
     {_,Rest} =      sequence_monoid:split_by_seq(fun(Seq) -> Seq >= MinSeq end, Q),
     {Interval,_} =  sequence_monoid:split_by_seq(fun(Seq) -> Seq =< MaxSeq end, Rest),
     sequence_monoid:to_list(Interval).
+
 
