@@ -42,14 +42,14 @@ qos0(Msg,Session = #session_in{packet_seq = Seq}) ->
 
 qos1(Msg,Session = #session_in{packet_seq = Seq}) ->
     NewSeq = Seq + 1,
-    fwd_message(Msg,Seq),
+    fwd_message(Msg,NewSeq),
     Session#session_in{packet_seq = NewSeq}.
 
 %% --------------------------------------------------------------------------------------
 %% Storing Packet Identifier and Forwarding the message need to be atomic operations
 %% --------------------------------------------------------------------------------------
 qos2_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
-            Session = #session_in{packet_seq = Seq, qos2_rec = Qos2Rec})  ->
+            Session = #session_in{qos2_rec = Qos2Rec})  ->
     case gb_sets:is_element(PacketId,Qos2Rec) of
         false ->
             NewSession = log_pending_message(Msg,Session),

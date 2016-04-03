@@ -45,9 +45,9 @@ remove(ClientId,SQ = #shared_q{client_seqs = Offsets}) ->
 add(ClientId,SQ = #shared_q{cur_seq = CurSeq}) ->
     add(ClientId,CurSeq,SQ).
 
-add(ClientId,Seq,SQ = #shared_q{client_seqs = Offsets,cur_seq = CurSeq}) ->
+add(ClientId,AtSeq,SQ = #shared_q{client_seqs = Offsets,cur_seq = CurSeq}) ->
     %%@todo: Should we sanitize the input???
-    ActualSeq = max(min_val_tree:min(Offsets),min(CurSeq,Seq)),
+    ActualSeq = max(min_val_tree:min(Offsets),min(CurSeq,AtSeq)),
     SQ#shared_q{client_seqs = min_val_tree:store(ClientId,ActualSeq,Offsets)}.
 
 maybe_truncate(NewOffsets, SQ = #shared_q{queue = Q}) ->
@@ -60,9 +60,9 @@ min_seq(#shared_q{client_seqs = Offsets}) -> min_val_tree:min(Offsets).
 
 max_seq(#shared_q{cur_seq = Seq}) -> Seq.
 
-read(MinSeq,MaxSeq, #shared_q{queue = Q}) ->
-    {_,Rest} =      sequence_monoid:split_by_seq(fun(Seq) -> Seq >= MinSeq end, Q),
-    {Interval,_} =  sequence_monoid:split_by_seq(fun(Seq) -> Seq =< MaxSeq end, Rest),
+read(FromSeq,ToSeq, #shared_q{queue = Q}) ->
+    {_,Rest}     = sequence_monoid:split_by_seq(fun(Seq) -> Seq >= FromSeq end, Q),
+    {Interval,_} = sequence_monoid:split_by_seq(fun(Seq) -> Seq =< ToSeq end, Rest),
     sequence_monoid:to_list(Interval).
 
 

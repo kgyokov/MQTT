@@ -309,16 +309,16 @@ handle_packet(Packet = #'PUBLISH'{topic = Topic},
 
 
 handle_packet(#'PUBACK'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-     mqtt_session_out:message_ack(SessionOut,PacketId),
+     mqtt_session_out:pub_ack(SessionOut,PacketId),
     {noreply,S};
 
 handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-    mqtt_session_out:message_pub_rec(SessionOut,PacketId),
+    mqtt_session_out:pub_rec(SessionOut,PacketId),
 %%     send_to_client(SenderPid,#'PUBREL'{packet_id = PacketId}),
     {noreply,S};
 
 handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-     mqtt_session_out:message_pub_comp(SessionOut,PacketId),
+     mqtt_session_out:pub_comp(SessionOut,PacketId),
     {noreply,S};
 
 handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn}) ->

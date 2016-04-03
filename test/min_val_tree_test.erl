@@ -21,13 +21,15 @@ all_test_() ->
             fun min_is_none_for_new_tree/0,
             fun min_is_none_after_removal_of_all_elements/0,
             fun removal_on_empty_does_not_error/0,
-            fun min_is_updated_after_removing_all_keys_for_old_min/0,
-            fun min_stays_same_if_not_all_keys_removed/0,
-            fun min_stays_same_if_not_all_keys_removed/0,
-            fun min_stays_same_if_inrelated_key_removed/0,
+            fun min_is_updated_after_removing_all_keys_of_old_min/0,
+            fun min_stays_same_if_not_all_corresponding_keys_removed/0,
+            fun min_stays_same_if_not_all_corresponding_keys_removed/0,
+            fun min_stays_same_if_unrelated_key_removed/0,
+            %% Guarantees monotonicity of the min value
             fun cannot_update_w_lower_value/0,
+            fun cannot_insert_w_lower_value/0,
             fun split_empty_tree/0,
-            fun split_tree_smaller_than_num/0,
+            fun split_tree_w_smaller_than_min_value/0,
             fun split_tree_w_zero/0,
             fun split_tree_general_case/0
         ].
@@ -67,7 +69,7 @@ removal_on_empty_does_not_error() ->
     T1 = remove_keys(ToRemove,T),
     ?assertEqual(none, min_val_tree:min(T1)).
 
-min_is_updated_after_removing_all_keys_for_old_min() ->
+min_is_updated_after_removing_all_keys_of_old_min() ->
     Pairs =
         [
             {a,5},
@@ -81,7 +83,7 @@ min_is_updated_after_removing_all_keys_for_old_min() ->
     T1 = remove_keys(ToRemove,T),
     ?assertEqual(min_val_tree:min(T1),{ok,3}).
 
-min_stays_same_if_not_all_keys_removed() ->
+min_stays_same_if_not_all_corresponding_keys_removed() ->
     Pairs =
         [
             {a,5},
@@ -95,7 +97,7 @@ min_stays_same_if_not_all_keys_removed() ->
     T1 = remove_keys(ToRemove,T),
     ?assertEqual(min_val_tree:min(T1),{ok,1}).
 
-min_stays_same_if_inrelated_key_removed() ->
+min_stays_same_if_unrelated_key_removed() ->
     Pairs =
         [
             {a,5},
@@ -108,7 +110,7 @@ min_stays_same_if_inrelated_key_removed() ->
     T2 =remove_keys(ToRemove,T1),
     ?assertEqual(min_val_tree:min(T2),{ok,1}).
 
-
+%% Guarantee monotonicity
 cannot_update_w_lower_value() ->
     Pairs =
         [
@@ -121,13 +123,26 @@ cannot_update_w_lower_value() ->
     ?assertEqual(min_val_tree:min(T2),{ok,3}),
     ?assertEqual(min_val_tree:get_val(a,T2),{ok,5}).
 
+%% Guarantee monotonicity
+cannot_insert_w_lower_value() ->
+    Pairs =
+        [
+            {a,5},
+            {b,3},
+            {c,7}
+        ],
+    T1 = store_pairs(Pairs),
+    T2 = min_val_tree:store(d,1,T1),
+    ?assertEqual(min_val_tree:min(T2),{ok,3}),
+    ?assertEqual(min_val_tree:get_val(d,T2),{ok,5}).
+
 split_empty_tree() ->
     T1 = min_val_tree:new(),
     {L,T2} = min_val_tree:split(2,T1),
     ?assertEqual(length(L),0),
     ?assert(min_val_tree:is_empty(T2)).
 
-split_tree_smaller_than_num() ->
+split_tree_w_smaller_than_min_value() ->
     Pairs =
         [
             {a,5},

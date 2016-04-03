@@ -15,9 +15,14 @@
 
 %% API
 -export([create_tables/2, wait_for_tables/0,
-    save_sub/2, remove_sub/2, clear_sub_pid/2,
-    get_matches/1, get_matching_subs/1,
-    clear/1, load/1, get_sub/1]).
+    save_sub/2,
+    remove_sub/2,
+    clear_sub_pid/2,
+    get_matches/1,
+    get_matching_subs/1,
+    clear/1,
+    load/1,
+    get_sub/1]).
 
 -ifdef(TEST).
     -export([clear_tables/0,delete_tables/0]).
