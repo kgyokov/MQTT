@@ -46,7 +46,10 @@ remove(Key,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
     Set#s_set{log = gb_trees:insert(-Seq,Next,Log)}.
 
 -spec(get_at(non_neg_integer(), shared_set()) -> dict:dict()).
-get_at(Seq,#s_set{log = Log}) when Seq > 0 ->
+get_at(Seq,Set) when Seq > 0 ->
+    [Val || {_,Val} <- dict:to_list(get_dict_at(Seq,Set))].
+
+get_dict_at(Seq,#s_set{log = Log}) ->
     Iter = gb_trees:iterator_from(-Seq,Log), %% the whole reason for storing negative Sequence numbers
     case gb_trees:next(Iter) of
         none -> dict:new();
