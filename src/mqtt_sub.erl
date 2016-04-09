@@ -43,13 +43,12 @@
 -type dict()::any().
 
 -record(state, {
-    repo            ::module(), %% Module used for persistence
     filter          ::binary(), %% Filter handled by this process (e.g. /A/B/+
     live_subs       ::dict(),    %% dictionary of {ClientId::binary(),#client_reg{}}
-    dead_subs       ::dict(),
     monref_idx      ::any(),    %% dictionary of (MonitorRef,ClientId}
     packet_seq      ::non_neg_integer(),%% A sequence number assigned to each Message from a topic covered by this filter.
                                     %% This process assigns incremental integers to each new message
+    client_seqs     ::any(),
     queue           ::any(),    %% Shared queue of messages
     retained        ::shared_set:shared_set(),   %% Dictionary of retained messages
     garbage         ::any()     %% garbage stats from the queue
@@ -160,11 +159,9 @@ init([Filter, Repo]) ->
     {ok,#state{filter = Filter,
                monref_idx = dict:new(),
                live_subs = dict:new(),
-               dead_subs = dict:new(),
                packet_seq = Seq,
                queue = shared_queue:new(Seq),
-               retained = shared_set:new(),
-               repo = Repo}}.
+               retained = shared_set:new()}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -258,12 +255,6 @@ handle_call({unsub,ClientId,Seq}, _From, S = #state{filter = Filter,
 handle_call({push,Packet}, From, S) ->
     handle_new_packet(Packet,From,S);
 
-%%handle_call(get_live_clients, _From, S = #state{live_subs = Subs}) ->
-%%    Pids = [
-%%        {ClientId,QoS,Pid} ||
-%%        {ClientId,#sub{pid = Pid,qos = QoS}} <- dict:to_list(Subs), Pid =/= undefined],
-%%    {reply, Pids, S};
-
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
@@ -346,13 +337,13 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%%===================================================================
-%%% Internal functions
+%%% Handling Packets and Acks
 %%%===================================================================
 
 handle_new_packet(Packet,_From,S = #state{filter = Filter,
                                           live_subs = Subs,
-                                          retained = Ret,
-                                          queue = SQ}) ->
+                                          queue = SQ,
+                                          retained = Ret}) ->
     SQ1 = shared_queue:pushr({Packet#packet.qos,Packet},SQ),
     NewSeq = shared_queue:max_seq(SQ1),
     Ret1 = maybe_store_retained(Packet,NewSeq,Ret),
@@ -360,7 +351,7 @@ handle_new_packet(Packet,_From,S = #state{filter = Filter,
     S1 = S#state{live_subs = Subs1,
                  queue = SQ1,
                  retained = Ret1},
-    MQPacket = Packet#packet{retain = false, ref = {q,NewSeq}},
+    MQPacket = Packet#packet{retain = false,ref = {q,NewSeq}},
     send_packet_to_clients(SendTo,Filter,MQPacket),
     {reply,{ok, NewSeq},S1}.
 
@@ -374,7 +365,6 @@ update_waiting_subs(NewSeq) ->
             end
     end.
 
-
 handle_pull(WSize,ClientId,S = #state{filter = Filter,
                                       live_subs = Subs,
                                       queue = SQ}) ->
@@ -387,25 +377,14 @@ handle_pull(WSize,ClientId,S = #state{filter = Filter,
     Subs1 = dict:update(ClientId,Fun,Subs),
     S#state{live_subs = Subs1}.
 
-%%handle_ack(ClientId,{ret,RetAck},S = #state{live_subs = Subs}) ->
-%%    Subs1 = dict:update(ClientId,
-%%        fun(Sub) ->
-%%            mqtt_sub_state:ack_retained(RetAck,Sub)
-%%        end,
-%%        Subs),
-%%    S#state{live_subs = Subs1};
-
 handle_ack(ClientId,{q,QAck},S = #state{queue = Q,
                                         garbage = Garbage}) ->
     {MoreGarbage,Q1} = shared_queue:forward(ClientId,QAck,Q),
     S#state{queue = Q1,garbage = ?MONOID:as(Garbage,MoreGarbage)}.
 
-replace_monitor(Pid,OldRef,S = #state{monref_idx = Mon}) ->
-    NewRef = monitor(process,Pid),
-    MonRef = maybe_demonitor_client(OldRef,Mon),
-    MonRef1 = dict:store(NewRef,Pid,MonRef),
-    S#state{monref_idx = MonRef1}.
-
+maybe_store_retained(#packet{retain = false},_Seq,Ret)               -> Ret;
+maybe_store_retained(#packet{topic = Topic,content = <<>>},Seq,Ret)  -> shared_set:remove(Topic,Seq,Ret);
+maybe_store_retained(Packet = #packet{topic = Topic},Seq,Ret)        -> shared_set:append(Topic,Packet,Seq,Ret).
 
 %% ===================================================================
 %% Packet Sending
@@ -420,7 +399,7 @@ send_packets_to_client(CPid,Filter,Packets) ->
 send_packet(CPid,Filter,P) -> mqtt_session_out:push(CPid,Filter,P).
 
 %% ===================================================================
-%% Subscriptions
+%% Managing Subscriptions
 %% ===================================================================
 
 set_sub({ClientId,ClientSeq,QoS,Pid},NextInQ,WSize,S = #state{monref_idx = Mons,
@@ -450,10 +429,6 @@ resubscribe(ClientId,QoS,Sub,S = #state{retained = Ret,live_subs = Subs}) ->
     Sub1 = mqtt_sub_state:resubscribe(QoS,Ret,Sub),
     S#state{live_subs = dict:store(ClientId,Sub1,Subs)}.
 
-maybe_store_retained(#packet{retain = false},_Seq,Ret)               -> Ret;
-maybe_store_retained(#packet{topic = Topic,content = <<>>},Seq,Ret)  -> shared_set:remove(Topic,Seq,Ret);
-maybe_store_retained(Packet = #packet{topic = Topic},Seq,Ret)        -> shared_set:append(Topic,Packet,Seq,Ret).
-
 %% =====================================================================
 %% Monitoring and Recovery
 %% =====================================================================
@@ -473,6 +448,12 @@ maybe_remove_downed(MonRef,S = #state{filter = Filter,
             S#state{monref_idx = Mon1,live_subs = Subs1};
         error -> S
     end.
+
+replace_monitor(Pid,OldRef,S = #state{monref_idx = Mon}) ->
+    NewRef = monitor(process,Pid),
+    MonRef = maybe_demonitor_client(OldRef,Mon),
+    MonRef1 = dict:store(NewRef,Pid,MonRef),
+    S#state{monref_idx = MonRef1}.
 
 recover(SubRecord,S = #state{queue = Q}) ->
     lists:foldl(fun recover_sub/2,Q,SubRecord).
