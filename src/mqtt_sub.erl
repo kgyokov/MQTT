@@ -56,16 +56,11 @@
 }).
 
 -record(sub, {
-    qos                 ::qos(), %% QoS for this client subscription
     monref              ::any(), %% monitor reference for the process handling the client
     pid                 ::pid(), %% Process id of the process handling the client
-    client_seq = 0      ::non_neg_integer(), %% the version number of the client process registration
+    client_seq = 0      ::non_neg_integer() %% the version number of the client process registration
                                         %% (incremented every time a new client process is spawned, used to choose
                                         %% between different instances of a Client in case of race conditions)
-    %% last_ack = 0     ::non_neg_integer(),  %% the filter-assigned sequence number of the last message processed by this client,
-    last_sent = 0       ::non_neg_integer(),  %% the last message sent to the client
-    window = 0          ::non_neg_integer(),   %% How many messages the client has requested
-    retained_msgs = []  ::list() %% the retained messages to send to the client
 }).
 
 %%%===================================================================
@@ -160,6 +155,7 @@ new(Filter) ->
     {stop, Reason :: term()} | ignore).
 init([Filter, Repo]) ->
     self() ! async_init,
+    mqtt_sub_repo:claim_filter(Filter,self()),
     Seq = 0,
     {ok,#state{filter = Filter,
                monref_idx = dict:new(),
@@ -188,13 +184,12 @@ init([Filter, Repo]) ->
 
 
 handle_call({sub,ClientId,CSeq,QoS,WSize},{Pid,_},S = #state{filter = Filter,
-                                                             live_subs = Subs,
-                                                             monref_idx = Mon}) ->
+                                                             live_subs = Subs}) ->
+    NewSub = {ClientId,CSeq,QoS,Pid},
     case dict:find(ClientId,Subs) of
         error ->
-            SubInfo = {ClientId,CSeq,QoS},
-            mqtt_sub_repo:save_sub(Filter,SubInfo),
-            S1 = insert_new_sub(SubInfo,Pid,WSize,S),
+            mqtt_sub_repo:save_sub(Filter,NewSub),
+            S1 = insert_new_sub(NewSub,WSize,S),
             {reply,ok,S1};
         {ok,Sub} ->
             case Sub of
@@ -208,35 +203,27 @@ handle_call({sub,ClientId,CSeq,QoS,WSize},{Pid,_},S = #state{filter = Filter,
                     %% 5. Because the 'monitor' call is asynchronous, 'sub' message from process B is received
                     %%      while this process still thinks process A is alive
                     {reply,duplicate,S};
-                #sub{pid = Pid} ->
-                    %% Same Pid, no need to create a new monitor
-                    NewSub = {ClientId,CSeq,QoS,Pid},
+                #sub{pid = OldPid,monref = OldRef} ->
                     mqtt_sub_repo:save_sub(Filter,NewSub),
-                    S1 = resubscribe(ClientId,QoS,Sub,S),
-                    {reply,ok,S1};
-                #sub{pid = OldPid,monref = OldRef} when OldPid =/= Pid ->
-                    %% replacing the Pid and QoS
-                    NewSub = {ClientId,CSeq,QoS,Pid},
-                    mqtt_sub_repo:save_sub(Filter,NewSub),
-                    NewRef = monitor(process,Pid),
-                    MonRef = maybe_demonitor_client(OldRef,Mon),
-                    MonRef1 = dict:store(NewRef,Pid,MonRef),
-                    S1 = S#state{monref_idx = MonRef1},
+                    S1  =
+                        case OldPid =:= Pid of
+                            true -> replace_monitor(Pid,OldRef,S);
+                             _-> S
+                        end,
                     S2 = resubscribe(ClientId,QoS,NewSub,S1),
                     {reply,ok,S2}
             end
     end;
 
-handle_call({resume,ClientId,CSeq,QoS,ResumeFrom,WSize},{Pid,_},S = #state{filter = Filter,
-                                                                           monref_idx = Mon,
+handle_call({resume,ClientId,CSeq,QoS,ResumeFrom,WSize},{Pid,_},S = #state{monref_idx = Mon,
                                                                            live_subs = Subs,
                                                                            queue = SQ,
-                                                                           garbage = Garbage}) ->
+                                                                           retained = Ret}) ->
     case dict:find(ClientId,Subs) of
         error -> ok;
         {ok,Sub = #sub{monref = MonRef}} ->
             SubInfo = {ClientId,CSeq,QoS},
-            mqtt_sub_state:resume(Pid,MonRef,ResumeFrom,WSize,Sub)
+            mqtt_sub_state:resume(Pid,MonRef,ResumeFrom,WSize,SQ,Ret,Sub)
     end;
 
 handle_call({unsub,ClientId,Seq}, _From, S = #state{filter = Filter,
@@ -271,11 +258,11 @@ handle_call({unsub,ClientId,Seq}, _From, S = #state{filter = Filter,
 handle_call({push,Packet}, From, S) ->
     handle_new_packet(Packet,From,S);
 
-handle_call(get_live_clients, _From, S = #state{live_subs = Subs}) ->
-    Pids = [
-        {ClientId,QoS,Pid} ||
-        {ClientId,#sub{pid = Pid,qos = QoS}} <- dict:to_list(Subs), Pid =/= undefined],
-    {reply, Pids, S};
+%%handle_call(get_live_clients, _From, S = #state{live_subs = Subs}) ->
+%%    Pids = [
+%%        {ClientId,QoS,Pid} ||
+%%        {ClientId,#sub{pid = Pid,qos = QoS}} <- dict:to_list(Subs), Pid =/= undefined],
+%%    {reply, Pids, S};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -319,9 +306,9 @@ handle_cast(_Request, S) ->
 handle_info({'DOWN', MonRef, _, _, _}, S) ->
     {noreply, maybe_remove_downed(MonRef,S)};
 
-handle_info(async_init, S = #state{filter = Filter,repo = Repo}) ->
-    SubState = Repo:load(Filter),
-    S1 = recover(SubState,S),
+handle_info(async_init, S = #state{filter = Filter}) ->
+    RepoSubs = mqtt_sub_repo:load(Filter),
+    S1 = recover(RepoSubs,S),
     {noreply,S1};
 
 handle_info(_Info, State) ->
@@ -340,9 +327,9 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, S = #state{filter = Filter,repo = Repo}) ->
+terminate(_Reason, S = #state{filter = Filter}) ->
     error_logger:info_msg("Terminating Sub with id ~p, state ~p, reason ~p",[self(),S,_Reason]),
-    Repo:clear(Filter).
+    mqtt_sub_repo:unclaim_filter(Filter,self()).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -413,6 +400,12 @@ handle_ack(ClientId,{q,QAck},S = #state{queue = Q,
     {MoreGarbage,Q1} = shared_queue:forward(ClientId,QAck,Q),
     S#state{queue = Q1,garbage = ?MONOID:as(Garbage,MoreGarbage)}.
 
+replace_monitor(Pid,OldRef,S = #state{monref_idx = Mon}) ->
+    NewRef = monitor(process,Pid),
+    MonRef = maybe_demonitor_client(OldRef,Mon),
+    MonRef1 = dict:store(NewRef,Pid,MonRef),
+    S#state{monref_idx = MonRef1}.
+
 
 %% ===================================================================
 %% Packet Sending
@@ -430,7 +423,7 @@ send_packet(CPid,Filter,P) -> mqtt_session_out:push(CPid,Filter,P).
 %% Subscriptions
 %% ===================================================================
 
-set_sub({ClientId,ClientSeq,QoS},Pid,NextInQ,WSize,S = #state{monref_idx = Mons,
+set_sub({ClientId,ClientSeq,QoS,Pid},NextInQ,WSize,S = #state{monref_idx = Mons,
                                                               live_subs = Subs,
                                                               queue = SQ,
                                                               retained = Ret}) ->
@@ -443,24 +436,12 @@ set_sub({ClientId,ClientSeq,QoS},Pid,NextInQ,WSize,S = #state{monref_idx = Mons,
 %%
 %% A client comes back online and re-establishes an existing subscription
 %%
-recover_sub({SubInfo,Pid,NextInQ,WSize},S) ->
-    ok.
+recover_sub({ClientId,_QoS,_CSeq,_ClientPid},Q) ->
+    shared_queue:add(ClientId,undefined,Q).
 
-insert_new_sub(SubInfo,Pid,WSize,S = #state{queue = SQ}) ->
+insert_new_sub(SubInfo,WSize,S = #state{queue = SQ}) ->
     NextInQ = shared_queue:max_seq(SQ), %% start reading packets from the next one
-    set_sub(SubInfo,Pid,NextInQ,WSize,S).
-
-%%update_sub(SubInfo = {ClientId,_,_},Pid,S = #state{queue = SQ}) ->
-%%    NextInQ = shared_queue:whereis(ClientId,SQ),
-%%    set_sub(SubInfo,Pid,NextInQ,S).
-%%
-%%reset_sub(SubInfo,latest,WSize,S = #state{queue = SQ}) ->
-%%    NextInQ = shared_queue:max_seq(SQ);
-%%
-%%
-%%reset_sub(SubInfo = {ClientId,_,_},{NextInQ,NextRet},WSize,S = #state{queue = SQ}) ->
-%%    SQ1 = shared_queue:add(ClientId,NextInQ,SQ).
-
+    set_sub(SubInfo,NextInQ,WSize,S).
 
 %%
 %% Only update existing properties - this is not a new subscription
@@ -493,8 +474,8 @@ maybe_remove_downed(MonRef,S = #state{filter = Filter,
         error -> S
     end.
 
-recover(SubRecord,S) ->
-    lists:foldl(fun recover_sub/2,S,SubRecord).
+recover(SubRecord,S = #state{queue = Q}) ->
+    lists:foldl(fun recover_sub/2,Q,SubRecord).
 
 maybe_clean_garbage(Garbage) ->
     %%@todo: perform cleanup
