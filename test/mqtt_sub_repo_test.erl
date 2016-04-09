@@ -12,13 +12,15 @@
 -compile(export_all).
 
 -include("test_utils.hrl").
+-include("mqtt_internal_msgs.hrl").
 
 setup()->
     Nodes = [node()],
     mnesia:create_schema(Nodes),
     application:start(mnesia),
-    mqtt_sub_repo:create_tables(Nodes,1),
-    mqtt_sub_repo:wait_for_tables().
+    ok = mqtt_sub_repo:delete_tables(),
+    ok = mqtt_sub_repo:create_tables(Nodes,1),
+    ok = mqtt_sub_repo:wait_for_tables().
 
 teardown()->
     mqtt_sub_repo:delete_tables().
@@ -31,98 +33,99 @@ sub_persistence_test_() ->
                 [
                     {spawn,
                         fun() ->
-                            ?lists_are_equal([], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            ?lists_are_equal([], mqtt_sub_repo:load(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
-                            ?lists_are_equal([], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Client = <<"Client1">>,
+                            Filter = <<"/A/+">>,
+                            mqtt_sub_repo:save_sub(Filter,{Client,?QOS_1,1,self()}),
+                            mqtt_sub_repo:remove_sub(Filter,Client),
+                            ?assertEqual([],mqtt_sub_repo:load(Filter))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 2),
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            ?lists_are_equal([{<<"Client1">>, 1}], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Client = <<"Client1">>,
+                            Filter = <<"/A/+">>,
+                            ?assertEqual(ok,mqtt_sub_repo:remove_sub(Filter,Client)),
+                            ?assertEqual([],mqtt_sub_repo:load(Filter))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
-                            ?lists_are_equal([], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Client = <<"Client1">>,
+                            Filter = <<"/A/+">>,
+                            mqtt_sub_repo:save_sub(Filter,{Client,?QOS_1,1,self()}),
+                            mqtt_sub_repo:save_sub(Filter,{Client,?QOS_2,2,self()}),
+                            ?assertEqual([{Client,?QOS_2,2,self()}], mqtt_sub_repo:load(Filter))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/1">>, 1),
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 2),
-                            ?lists_are_equal([{<<"Client1">>, 2}], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Filter = <<"/A/+">>,
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            ?assertEqual([{Filter,self()}],mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:save_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client1">>,1},{<<"Client2">>,2}], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Filter = <<"/A/+">>,
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            ?assertEqual([{Filter,self()}], mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:save_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client1">>,1},{<<"Client2">>,2}], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Filter = <<"/A/+">>,
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            mqtt_sub_repo:unclaim_filter(Filter,self()),
+                            ?assertEqual([{Filter,undefined}], mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>),
-
-                            mqtt_sub_repo:save_sub(<<"Client2">>, <<"/+/1">>, 2),
-                            ?lists_are_equal([{<<"Client2">>,2}], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Filter = <<"/A/+">>,
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            mqtt_sub_repo:unclaim_filter(Filter,spawn(fun() -> ok end)),
+                            ?assertEqual([{Filter,self()}], mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_matches(<<"/A/1">>))
-                        end
-                    },
-
-                    {spawn,
-                        fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>,  <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Filter = <<"/A/+">>,
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            mqtt_sub_repo:unclaim_filter(Filter,self()),
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            ?assertEqual([{Filter,self()}], mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            Filter = <<"/A/+">>,
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            mqtt_sub_repo:claim_filter(Filter,self()),
+                            mqtt_sub_repo:unclaim_filter(Filter,self()),
+                            ?assertEqual([{Filter,undefined}], mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
                         end
                     },
                     {spawn,
                         fun() ->
-                            mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1),
-                            mqtt_sub_repo:remove_sub(<<"Client2">>, <<"/+/1">>),
-                            ?lists_are_equal([{<<"Client1">>,1}], mqtt_sub_repo:get_matches(<<"/A/1">>))
+                            OtherPid = spawn(fun() -> ok end),
+                            mqtt_sub_repo:claim_filter(<<"/A/1">>, self()),
+                            mqtt_sub_repo:claim_filter(<<"/A/+">>, OtherPid),
+                            ?lists_are_equal([{<<"/A/1">>, self()},{<<"/A/+">>, OtherPid}], mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
                         end
                     },
                     {spawn,
-                         fun() ->
-                             ?assertMatch({ok,new},      mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1)),
-                             ?assertMatch({ok,existing}, mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1)),
-                             ?assertMatch({ok,new},      mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 2)),
-                             ?assertMatch(ok,            mqtt_sub_repo:remove_sub(<<"Client1">>, <<"/A/+">>)),
-                             ?assertMatch({ok,new},      mqtt_sub_repo:save_sub(<<"Client1">>, <<"/A/+">>, 1))
-                         end
+                        fun() ->
+                            OtherPid = spawn(fun() -> ok end),
+                            mqtt_sub_repo:claim_filter(<<"/+/1">>, self()),
+                            mqtt_sub_repo:claim_filter(<<"/A/+">>, OtherPid),
+                            ?lists_are_equal([{<<"/+/1">>, self()},{<<"/A/+">>, OtherPid}], mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
+                        end
                     }
                 ]
             %%}
