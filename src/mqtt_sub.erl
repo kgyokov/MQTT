@@ -45,21 +45,12 @@
 -record(state, {
     filter          ::binary(), %% Filter handled by this process (e.g. /A/B/+
     live_subs       ::dict(),    %% dictionary of {ClientId::binary(),#client_reg{}}
-    monref_idx      ::any(),    %% dictionary of (MonitorRef,ClientId}
     packet_seq      ::non_neg_integer(),%% A sequence number assigned to each Message from a topic covered by this filter.
                                     %% This process assigns incremental integers to each new message
-    client_seqs     ::any(),
+    client_seqs     ::min_val_tree:tree(client_id(),fun()),
     queue           ::any(),    %% Shared queue of messages
-    retained        ::shared_set:shared_set(),   %% Dictionary of retained messages
+    retained        ::shared_set:set(),   %% Dictionary of retained messages
     garbage         ::any()     %% garbage stats from the queue
-}).
-
--record(sub, {
-    monref              ::any(), %% monitor reference for the process handling the client
-    pid                 ::pid(), %% Process id of the process handling the client
-    client_seq = 0      ::non_neg_integer() %% the version number of the client process registration
-                                        %% (incremented every time a new client process is spawned, used to choose
-                                        %% between different instances of a Client in case of race conditions)
 }).
 
 %%%===================================================================
@@ -157,10 +148,9 @@ init([Filter, Repo]) ->
     mqtt_sub_repo:claim_filter(Filter,self()),
     Seq = 0,
     {ok,#state{filter = Filter,
-               monref_idx = dict:new(),
                live_subs = dict:new(),
                packet_seq = Seq,
-               queue = shared_queue:new(Seq),
+               queue = shared_queue:new(Seq,fun is_less_than/2),
                retained = shared_set:new()}}.
 
 %%--------------------------------------------------------------------
@@ -180,80 +170,17 @@ init([Filter, Repo]) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 
 
-handle_call({sub,ClientId,CSeq,QoS,WSize},{Pid,_},S = #state{filter = Filter,
-                                                             live_subs = Subs}) ->
-    NewSub = {ClientId,CSeq,QoS,Pid},
-    case dict:find(ClientId,Subs) of
-        error ->
-            mqtt_sub_repo:save_sub(Filter,NewSub),
-            S1 = insert_new_sub(NewSub,WSize,S),
-            {reply,ok,S1};
-        {ok,Sub} ->
-            case Sub of
-                #sub{client_seq = CurSeq} when CurSeq > CSeq ->
-                    %% Message from an old process. Ignore it!
-                    %% This can happen in the following (unlikely, but theoretically possible) scenario:
-                    %% 1. Process A is spawned for this ClientId and sends a 'sub' message to this process
-                    %% 2. Process A dies
-                    %% 3. Process B is spawned for the same ClientId and sends another 'sub' message
-                    %% 4. 'sub' message from process A is received and this process starts to monitor process A
-                    %% 5. Because the 'monitor' call is asynchronous, 'sub' message from process B is received
-                    %%      while this process still thinks process A is alive
-                    {reply,duplicate,S};
-                #sub{pid = OldPid,monref = OldRef} ->
-                    mqtt_sub_repo:save_sub(Filter,NewSub),
-                    S1  =
-                        case OldPid =:= Pid of
-                            true -> replace_monitor(Pid,OldRef,S);
-                             _-> S
-                        end,
-                    S2 = resubscribe(ClientId,QoS,NewSub,S1),
-                    {reply,ok,S2}
-            end
-    end;
+handle_call({sub,ClientId,CSeq,QoS,WSize},{Pid,_},S) ->
+    handle_sub(ClientId,CSeq,QoS,WSize,Pid,S);
 
-handle_call({resume,ClientId,CSeq,QoS,ResumeFrom,WSize},{Pid,_},S = #state{monref_idx = Mon,
-                                                                           live_subs = Subs,
-                                                                           queue = SQ,
-                                                                           retained = Ret}) ->
-    case dict:find(ClientId,Subs) of
-        error -> ok;
-        {ok,Sub = #sub{monref = MonRef}} ->
-            SubInfo = {ClientId,CSeq,QoS},
-            mqtt_sub_state:resume(Pid,MonRef,ResumeFrom,WSize,SQ,Ret,Sub)
-    end;
+handle_call({resume,ClientId,CSeq,QoS,ResumeFrom,WSize},{Pid,_},S) ->
+    handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S);
 
-handle_call({unsub,ClientId,Seq}, _From, S = #state{filter = Filter,
-                                                    monref_idx = Mon,
-                                                    live_subs = Subs,
-                                                    queue = SQ,
-                                                    garbage = Garbage}) ->
-    case dict:find(ClientId,Subs) of
-        error ->
-            {reply,ok,S};
-        {ok,Sub} ->
-            case Sub of
-                #sub{monref = MonRef,client_seq = OldSeq} when Seq >= OldSeq ->
-                    mqtt_sub_repo:remove_sub(Filter,ClientId),
-                    Mon1 = maybe_demonitor_client(MonRef,Mon),
-                    Subs1 = dict:erase(ClientId,Subs),
-                    {MoreGarbage,SQ1} = shared_queue:remove(ClientId,SQ),
-                    S1 = S#state{monref_idx = Mon1,
-                                 live_subs = Subs1,
-                                 queue = SQ1,
-                                 garbage = ?MONOID:as(Garbage,MoreGarbage)},
-                    case dict:size(Subs1) of
-                        0 -> {stop,no_subs,ok,S1};
-                        _ -> {reply,ok,S1}
-                    end;
-                _ ->
-                    {reply,ok,S}
-            end
-    end;
+handle_call({unsub,ClientId,Seq}, _From,S) ->
+    handle_unsub(ClientId,Seq,S);
 
-
-handle_call({push,Packet}, From, S) ->
-    handle_new_packet(Packet,From,S);
+handle_call({push,Packet},_From, S) ->
+    handle_push(Packet,S);
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -340,10 +267,33 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Handling Packets and Acks
 %%%===================================================================
 
-handle_new_packet(Packet,_From,S = #state{filter = Filter,
-                                          live_subs = Subs,
-                                          queue = SQ,
-                                          retained = Ret}) ->
+-spec(is_less_than(client_seq(),client_seq()) -> boolean()).
+is_less_than(A,B) -> compare(A,B) =:= lt.
+
+-type(order() :: gt | lt | eq).
+-type(partial_order() :: order() | undefined).
+-type(client_seq():: undefined
+                    | non_neg_integer()
+                    | complete).
+-spec(compare(client_seq(),client_seq())-> order()).
+
+compare(A,A)               -> eq;
+compare(complete,_)        -> gt;
+compare(_,complete)        -> lt;
+compare(undefined,_)       -> lt;
+compare(_,undefined)       -> gt;
+compare(A,B) when is_integer(A),
+                  is_integer(B) ->
+    case A > B of
+        true -> gt;
+        _    -> lt
+    end.
+
+
+handle_push(Packet,S = #state{filter = Filter,
+                              live_subs = Subs,
+                              queue = SQ,
+                              retained = Ret}) ->
     SQ1 = shared_queue:pushr({Packet#packet.qos,Packet},SQ),
     NewSeq = shared_queue:max_seq(SQ1),
     Ret1 = maybe_store_retained(Packet,NewSeq,Ret),
@@ -353,12 +303,12 @@ handle_new_packet(Packet,_From,S = #state{filter = Filter,
                  retained = Ret1},
     MQPacket = Packet#packet{retain = false,ref = {q,NewSeq}},
     send_packet_to_clients(SendTo,Filter,MQPacket),
-    {reply,{ok, NewSeq},S1}.
+    {reply,{ok,NewSeq},S1}.
 
 update_waiting_subs(NewSeq) ->
     fun(ClientId,Sub,AccIn = {SendToAcc,SubsAcc}) ->
             case mqtt_sub_state:maybe_update_waiting(NewSeq,Sub) of
-                {ok,Sub1 = #sub{pid = Pid}} ->
+                {ok,Pid,Sub1} ->
                     SubsAcc1 = dict:update(ClientId,Sub1,SubsAcc),
                     {[Pid|SendToAcc],SubsAcc1};
                 _ -> AccIn
@@ -369,8 +319,8 @@ handle_pull(WSize,ClientId,S = #state{filter = Filter,
                                       live_subs = Subs,
                                       queue = SQ}) ->
     Fun =
-        fun(Sub = #sub{pid = Pid}) ->
-            {ok,Packets,Sub1} = mqtt_sub_state:take(WSize,SQ,Sub),
+        fun(Sub) ->
+            {Pid,Packets,Sub1} = mqtt_sub_state:take(WSize,SQ,Sub),
             send_packets_to_client(Pid,Filter,Packets),
             Sub1
         end,
@@ -380,7 +330,10 @@ handle_pull(WSize,ClientId,S = #state{filter = Filter,
 handle_ack(ClientId,{q,QAck},S = #state{queue = Q,
                                         garbage = Garbage}) ->
     {MoreGarbage,Q1} = shared_queue:forward(ClientId,QAck,Q),
-    S#state{queue = Q1,garbage = ?MONOID:as(Garbage,MoreGarbage)}.
+    S#state{queue = Q1,garbage = ?MONOID:as(Garbage,MoreGarbage)};
+
+handle_ack(_ClientId,{ret,_QAck},S) -> S. %% We don't do anything with ack-ed retained messages
+
 
 maybe_store_retained(#packet{retain = false},_Seq,Ret)               -> Ret;
 maybe_store_retained(#packet{topic = Topic,content = <<>>},Seq,Ret)  -> shared_set:remove(Topic,Seq,Ret);
@@ -402,25 +355,84 @@ send_packet(CPid,Filter,P) -> mqtt_session_out:push(CPid,Filter,P).
 %% Managing Subscriptions
 %% ===================================================================
 
-set_sub({ClientId,ClientSeq,QoS,Pid},NextInQ,WSize,S = #state{monref_idx = Mons,
-                                                              live_subs = Subs,
-                                                              queue = SQ,
-                                                              retained = Ret}) ->
-    MonRef = monitor(process,Pid),
-    Sub = mqtt_sub_state:new(Pid,MonRef,ClientSeq,QoS,NextInQ,Ret,WSize),
+handle_sub(ClientId,CSeq,QoS,WSize,Pid,S = #state{filter = Filter,
+                                                  live_subs = Subs}) ->
+    NewSub = {ClientId,CSeq,QoS,Pid},
+    case dict:find(ClientId,Subs) of
+        error ->
+            mqtt_sub_repo:save_sub(Filter,NewSub),
+            S1 = insert_new_sub(NewSub,WSize,S),
+            {reply,ok,S1};
+        {ok,Sub} ->
+            case mqtt_sub_state:is_old(CSeq,Sub) of
+                true ->
+                    %% Message from an old process. Ignore it!
+                    %% This can happen in the following (unlikely, but theoretically possible) scenario:
+                    %% 1. Process A is spawned for this ClientId and sends a 'sub' message to this process
+                    %% 2. Process A dies
+                    %% 3. Process B is spawned for the same ClientId and sends another 'sub' message
+                    %% 4. 'sub' message from process A is received and this process starts to monitor process A
+                    %% 5. Because the 'monitor' call is asynchronous, 'sub' message from process B is received
+                    %%      while this process still thinks process A is alive
+                    {reply,duplicate,S};
+                false ->
+                    mqtt_sub_repo:save_sub(Filter,NewSub),
+                    S1 = resubscribe(ClientId,QoS,NewSub,S),
+                    {reply,ok,S1}
+            end
+    end.
+
+handle_unsub(ClientId,CSeq, S = #state{filter = Filter,
+                                      live_subs = Subs,
+                                      queue = SQ,
+                                      retained = Ret,
+                                      garbage = Garbage}) ->
+    case dict:find(ClientId,Subs) of
+        error ->
+            {reply,ok,S};
+        {ok,Sub} ->
+            case mqtt_sub_state:is_old(CSeq,Sub) of
+                true ->
+                    {reply,ok,S};
+                _ ->
+                    mqtt_sub_repo:remove_sub(Filter,ClientId),
+                    Subs1 = dict:erase(ClientId,Subs),
+                    {MoreGarbage,SQ1} = shared_queue:remove(ClientId,SQ),
+                    MinSeq = shared_queue:min_seq(SQ1),
+                    Ret1 = shared_set:truncate(MinSeq,Ret),
+                    S1 = S#state{live_subs = Subs1,
+                                 queue = SQ1,
+                                 retained = Ret1,
+                                 garbage = ?MONOID:as(Garbage,MoreGarbage)},
+                    case dict:size(Subs1) of
+                        0 -> {stop,no_subs,ok,S1};
+                        _ -> {reply,ok,S1}
+                    end
+
+            end
+    end.
+
+handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S = #state{live_subs = Subs,
+                                                                  queue = SQ,
+                                                                  retained = Ret}) ->
+    ShouldResume =
+        case dict:find(ClientId,Subs) of
+            error -> true;
+            {ok,Sub} -> not mqtt_sub_state:is_old(CSeq,Sub)
+        end,
+    case ShouldResume of
+        true ->
+            Sub1 = mqtt_sub_state:new(Pid,CSeq,QoS,ResumeFrom,WSize,SQ,Ret),
+            S#state{live_subs = dict:store(ClientId,Sub1,Subs)};
+        _ -> S
+    end.
+
+insert_new_sub({ClientId,CSeq,QoS,Pid},WSize,S = #state{live_subs = Subs,
+                                                        queue = SQ,
+                                                        retained = Ret}) ->
+    Sub = mqtt_sub_state:new(Pid,CSeq,QoS,WSize,SQ,Ret),
     S#state{live_subs = dict:store(ClientId,Sub,Subs),
-            monref_idx = dict:store(MonRef,ClientId,Mons),
             queue = shared_queue:add(ClientId,SQ)}.
-
-%%
-%% A client comes back online and re-establishes an existing subscription
-%%
-recover_sub({ClientId,_QoS,_CSeq,_ClientPid},Q) ->
-    shared_queue:add(ClientId,undefined,Q).
-
-insert_new_sub(SubInfo,WSize,S = #state{queue = SQ}) ->
-    NextInQ = shared_queue:max_seq(SQ), %% start reading packets from the next one
-    set_sub(SubInfo,NextInQ,WSize,S).
 
 %%
 %% Only update existing properties - this is not a new subscription
@@ -429,45 +441,12 @@ resubscribe(ClientId,QoS,Sub,S = #state{retained = Ret,live_subs = Subs}) ->
     Sub1 = mqtt_sub_state:resubscribe(QoS,Ret,Sub),
     S#state{live_subs = dict:store(ClientId,Sub1,Subs)}.
 
-%% =====================================================================
-%% Monitoring and Recovery
-%% =====================================================================
-
-maybe_remove_downed(MonRef,S = #state{filter = Filter,
-                                      live_subs = Subs,
-                                      monref_idx = Mon}) ->
-    case dict:find(MonRef,Mon) of
-        {ok,ClientId} ->
-            mqtt_sub_repo:clear_sub_pid(Filter,ClientId),
-            Subs1 = dict:update(ClientId,
-                        fun(Reg) -> Reg#sub{monref = undefined,
-                                            pid = undefined}
-                        end,
-                    Subs),
-            Mon1 = dict:erase(MonRef,Mon),
-            S#state{monref_idx = Mon1,live_subs = Subs1};
-        error -> S
-    end.
-
-replace_monitor(Pid,OldRef,S = #state{monref_idx = Mon}) ->
-    NewRef = monitor(process,Pid),
-    MonRef = maybe_demonitor_client(OldRef,Mon),
-    MonRef1 = dict:store(NewRef,Pid,MonRef),
-    S#state{monref_idx = MonRef1}.
+%%
+%% We know that a client is subscribed to a queue,we just don't know the index (Seq number)
+%%
+recover_sub({ClientId,_QoS,_CSeq,_ClientPid},Q) ->
+    shared_queue:add(ClientId,0,Q).
 
 recover(SubRecord,S = #state{queue = Q}) ->
     lists:foldl(fun recover_sub/2,Q,SubRecord).
 
-maybe_clean_garbage(Garbage) ->
-    %%@todo: perform cleanup
-    ok.
-
-monitor_client(Pid,Mon) ->
-    Ref = monitor([process],Pid).
-
-
-maybe_demonitor_client(undefined,Mons) ->
-    Mons;
-maybe_demonitor_client(Ref,Mons)       ->
-    demonitor(Ref,[flush]),
-    dict:erase(Ref,Mons).

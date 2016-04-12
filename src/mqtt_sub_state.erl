@@ -12,13 +12,16 @@
 -include("mqtt_internal_msgs.hrl").
 
 %% API
--export([maybe_update_waiting/2, take/3, new/7, resume/7,resubscribe/3
+-export([maybe_update_waiting/2,
+    take/3,
+    new/6,
+    resubscribe/3,
     %% resubscribe/5
-]).
+    is_old/2]).
 
 -record(sub, {
     qos                 ::qos(), %% QoS for this client subscription
-    monref              ::any(), %% monitor reference for the process handling the client
+    %% monref              ::any(), %% monitor reference for the process handling the client
     pid                 ::pid(), %% Process id of the process handling the client
     client_seq = 0      ::non_neg_integer(), %% the version number of the client process registration
     %% (incremented every time a new client process is spawned, used to choose
@@ -33,38 +36,40 @@
 %% @doc
 %% Updates a sub if the new packet sequence is within the window
 %% @end
-maybe_update_waiting(NextSeq,Sub = #sub{retained_msgs = RetWaiting,
+maybe_update_waiting(NextSeq,Sub = #sub{pid = Pid,
+                                        retained_msgs = RetWaiting,
                                         next_in_q = NextInQ,
                                         window = WSize})
                                         when NextSeq - NextInQ + length(RetWaiting) > 0, WSize > 0 ->
     NumToSend = min(NextInQ + WSize,NextSeq),
-    {ok,Sub#sub{next_in_q = NextInQ + NumToSend,
-                window = WSize - NumToSend}};
+    {ok,Pid,Sub#sub{next_in_q = NextInQ + NumToSend,
+                    window = WSize - NumToSend}};
 
 maybe_update_waiting(_,_) -> blocked.
 
+is_old(MsgCSeq,#sub{client_seq = CSeq}) when CSeq >= MsgCSeq -> true;
+is_old(_,_) -> false.
 
 %% @doc
 %% Determine the sequence range of packets to send depending on the size of the Client's Window
 %% @end
 
 %% LastWSize should be 0
-take(Num,Q,Sub = #sub{window = LastWSize}) ->
+take(Num,Q,Sub = #sub{pid = Pid,window = LastWSize}) ->
     TotalToTake = Num + LastWSize,
     {RetPs,Sub1} = take_retained(TotalToTake,Sub),
 
     QToTake = TotalToTake - length(RetPs),
     {QPs,Sub2} = take_shared(QToTake,Q,Sub1),
-    {RetPs ++ QPs,Sub2}.
+    {Pid,RetPs ++ QPs,Sub2}.
 
 
 take_retained(TotalToSend,Sub = #sub{retained_msgs = RetWaiting,
                                      next_retained = RetSeq}) ->
-    {QSeq,Offset} = RetSeq,
     NumRetToSend = min(TotalToSend,length(RetWaiting)),
     {RetToSend,RetRest} = lists:split(NumRetToSend,RetWaiting),
     {RetPs,_} = enumerate(true,RetSeq,RetToSend),
-    {RetPs,Sub#sub{next_retained = {QSeq,Offset + NumRetToSend},
+    {RetPs,Sub#sub{next_retained = RetSeq + NumRetToSend,
                    retained_msgs = RetRest,
                    window = TotalToSend - NumRetToSend}}.
 
@@ -76,48 +81,33 @@ take_shared(RestWSize,Q,Sub = #sub{next_in_q = NextInQ}) ->
                  window = RestWSize - NumQToSend}}.
 
 
-enumerate(IsRetained,StartSeq,Ps) ->
+enumerate(IsRetained,StartSeq,Packets) ->
     Type =
         case IsRetained of
             true  -> ret;
             false ->   q
         end,
-    {EnumPs,_} = lists:mapfoldl(fun(P,Seq) -> {P#packet{retain = IsRetained,ref = {Type,Seq}},Seq+1} end,StartSeq,Ps),
+    {EnumPs,_} = lists:mapfoldl(fun(P,Seq) -> {P#packet{retain = IsRetained,ref = {Type,Seq}},Seq+1} end,StartSeq,Packets),
     EnumPs.
 
-new(Pid,MonRef,CSeq,QoS,Q,Ret,WSize) ->
-    QSeq = shared_queue:max_seq(Q),
-    
-    RetainedMsgs = shared_set:get_at(QSeq,Ret),
-    #sub{client_seq = CSeq,
-         qos = QoS,
-         pid = Pid,
-         monref = MonRef,
-         retained_msgs = RetainedMsgs,
-         next_retained = 0,
-         next_in_q = QSeq,
-         window = WSize}.
+new(Pid,CSeq,QoS,WSize,Q,Ret) ->
+    ResumeFrom = {0,shared_queue:max_seq(Q)},
+    new(Pid,CSeq,QoS,ResumeFrom,WSize,Q,Ret).
 
-resume(Pid,MonRef,_ResumeFrom = {RetOffset,QSeq},WSize,Q,Ret,Sub) ->
+new(Pid,CSeq,QoS,ResumeFrom,WSize,Q,Ret) ->
+    Sub = #sub{qos = QoS},
+    resume(Pid,CSeq,ResumeFrom,WSize,Q,Ret,Sub).
+
+resume(Pid,CSeq,_ResumeFrom = {RetSeq,QSeq},WSize,Q,Ret,Sub) ->
     ActualQSeq = max(QSeq,shared_queue:min_seq(Q)),
-
     RetainedMsgs = shared_set:get_at(ActualQSeq,Ret),
     Sub#sub{pid = Pid,
-            monref = MonRef,
+            client_seq = CSeq,
+            %%monref = MonRef,
             retained_msgs = RetainedMsgs,
-            next_retained = RetOffset,
+            next_retained = RetSeq,
             next_in_q = ActualQSeq,
             window = WSize}.
-
-set(Pid,MonRef,_ResumeFrom = {RetOffset,QSeq},WSize,Ret,Sub) ->
-    RetainedMsgs = shared_set:get_at(QSeq,Ret),
-    Sub#sub{pid = Pid,
-            monref = MonRef,
-            retained_msgs = RetainedMsgs,
-            next_retained = RetOffset,
-            next_in_q = QSeq,
-            window = WSize}.
-
 
 %% @doc
 %% Re-subscribing to existing subscription
@@ -128,10 +118,3 @@ resubscribe(QoS,Ret,Sub = #sub{next_in_q = QSeq}) ->
             %% Restart retained messages
             retained_msgs = RetainedMsgs,
             next_retained = 0}.
-
-%%%% @doc
-%%%% Re-subscribing to existing subscription
-%%%% @end
-%%resubscribe(Pid,MonRef,QoS,Ret,Sub) ->
-%%    Sub1 = Sub#sub{pid = Pid,monref = MonRef},
-%%    resubscribe(QoS,Ret,Sub1).
