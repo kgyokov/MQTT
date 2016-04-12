@@ -18,15 +18,15 @@
     log :: gb_trees:tree(non_neg_integer(),dict:dict())
 }).
 
--type(shared_set()::#s_set{}).
+-type(set()::#s_set{}).
 
 new() -> new(0,dict:new()).
 
--spec(new(non_neg_integer(),dict:dict()) -> shared_set()).
+-spec(new(non_neg_integer(),dict:dict()) -> set()).
 new(StartSeq,Dict) ->
     #s_set{log = gb_trees:insert(-StartSeq,Dict,gb_trees:empty())}.
 
--spec(append(any(),any(),non_neg_integer(), shared_set()) -> shared_set()).
+-spec(append(any(),any(),non_neg_integer(), set()) -> set()).
 append(Key,Val,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
     {LastSeq,Last} = gb_trees:smallest(Log),
     case LastSeq =< -Seq  of
@@ -45,7 +45,7 @@ remove(Key,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
     Next = dict:erase(Key,Last),
     Set#s_set{log = gb_trees:insert(-Seq,Next,Log)}.
 
--spec(get_at(non_neg_integer(), shared_set()) -> dict:dict()).
+-spec(get_at(non_neg_integer(), set()) -> dict:dict()).
 get_at(Seq,Set) when Seq > 0 ->
     [Val || {_,Val} <- dict:to_list(get_dict_at(Seq,Set))].
 
@@ -56,7 +56,7 @@ get_dict_at(Seq,#s_set{log = Log}) ->
         {_,Val,_} -> Val
     end.
 
--spec(truncate(non_neg_integer(), shared_set()) -> shared_set()).
+-spec(truncate(non_neg_integer(), set()) -> set()).
 truncate(Seq,Set = #s_set{log = Log}) ->
     %% @todo: OPTIMIZE!!!
     L = lists:takewhile(fun({Key,_}) -> Key =< -Seq end, gb_trees:to_list(Log)),
