@@ -12,7 +12,7 @@
 -author("Kalin").
 
 %% API
--export([new/0, new/2, append/4, get_at/2, get_at/3, truncate/2, size/1, remove/3]).
+-export([new/0, new/2, append/4, get_at/2, iterator_from/3, truncate/2, size/1, remove/3, take/2]).
 
 -record(s_set,{
     log :: gb_trees:tree(non_neg_integer(),dict:dict())
@@ -20,7 +20,7 @@
 
 -type(set()::#s_set{}).
 
-new() -> new(0,dict:new()).
+new() -> new(0,gb_trees:empty()).
 
 -spec(new(non_neg_integer(),dict:dict()) -> set()).
 new(StartSeq,Dict) ->
@@ -33,7 +33,7 @@ append(Key,Val,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
         true -> error({invalid_seq,LastSeq,Seq});
         false -> ok
     end,
-    Next = dict:store(Key,Val,Last),
+    Next = gb_trees:enter(Key,Val,Last),
     Set#s_set{log = gb_trees:insert(-Seq,Next,Log)}.
 
 remove(Key,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
@@ -42,23 +42,40 @@ remove(Key,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
         true -> error({invalid_seq,LastSeq,Seq});
         false -> ok
     end,
-    Next = dict:erase(Key,Last),
+    Next = gb_trees:delete_any(Key,Last),
     Set#s_set{log = gb_trees:insert(-Seq,Next,Log)}.
 
 -spec(get_at(non_neg_integer(),set()) -> []).
 get_at(Seq,Set) when Seq > 0 ->
-    get_at(Seq,0,Set).
+    iterator_from(Seq,0,Set).
 
--spec(get_at(non_neg_integer(),non_neg_integer(),set()) -> []).
-get_at(Seq,Offset,Set) when Seq > 0 ->
-    List = [Val || {_,Val} <- dict:to_list(get_dict_at(Seq,Set))],
-    {_,Rest} = lists:split(Offset,List),
-    Rest.
+-spec(iterator_from(non_neg_integer(),non_neg_integer(),set()) -> []).
+iterator_from(Seq,Offset,Set) when Seq > 0 ->
+    gb_trees:iterator_from(Offset,get_tree_at(Seq,Set)).
 
-get_dict_at(Seq,#s_set{log = Log}) ->
+%%-spec(next(gb_trees:iter(Key,Val)) -> none | {Val,gb_trees:iter(Key,Val)}).
+%%next(Iter) ->
+%%    case gb_trees:next(Iter) of
+%%        none -> none;
+%%        {_,Val,Iter1} -> {Val,Iter1}
+%%    end.
+
+take(Num,Iter) when Num >= 0->
+    take(Num,Iter,[]).
+
+take(0,Iter,Acc) ->
+    {Acc,Iter};
+
+take(Num,Iter,Acc) ->
+    case gb_trees:next(Iter) of
+        none -> {Acc,nil};
+        {_,Val,Iter1} -> take(Num-1,[Val|Acc],Iter1)
+    end.
+
+get_tree_at(Seq,#s_set{log = Log}) ->
     Iter = gb_trees:iterator_from(-Seq,Log), %% the whole reason for storing negative Sequence numbers
     case gb_trees:next(Iter) of
-        none -> dict:new();
+        none -> gb_trees:empty();
         {_,Val,_} -> Val
     end.
 

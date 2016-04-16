@@ -13,10 +13,10 @@
 
 %% API
 -export([maybe_update_waiting/2,
-    take/3,
-    new/6,
-    resubscribe/4,
-    is_old/2]).
+         take/3,
+         new/6,
+         resubscribe/4,
+         is_old/2]).
 
 -record(sub, {
     qos                 ::qos(), %% QoS for this client subscription
@@ -50,28 +50,30 @@ is_old(MsgCSeq,#sub{client_seq = CSeq}) when CSeq >= MsgCSeq -> true;
 is_old(_,_) -> false.
 
 %% @doc
-%% Determine the packets to send depending on the size of the Client's Window
+%% Determine the packets to send depending on the size of the Client's Window.
+%% Called under one the following conditions:
+%% - The Client has consumed one or more package and has increased its window size
+%% - There may be new messages to send
 %% @end
-
 take(Num,Q,Sub = #sub{pid = Pid,window = LastWSize}) ->
     TotalToTake = Num + LastWSize,
     {RetPs,Sub1} = take_retained(TotalToTake,Sub),
 
     QToTake = TotalToTake - length(RetPs),
-    {QPs,Sub2} = take_shared(QToTake,Q,Sub1),
+    {QPs,Sub2} = take_queued(QToTake,Q,Sub1),
     {Pid,RetPs ++ QPs,Sub2}.
 
 
-take_retained(TotalToSend,Sub = #sub{retained_msgs = RetWaiting,
+take_retained(TotalToTake,Sub = #sub{retained_msgs = RetWaiting,
                                      next_retained = RetSeq}) ->
-    NumRetToSend = min(TotalToSend,length(RetWaiting)),
-    {RetToSend,RetRest} = lists:split(NumRetToSend,RetWaiting),
-    {RetPs,_} = enumerate(true,RetSeq,RetToSend),
-    {RetPs,Sub#sub{next_retained = RetSeq + NumRetToSend,
-                   retained_msgs = RetRest,
-                   window = TotalToSend - NumRetToSend}}.
+    {Taken,RetRest} = shared_set:take(TotalToTake,RetWaiting),
+    {RetPs,_} = enumerate(true,RetSeq,Taken),
+    NumTaken = length(Taken),
+    {RetPs,Sub#sub{retained_msgs = RetRest,
+                   next_retained = RetSeq + NumTaken,
+                   window = TotalToTake - NumTaken}}.
 
-take_shared(RestWSize,Q,Sub = #sub{next_in_q = NextInQ}) ->
+take_queued(RestWSize,Q,Sub = #sub{next_in_q = NextInQ}) ->
     QToSend = shared_queue:read(NextInQ,NextInQ + RestWSize,Q),
     NumQToSend = length(QToSend),
     {QPs,_} = enumerate(false,NextInQ,QToSend),
@@ -91,22 +93,23 @@ enumerate(IsRetained,StartSeq,Packets) ->
 new(Pid,CSeq,QoS,WSize,Q,Ret) ->
     new(Pid,CSeq,QoS,undefined,WSize,Q,Ret).
 
-new(Pid,CSeq,QoS,ResumeFrom,WSize,Q,Ret) ->
-    Sub = #sub{qos = QoS},
-    resume(Pid,CSeq,ResumeFrom,WSize,Q,Ret,Sub).
+new(Pid,CSeq,QoS,From,WSize,Q,Ret) ->
+    Sub = #sub{pid = Pid,
+               client_seq = CSeq,
+               qos = QoS,
+               client_seq = CSeq},
+    iterator_from(From,WSize,Q,Ret,Sub).
 
 %% @doc
 %% Picking a subscription back up from where we left off
 %% @end
-resume(Pid,CSeq,_ResumeFrom = undefined,WSize,Q,Ret,Sub) ->
-    ResumeFrom = {0,shared_queue:max_seq(Q)},
-    resume(Pid,CSeq,ResumeFrom,WSize,Q,Ret,Sub);
+iterator_from(_From = undefined,WSize,Q,Ret,Sub) ->
+    ResumeAt = {0,shared_queue:max_seq(Q)},
+    iterator_from(ResumeAt,WSize,Q,Ret,Sub);
 
-resume(Pid,CSeq,_ResumeFrom = {RetSeq,QSeq},WSize,Q,Ret,Sub) ->
+iterator_from(_From = {RetSeq,QSeq},WSize,Q,Ret,Sub) ->
     ActualQSeq = max(QSeq,shared_queue:min_seq(Q)),
-    Sub1 = Sub#sub{pid = Pid,
-                   client_seq = CSeq,
-                   next_in_q = ActualQSeq},
+    Sub1 = Sub#sub{next_in_q = ActualQSeq},
     Sub2 = resume_retained(RetSeq,ActualQSeq,Ret,Sub1),
     take(WSize,Q,Sub2).
 
@@ -119,6 +122,6 @@ resubscribe(QoS,Q,Ret,Sub = #sub{next_in_q = QSeq}) ->
     take(0,Q,Sub2).
 
 resume_retained(RetSeq,QSeq,Ret,Sub) ->
-    RetainedMsgs = shared_set:get_at(QSeq,RetSeq,Ret),
+    RetainedMsgs = shared_set:iterator_from(QSeq,RetSeq,Ret),
     Sub#sub{retained_msgs = RetainedMsgs,
             next_retained = RetSeq}.
