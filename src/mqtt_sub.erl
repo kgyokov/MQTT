@@ -221,9 +221,6 @@ handle_cast(_Request, S) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_info({'DOWN', MonRef, _, _, _}, S) ->
-    {noreply, maybe_remove_downed(MonRef,S)};
-
 handle_info(async_init, S = #state{filter = Filter}) ->
     RepoSubs = mqtt_sub_repo:load(Filter),
     S1 = recover(RepoSubs,S),
