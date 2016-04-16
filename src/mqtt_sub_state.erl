@@ -15,7 +15,7 @@
 -export([maybe_update_waiting/2,
     take/3,
     new/6,
-    resubscribe/3,
+    resubscribe/4,
     is_old/2]).
 
 -record(sub, {
@@ -50,10 +50,9 @@ is_old(MsgCSeq,#sub{client_seq = CSeq}) when CSeq >= MsgCSeq -> true;
 is_old(_,_) -> false.
 
 %% @doc
-%% Determine the sequence range of packets to send depending on the size of the Client's Window
+%% Determine the packets to send depending on the size of the Client's Window
 %% @end
 
-%% LastWSize should be 0
 take(Num,Q,Sub = #sub{pid = Pid,window = LastWSize}) ->
     TotalToTake = Num + LastWSize,
     {RetPs,Sub1} = take_retained(TotalToTake,Sub),
@@ -96,26 +95,30 @@ new(Pid,CSeq,QoS,ResumeFrom,WSize,Q,Ret) ->
     Sub = #sub{qos = QoS},
     resume(Pid,CSeq,ResumeFrom,WSize,Q,Ret,Sub).
 
+%% @doc
+%% Picking a subscription back up from where we left off
+%% @end
 resume(Pid,CSeq,_ResumeFrom = undefined,WSize,Q,Ret,Sub) ->
     ResumeFrom = {0,shared_queue:max_seq(Q)},
     resume(Pid,CSeq,ResumeFrom,WSize,Q,Ret,Sub);
 
 resume(Pid,CSeq,_ResumeFrom = {RetSeq,QSeq},WSize,Q,Ret,Sub) ->
     ActualQSeq = max(QSeq,shared_queue:min_seq(Q)),
-    RetainedMsgs = shared_set:get_at(ActualQSeq,RetSeq,Ret),
-    Sub#sub{pid = Pid,
-            client_seq = CSeq,
-            retained_msgs = RetainedMsgs,
-            next_retained = RetSeq,
-            next_in_q = ActualQSeq,
-            window = WSize}.
+    Sub1 = Sub#sub{pid = Pid,
+                   client_seq = CSeq,
+                   next_in_q = ActualQSeq},
+    Sub2 = resume_retained(RetSeq,ActualQSeq,Ret,Sub1),
+    take(WSize,Q,Sub2).
 
 %% @doc
 %% Re-subscribing to existing subscription
 %% @end
-resubscribe(QoS,Ret,Sub = #sub{next_in_q = QSeq}) ->
-    RetainedMsgs = shared_set:get_at(QSeq,0,Ret),
-    Sub#sub{qos = QoS,
-            %% Restart retained messages
-            retained_msgs = RetainedMsgs,
-            next_retained = 0}.
+resubscribe(QoS,Q,Ret,Sub = #sub{next_in_q = QSeq}) ->
+    Sub1 = Sub#sub{qos = QoS},
+    Sub2 = resume_retained(0,QSeq,Ret,Sub1),
+    take(0,Q,Sub2).
+
+resume_retained(RetSeq,QSeq,Ret,Sub) ->
+    RetainedMsgs = shared_set:get_at(QSeq,RetSeq,Ret),
+    Sub#sub{retained_msgs = RetainedMsgs,
+            next_retained = RetSeq}.
