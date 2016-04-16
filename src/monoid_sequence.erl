@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 02. Mar 2016 11:45 PM
 %%%-------------------------------------------------------------------
--module(sequence_monoid).
+-module(monoid_sequence).
 -author("Kalin").
 
 -behavior(gen_monoid).

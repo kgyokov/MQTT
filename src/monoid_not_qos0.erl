@@ -4,9 +4,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 05. Mar 2016 12:23 AM
+%%% Created : 05. Mar 2016 12:21 AM
 %%%-------------------------------------------------------------------
--module(mqtt_queue_monoid).
+-module(monoid_not_qos0).
 -author("Kalin").
 
 -behavior(gen_monoid).
@@ -14,8 +14,11 @@
 %% API
 -export([id/0, as/2, ms/1]).
 
--define(MONOIDS,[sequence_monoid,not_qos0_monoid]).
+id() -> 0.
+as(NotQoS0_1,NotQoS0_2) -> NotQoS0_1 + NotQoS0_2.
+ms(QoS) ->
+    case QoS of
+        0 -> 0;
+        _ -> 1
+    end.
 
-id() -> [ M:id() || M <- ?MONOIDS].
-as(A,B) -> [ M:as(A,B) || M <- ?MONOIDS].
-ms(A) -> [ M:ms(A) || M <- ?MONOIDS].
