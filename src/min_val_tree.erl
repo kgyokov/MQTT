@@ -13,8 +13,14 @@
 %% API
 -export([store/3, min/1, split/2, remove/2, new/0, new/1, get_val/2, is_empty/1]).
 
+-opaque tree(Key,Val) :: {gb_trees:tree(Val,Key), dict:dict(Val,Key), fun((Val,Val) -> boolean())}.
+-opaque tree() :: tree(_,_).
+
+-export_type([tree/2,tree/0]).
+
 new() -> new(fun(A,B) -> A =< B end).
 
+-spec(new(fun((Val,Val) -> boolean())) -> tree(any(),Val)).
 new(Compare) ->
     {
         gb_trees:empty(),   %% A tree of Vals. Each Val can have several keys associated with it

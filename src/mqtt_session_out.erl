@@ -19,7 +19,6 @@
     pub_comp/2,
     subscribe/2,
     unsubscribe/2,
-    %%cleanup/1
     push_qos0/2,
     push_reliable/3,
     close_duplicate/1,
@@ -41,14 +40,16 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-    sender,
-    client_id,
-    seq,
-    session,
-    subs = orddict:new(),
-    is_persistent,
-    persist
+    sender          ::pid(),
+    client_id       ::binary(),
+    seq             ::non_neg_integer(),
+    session         ::any(),
+    monitors        ::dict:dict(reference(),binary()),
+    is_persistent   ::boolean(),
+    persist         ::fun()
 }).
+
+-define(DEFAULT_WSZIE,1).
 
 %%%===================================================================
 %%% API

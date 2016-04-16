@@ -34,7 +34,7 @@ save(ClientId,Session) ->
 
 load(ClientId) ->
     case mnesia:dirty_read(?SESSION_RECORD,ClientId) of
-        [#mqtt_session{session = SO}] -> SO;
+        [#mqtt_session{session = SO}] -> {ok,SO};
         []       -> {error,not_found}
     end.
 

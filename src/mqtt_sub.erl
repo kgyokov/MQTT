@@ -86,7 +86,7 @@ subscribe_self(Pid,ClientId,CSeq,QoS,WSize) ->
     gen_server:call(Pid,{sub,ClientId,CSeq,QoS,WSize}).
 
 -spec(resume(Pid::pid(), ClientId::client_id(), CSeq::non_neg_integer(),
-             Qos::qos(), any(), WSize::non_neg_integer())
+             Qos::qos(), ResumeFrom::any(), WSize::non_neg_integer())
         -> ok).
 resume(Pid,ClientId,CSeq,QoS,ResumeFrom,WSize) ->
     gen_server:call(Pid,{resume,ClientId,CSeq,QoS,ResumeFrom,WSize}).
@@ -143,7 +143,7 @@ new(Filter) ->
 -spec(init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
-init([Filter, Repo]) ->
+init([Filter, _Repo]) ->
     self() ! async_init,
     mqtt_sub_repo:claim_filter(Filter,self()),
     Seq = 0,
@@ -304,25 +304,22 @@ handle_push(Packet,S = #state{filter = Filter,
 
 update_waiting_subs(NewSeq) ->
     fun(ClientId,Sub,AccIn = {SendToAcc,SubsAcc}) ->
-            case mqtt_sub_state:maybe_update_waiting(NewSeq,Sub) of
-                {ok,Pid,Sub1} ->
-                    SubsAcc1 = dict:update(ClientId,Sub1,SubsAcc),
-                    {[Pid|SendToAcc],SubsAcc1};
-                _ -> AccIn
-            end
+        case mqtt_sub_state:maybe_update_waiting(NewSeq,Sub) of
+            {ok,Pid,Sub1} -> {[Pid|SendToAcc],dict:update(ClientId,Sub1,SubsAcc)};
+            _ -> AccIn
+        end
     end.
 
 handle_pull(WSize,ClientId,S = #state{filter = Filter,
                                       live_subs = Subs,
                                       queue = SQ}) ->
-    Fun =
-        fun(Sub) ->
+    case dict:find(ClientId,Subs) of
+        {ok,Sub} ->
             {Pid,Packets,Sub1} = mqtt_sub_state:take(WSize,SQ,Sub),
             send_packets_to_client(Pid,Filter,Packets),
-            Sub1
-        end,
-    Subs1 = dict:update(ClientId,Fun,Subs),
-    S#state{live_subs = Subs1}.
+            S#state{live_subs = dict:store(ClientId,Sub1,Subs)};
+        error -> S
+    end.
 
 handle_ack(ClientId,{q,QAck},S = #state{queue = Q,
                                         garbage = Garbage}) ->
