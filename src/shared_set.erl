@@ -12,7 +12,7 @@
 -author("Kalin").
 
 %% API
--export([new/0, new/2, append/4, get_at/2, truncate/2, size/1, remove/3]).
+-export([new/0, new/2, append/4, get_at/2, get_at/3, truncate/2, size/1, remove/3]).
 
 -record(s_set,{
     log :: gb_trees:tree(non_neg_integer(),dict:dict())
@@ -45,9 +45,15 @@ remove(Key,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
     Next = dict:erase(Key,Last),
     Set#s_set{log = gb_trees:insert(-Seq,Next,Log)}.
 
--spec(get_at(non_neg_integer(), set()) -> dict:dict()).
+-spec(get_at(non_neg_integer(),set()) -> []).
 get_at(Seq,Set) when Seq > 0 ->
-    [Val || {_,Val} <- dict:to_list(get_dict_at(Seq,Set))].
+    get_at(Seq,0,Set).
+
+-spec(get_at(non_neg_integer(),non_neg_integer(),set()) -> []).
+get_at(Seq,Offset,Set) when Seq > 0 ->
+    List = [Val || {_,Val} <- dict:to_list(get_dict_at(Seq,Set))],
+    {_,Rest} = lists:split(Offset,List),
+    Rest.
 
 get_dict_at(Seq,#s_set{log = Log}) ->
     Iter = gb_trees:iterator_from(-Seq,Log), %% the whole reason for storing negative Sequence numbers

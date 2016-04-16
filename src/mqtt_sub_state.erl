@@ -16,7 +16,6 @@
     take/3,
     new/6,
     resubscribe/3,
-    %% resubscribe/5
     is_old/2]).
 
 -record(sub, {
@@ -91,19 +90,21 @@ enumerate(IsRetained,StartSeq,Packets) ->
     EnumPs.
 
 new(Pid,CSeq,QoS,WSize,Q,Ret) ->
-    ResumeFrom = {0,shared_queue:max_seq(Q)},
-    new(Pid,CSeq,QoS,ResumeFrom,WSize,Q,Ret).
+    new(Pid,CSeq,QoS,undefined,WSize,Q,Ret).
 
 new(Pid,CSeq,QoS,ResumeFrom,WSize,Q,Ret) ->
     Sub = #sub{qos = QoS},
     resume(Pid,CSeq,ResumeFrom,WSize,Q,Ret,Sub).
 
+resume(Pid,CSeq,_ResumeFrom = undefined,WSize,Q,Ret,Sub) ->
+    ResumeFrom = {0,shared_queue:max_seq(Q)},
+    resume(Pid,CSeq,ResumeFrom,WSize,Q,Ret,Sub);
+
 resume(Pid,CSeq,_ResumeFrom = {RetSeq,QSeq},WSize,Q,Ret,Sub) ->
     ActualQSeq = max(QSeq,shared_queue:min_seq(Q)),
-    RetainedMsgs = shared_set:get_at(ActualQSeq,Ret),
+    RetainedMsgs = shared_set:get_at(ActualQSeq,RetSeq,Ret),
     Sub#sub{pid = Pid,
             client_seq = CSeq,
-            %%monref = MonRef,
             retained_msgs = RetainedMsgs,
             next_retained = RetSeq,
             next_in_q = ActualQSeq,
@@ -113,7 +114,7 @@ resume(Pid,CSeq,_ResumeFrom = {RetSeq,QSeq},WSize,Q,Ret,Sub) ->
 %% Re-subscribing to existing subscription
 %% @end
 resubscribe(QoS,Ret,Sub = #sub{next_in_q = QSeq}) ->
-    RetainedMsgs = shared_set:get_at(QSeq,Ret),
+    RetainedMsgs = shared_set:get_at(QSeq,0,Ret),
     Sub#sub{qos = QoS,
             %% Restart retained messages
             retained_msgs = RetainedMsgs,
