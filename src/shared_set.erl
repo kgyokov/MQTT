@@ -15,16 +15,17 @@
 -export([new/0, new/2, append/4, get_at/2, iterator_from/3, truncate/2, size/1, remove/3, take/2]).
 
 -record(s_set,{
-    log :: gb_trees:tree(non_neg_integer(),dict:dict())
+    log :: gb_trees:tree(neg_integer()|0,gb_trees:tree())
 }).
 
 -type(set()::#s_set{}).
 
+-spec(new() -> set()).
 new() -> new(0,gb_trees:empty()).
 
--spec(new(non_neg_integer(),dict:dict()) -> set()).
-new(StartSeq,Dict) ->
-    #s_set{log = gb_trees:insert(-StartSeq,Dict,gb_trees:empty())}.
+-spec(new(non_neg_integer(),gb_trees:tree()) -> set()).
+new(StartSeq,Tree) ->
+    #s_set{log = gb_trees:insert(-StartSeq,Tree,gb_trees:empty())}.
 
 -spec(append(any(),any(),non_neg_integer(), set()) -> set()).
 append(Key,Val,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
@@ -45,20 +46,13 @@ remove(Key,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
     Next = gb_trees:delete_any(Key,Last),
     Set#s_set{log = gb_trees:insert(-Seq,Next,Log)}.
 
--spec(get_at(non_neg_integer(),set()) -> []).
+-spec(get_at(non_neg_integer(),set()) -> gb_trees:iter()).
 get_at(Seq,Set) when Seq > 0 ->
     iterator_from(Seq,0,Set).
 
--spec(iterator_from(non_neg_integer(),non_neg_integer(),set()) -> []).
+-spec(iterator_from(non_neg_integer(),non_neg_integer(),set()) -> gb_trees:iter()).
 iterator_from(Seq,Offset,Set) when Seq > 0 ->
     gb_trees:iterator_from(Offset,get_tree_at(Seq,Set)).
-
-%%-spec(next(gb_trees:iter(Key,Val)) -> none | {Val,gb_trees:iter(Key,Val)}).
-%%next(Iter) ->
-%%    case gb_trees:next(Iter) of
-%%        none -> none;
-%%        {_,Val,Iter1} -> {Val,Iter1}
-%%    end.
 
 take(Num,Iter) when Num >= 0->
     take(Num,Iter,[]).

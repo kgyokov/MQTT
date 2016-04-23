@@ -25,7 +25,7 @@
     new/0,
     new/1,
     to_publish/4,
-    to_pubrel/1]).
+    to_pubrel/1, find_sub/2]).
 
 -define(DEFAULT_MAX_WINDOW,20).
 
@@ -49,6 +49,11 @@
 %% SUBSCRIPTIONS
 %% ================================================================================
 
+find_sub(Filter,#outgoing{subs = Subs}) ->
+    orddict:find(Filter,Subs).
+
+-spec(get_subs(#outgoing{}) -> [{binary(),qos(),any()}]).
+
 get_subs(#outgoing{subs = Subs}) ->
     [{Filter,QoS,Seq} || {Filter,{QoS,Seq}} <- orddict:to_list(Subs)].
 
@@ -59,12 +64,16 @@ get_subs(#outgoing{subs = Subs}) ->
     #outgoing{}.
 
 subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
-    %% @todo: Deduplicate
-    Subs1 = lists:foldl(fun add_sub/2,Subs,NewSubs),
+    Subs1 = lists:foldl(fun maybe_add_sub/2,Subs,NewSubs),
     S#outgoing{subs = Subs1}.
 
-add_sub({Filter,QoS},Subs) ->
-    orddict:store(Filter,{QoS,new_sub_seq()},Subs).
+maybe_add_sub({Filter,QoS},Subs) ->
+    NewSub =
+        case orddict:find(Filter,Subs) of
+            {ok,{_,Seq}} -> {QoS,Seq};
+            error        -> {QoS,undefined}
+        end,
+    orddict:store(Filter,NewSub,Subs).
 
 %% @doc
 %% Removes existing subscriptions from the session data
@@ -85,12 +94,12 @@ flush_queue(OldSubs,Q) ->
 %% MESSAGES
 %% =========================================================================
 
-push(Filter,Packet = #packet{ref = Ref},SO = #outgoing{subs = Subs}) ->
-    case should_accept(Filter,Ref,Subs) of
+push(Filter,Packet = #packet{seq = Seq},SO = #outgoing{subs = Subs}) ->
+    case should_accept(Filter,Subs) of
         false -> {[],SO};
         true ->
             SO1 = SO#outgoing{subs = orddict:update(Filter,
-                                            fun({QoS,_}) -> {QoS,Ref} end,
+                                            fun({QoS,_}) -> {QoS,Seq} end,
                                     Subs)},
             maybe_enqueue(Packet,SO1)
     end.
@@ -121,10 +130,10 @@ set_actual_qos(Subs,Packet = #packet{topic = Topic,
     ActualQoS = min(MsgQoS,SubQos),
     Packet#packet{qos = ActualQoS}.
 
-should_accept(Filter,Ref,Subs) ->
+should_accept(Filter,Subs) ->
     case orddict:find(Filter,Subs) of
-        {ok,{_,Seq}} -> is_new_msg(Ref,Seq);
-        error -> false
+        {ok,_Sub} -> true;
+        error     -> false
     end.
 
 push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
@@ -186,10 +195,10 @@ pub_rec(PacketId,SO) ->
 
 
 -spec pub_comp(packet_id(),#outgoing{}) ->
-    {continue|wait,#outgoing{}}.
+    {[#'PUBLISH'{}],#outgoing{}}.
 
 pub_comp(PacketId,SO = #outgoing{packet_seq = PSeq,
-                                         qos2_rec = Ack}) ->
+                                 qos2_rec = Ack}) ->
     AckSeq = get_ack_seq(PacketId,PSeq),
     case ordsets:is_element(AckSeq,Ack) of
         true ->
@@ -262,12 +271,6 @@ new(MaxWnd) ->
         qos2_rec = ordsets:new()
     }.
 
-%%
-%% Seq functionality
-%%
 
-is_new_msg({ret,Seq},{RetSeq,_}) -> Seq > RetSeq;
-is_new_msg({q,Seq},{_,QSeq}) -> Seq > QSeq.
 
-new_sub_seq() -> {-1,-1}.
 

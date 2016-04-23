@@ -40,7 +40,7 @@ annotate_w_seq(Seq,El) -> {Seq,El}.
 get_no_qos0({_,_,NotQoS0}) -> NotQoS0.
 
 pushr_w_seq(Seq,El,Q) ->
-    pushr({Seq,El},Q).
+    pushr(Q,{Seq,El}).
 
 split_by_seq(Fun,Q) ->
     split(fun({Seq,_,_}) -> Fun(Seq) end,Q).

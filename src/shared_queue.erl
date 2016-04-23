@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([new/2, pushr/2, remove/2, add/2, add/3, forward/3, whereis/2, min_seq/1, max_seq/1, read/3]).
+-export([new/2, pushr/2, remove/2, add/2, add/3, forward/3, whereis/2, min_seq/1, max_seq/1, take/3]).
 
 -define(SEQ_MONOID,sequence_monoid).
 
@@ -54,13 +54,17 @@ maybe_truncate(NewOffsets, SQ = #shared_q{queue = Q}) ->
     MinClientSeq = min_val_tree:min(NewOffsets),
     {Garbage,Q1} = monoid_sequence:split_by_seq(fun(Seq) -> Seq >= MinClientSeq end,Q),
     {monoid_sequence:measure(Garbage),
-     SQ#shared_q{queue = Q1,client_seqs = NewOffsets}}.
+        SQ#shared_q{queue = Q1,client_seqs = NewOffsets}}.
 
-min_seq(#shared_q{client_seqs = Offsets}) -> min_val_tree:min(Offsets).
+min_seq(Q = #shared_q{client_seqs = Offsets}) ->
+    case min_val_tree:min(Offsets) of
+        none -> max_seq(Q);
+        Seq  -> Seq
+    end.
 
 max_seq(#shared_q{cur_seq = Seq}) -> Seq.
 
-read(FromSeq,ToSeq, #shared_q{queue = Q}) ->
+take(FromSeq,ToSeq, #shared_q{queue = Q}) ->
     {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq >= FromSeq end, Q),
     {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq =< ToSeq end, Rest),
     monoid_sequence:to_list(Interval).

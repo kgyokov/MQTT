@@ -137,15 +137,19 @@ subscription_created(Pid,Sub) ->
 init([ConnPid,ClientId,CleanSession]) ->
     NewSeq = claim_client_id(ClientId),
     self() ! async_init,
+    %%todo: should this be async? Do we want to send a CONNACK before clearing the session???
+    IsPersistent = not CleanSession,
     Persist =
-        if not CleanSession -> fun(SO) -> mqtt_session_repo:save(ClientId,SO),SO end;
-           true             -> fun(SO) -> SO end
+        if  IsPersistent -> fun(SO) -> mqtt_session_repo:save(ClientId,SO),SO end;
+            true    -> fun(SO) -> SO end
         end,
+    SO1 = load_session(ClientId,IsPersistent,NewSeq),
     S = #state{client_id = ClientId,
                seq = NewSeq,
                sender = ConnPid,
                is_persistent = not CleanSession,
-               persist = Persist},
+               persist = Persist,
+               session = SO1},
     {ok,S}.
 
 %%--------------------------------------------------------------------
@@ -191,7 +195,7 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
     SO1 = mqtt_session:subscribe(NewSubs,SO),
     QoSResults = [{ok,QoS} || {_,QoS} <- NewSubs], %% @todo: do we even need this?
     Persist(SO1),
-    _Results = psubscribe(ClientId,Seq,NewSubs),
+    _Results = p_subscribe(ClientId,Seq,NewSubs),
     {reply,QoSResults,S#state{session = SO1}};
 
 handle_call({unsub,OldSubs}, _From, S = #state{session = SO,
@@ -199,7 +203,7 @@ handle_call({unsub,OldSubs}, _From, S = #state{session = SO,
                                                seq = Seq,
                                                persist = Persist}) ->
     SO1 = mqtt_session:unsubscribe(OldSubs,SO),
-    punsubscribe(ClientId,Seq,OldSubs),
+    p_unsubscribe(ClientId,Seq,OldSubs),
     Persist(SO1),
     {reply,ok,S#state{session = SO1}};
 
@@ -226,12 +230,14 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_cast({push,Packet,Filter,{FromPid,Ref}},S = #state{session = SO,persist = Persist,client_id = ClientId}) ->
+handle_cast({push,Packet,Filter,{FromPid,Ref}},S = #state{session = SO,
+                                                          persist = Persist,
+                                                          client_id = ClientId}) ->
     {ToSend,SO1} = mqtt_session:push(Filter,Packet,SO),
     Persist(SO1),
     %% @todo: maybe combine the two casts into one???
-    mqtt_sub:ack(FromPid,ClientId,Ref),
-    mqtt_sub:pull(FromPid,1,ClientId),
+    mqtt_router:ack(FromPid,ClientId,Ref),
+    mqtt_router:pull(FromPid,1,ClientId),
     send_to_client(S,ToSend),
     {noreply,S#state{session = SO1}};
 
@@ -257,21 +263,29 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_info(async_init, S = #state{is_persistent = IsPersistent,
+handle_info(async_init, S = #state{session = SO1,
                                    client_id = ClientId,
                                    seq = NewSeq}) ->
-    %%todo: should this be async? Do we want to send a CONNACK before clearing the session???
-    SO1 = load_session(ClientId,IsPersistent,NewSeq),
     Subs = mqtt_session:get_subs(SO1),
     MsgInFlight = mqtt_session:msg_in_flight(SO1),
-
-    %% Side Effects
-    psubscribe(ClientId,NewSeq,Subs),
-    %% Recover messages in flight and re-send them
+    Mons = p_resume(ClientId,NewSeq,Subs),
     send_to_client(S,MsgInFlight),
-    %% Refresh the subscriptions
-    %%mqtt_router:refresh_subs(ClientId,NewSeq,mqtt_session:get_subs(SO2)),
-    {noreply, S#state{session = SO1}};
+    {noreply, S#state{session = SO1,
+                      monitors = Mons}};
+
+handle_info({'DOWN', MonRef, _, _, _}, S = #state{seq = CSeq,
+                                                  client_id = ClientId,
+                                                  monitors = Mons,
+                                                  session = SO}) ->
+    S1 =
+        case dict:find(MonRef,Mons) of
+            {ok,Filter} ->
+                {ok,Sub} = mqtt_session:find_sub(Filter,SO),
+                MonRef1 = resume(Sub,ClientId,CSeq,?DEFAULT_WSZIE),
+                S#state{monitors = dict:store(Filter,MonRef1,Mons)};
+            error -> S
+        end,
+    {noreply,S1};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -337,23 +351,31 @@ load_session(ClientId,_IsPersistent = false,NewSeq) ->
         {error,not_found} -> ok;
         {ok,SO} ->
             Filters = [Filter || {Filter,_,_} <- mqtt_session:get_subs(SO)],
-            punsubscribe(ClientId,NewSeq,Filters)
+            p_unsubscribe(ClientId,NewSeq,Filters)
     end,
     SO1 = mqtt_session:new(),
     mqtt_session_repo:save(ClientId,SO1),
     SO1.
 
-psubscribe(ClientId,Seq,Subs) ->
-    rpc:pmap({?MODULE,subscribe_self},[ClientId,Seq],Subs).
+p_subscribe(ClientId,Seq,Subs) ->
+    rpc:pmap({?MODULE,subscribe},[ClientId,Seq,?DEFAULT_WSZIE],Subs).
 
-punsubscribe(ClientId,Seq,Filters) ->
-    rpc:pmap({?MODULE,unsubscribe_self},[ClientId,Seq],Filters).
+subscribe({Filter,QoS},ClientId,CSeq,WSize) ->
+    mqtt_router:subscribe(Filter,ClientId,QoS,CSeq,WSize).
 
-subscribe_self({Filter,QoS},ClientId,CSeq) ->
-    mqtt_router:subscribe(Filter,ClientId,QoS,CSeq).
+p_unsubscribe(ClientId,CSeq,Filters) ->
+    rpc:pmap({?MODULE,unsubscribe},[ClientId,CSeq],Filters).
 
-unsubscribe_self(Filter,ClientId,Seq) ->
+unsubscribe(Filter,ClientId,Seq) ->
     mqtt_router:unsubscribe(Filter,ClientId,Seq).
+
+p_resume(ClientId,CSeq,Subs) ->
+    Mons = rpc:pmap({?MODULE,resume},[ClientId,CSeq,?DEFAULT_WSZIE],Subs),
+    Filters = [Filter || {Filter,_,_} <- Subs],
+    dict:from_list(lists:zip(Mons,Filters)).
+
+resume({Filter,QoS,From},ClientId,CSeq,WSize) ->
+    mqtt_router:resume_sub(ClientId,CSeq,{Filter,QoS,From},WSize).
 
 send_to_client(#state{sender = Sender}, Packets) when is_list(Packets) ->
     lists:foreach(fun(P) -> send_to_client(Sender,P) end, Packets);
@@ -364,18 +386,14 @@ send_to_client(#state{sender = Sender}, Packet) ->
 send_to_client(Sender, Packet) ->
     mqtt_sender:send_packet(Sender, Packet).
 
-clear_session(#state{session = SO,client_id = ClientId},NewSeq) ->
-    [mqtt_router:unsubscribe(Filter,ClientId,NewSeq)
-        || {Filter,_} <- mqtt_session:get_subs(SO)],
-    SO1 = mqtt_session:new(),
-    mqtt_session_repo:save(ClientId,SO1),
-    SO1.
-
 maybe_clear_session(#state{is_persistent = true}) -> ok;
 
-maybe_clear_session(#state{session = SO,client_id = ClientId,seq = Seq,is_persistent = false}) ->
+maybe_clear_session(#state{is_persistent = false,
+                           session = SO,
+                           client_id = ClientId,
+                           seq = Seq}) ->
     [mqtt_router:unsubscribe(Filter,ClientId,Seq) ||
-        {Filter,_QoS}  <- mqtt_session:get_subs(SO)],
+        {Filter,_,_}  <- mqtt_session:get_subs(SO)],
     ok.
 
 %% Termination handling

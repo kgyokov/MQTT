@@ -24,7 +24,7 @@
     cast_msg_local/2,
     subscribe/5,
     unsubscribe/3,
-    resume_sub/5,
+    resume_sub/4,
     ack/3,
     pull/3]).
 
@@ -108,10 +108,10 @@ unsubscribe(Filter,ClientId,Seq) ->
     mqtt_sub:cancel(Pid,ClientId,Seq).
 
 
-resume_sub(ClientId,CSeq,_Sub = {Filter,QoS},From,WSize) ->
+resume_sub(ClientId,CSeq,_Sub = {Filter,QoS,From},WSize) ->
          Pid = get_sub(Filter),
          mqtt_sub:resume(Pid,ClientId,CSeq,QoS,From,WSize),
-         Pid.
+         monitor(process,Pid).
 
 %%resume_sub(ClientId,CSeq,Sub = {Filter,QoS}) ->
 %%    [begin
@@ -175,7 +175,7 @@ group_by_node(Regs) ->
 %% ========================================================================
 
 get_sub(Filter) ->
-    case mqtt_sub_repo:get_sub(Filter) of
+    case mqtt_sub_repo:get_subs(Filter) of
         {ok,Pid} -> maybe_create_new_sub(Filter,Pid);
         error  -> create_new_sub(Filter)
     end.

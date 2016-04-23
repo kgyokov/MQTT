@@ -12,42 +12,31 @@
 -include("mqtt_internal_msgs.hrl").
 
 %% API
--export([maybe_update_waiting/2,
-         take/3,
-         new/6,
-         resubscribe/4,
-         is_old/2]).
+-export([take/3,
+    maybe_take/2,
+    new/6,
+    new/7,
+    resubscribe/4,
+    is_old/2]).
 
 -record(sub, {
-    qos                 ::qos(), %% QoS for this client subscription
-    %% monref              ::any(), %% monitor reference for the process handling the client
-    pid                 ::pid(), %% Process id of the process handling the client
-    client_seq = 0      ::non_neg_integer(), %% the version number of the client process registration
+    qos                                 ::qos(), %% QoS for this client subscription
+    pid                                 ::pid(), %% Process id of the process handling the client
+    client_seq = 0                      ::non_neg_integer(), %% the version number of the client process registration
     %% (incremented every time a new client process is spawned, used to choose
     %% between different instances of a Client in case of race conditions)
     %% last_ack = 0  ::non_neg_integer(),   %% the filter-assigned sequence number of the last message processed by this client,
-    next_in_q = 0       ::non_neg_integer(),    %% the last message sent to the client
-    window = 0          ::non_neg_integer(),    %% How many messages the client has requested
-    retained_msgs = []  ::[],                %% the retained messages to send to the client
-    next_retained = 0   ::non_neg_integer()    %% the retained message sequence for this subscription
+    next_in_q = 0                       ::non_neg_integer(),    %% the last message sent to the client
+    window = 0                          ::non_neg_integer(),    %% How many messages the client has requested
+    retained_msgs = shared_set:new()    ::shared_set:set(),                %% the retained messages to send to the client
+    next_retained = 0                   ::non_neg_integer()    %% the retained message sequence for this subscription
 }).
-
-%% @doc
-%% Updates a sub if the new packet sequence is within the window
-%% @end
-maybe_update_waiting(NextSeq,Sub = #sub{pid = Pid,
-                                        retained_msgs = RetWaiting,
-                                        next_in_q = NextInQ,
-                                        window = WSize})
-                                        when NextSeq - NextInQ + length(RetWaiting) > 0, WSize > 0 ->
-    NumToSend = min(NextInQ + WSize,NextSeq),
-    {ok,Pid,Sub#sub{next_in_q = NextInQ + NumToSend,
-                    window = WSize - NumToSend}};
-
-maybe_update_waiting(_,_) -> blocked.
 
 is_old(MsgCSeq,#sub{client_seq = CSeq}) when CSeq >= MsgCSeq -> true;
 is_old(_,_) -> false.
+
+maybe_take(Q,Sub) ->
+    take(0,Q,Sub).
 
 %% @doc
 %% Determine the packets to send depending on the size of the Client's Window.
@@ -64,31 +53,35 @@ take(Num,Q,Sub = #sub{pid = Pid,window = LastWSize}) ->
     {Pid,RetPs ++ QPs,Sub2}.
 
 
-take_retained(TotalToTake,Sub = #sub{retained_msgs = RetWaiting,
+take_retained(TotalToTake,Sub = #sub{next_in_q = NextInQ,
+                                     retained_msgs = RetWaiting,
                                      next_retained = RetSeq}) ->
     {Taken,RetRest} = shared_set:take(TotalToTake,RetWaiting),
-    {RetPs,_} = enumerate(true,RetSeq,Taken),
     NumTaken = length(Taken),
+    RetPs = enumerate(true,NextInQ,RetSeq,Taken),
     {RetPs,Sub#sub{retained_msgs = RetRest,
                    next_retained = RetSeq + NumTaken,
                    window = TotalToTake - NumTaken}}.
 
-take_queued(RestWSize,Q,Sub = #sub{next_in_q = NextInQ}) ->
-    QToSend = shared_queue:read(NextInQ,NextInQ + RestWSize,Q),
-    NumQToSend = length(QToSend),
-    {QPs,_} = enumerate(false,NextInQ,QToSend),
-    {QPs,Sub#sub{next_in_q = NextInQ + NumQToSend,
-                 window = RestWSize - NumQToSend}}.
+take_queued(RestWSize,Q,Sub = #sub{retained_msgs = RetSeq,
+                                   next_in_q = NextInQ}) ->
+    Taken = shared_queue:take(NextInQ,NextInQ + RestWSize,Q),
+    NumTaken = length(Taken),
+    QPs = enumerate(false,NextInQ,RetSeq,Taken),
+    {QPs,Sub#sub{next_in_q = NextInQ + NumTaken ,
+                 window = RestWSize - NumTaken}}.
 
-
-enumerate(IsRetained,StartSeq,Packets) ->
-    Type =
-        case IsRetained of
-            true  -> ret;
-            false ->   q
-        end,
-    {EnumPs,_} = lists:mapfoldl(fun(P,Seq) -> {P#packet{retain = IsRetained,ref = {Type,Seq}},Seq+1} end,StartSeq,Packets),
+enumerate(IsRetained,QSeq,RetSeq,Packets) ->
+    IncFun = inc_fun(IsRetained,RetSeq,QSeq),
+    {EnumPs,_} = lists:mapfoldl(fun(P,Seq) -> {P#packet{retain = IsRetained, seq = Seq},IncFun(Seq)} end,RetSeq,Packets),
     EnumPs.
+
+inc_fun(false,_,QSeq) ->
+    fun({RetSeq1,_}) -> {RetSeq1 + 1,QSeq} end;
+
+inc_fun(true,RetSeq,_) ->
+    fun({_,QSeq1}) -> {RetSeq,QSeq1 + 1} end.
+
 
 new(Pid,CSeq,QoS,WSize,Q,Ret) ->
     new(Pid,CSeq,QoS,undefined,WSize,Q,Ret).
@@ -96,18 +89,17 @@ new(Pid,CSeq,QoS,WSize,Q,Ret) ->
 new(Pid,CSeq,QoS,From,WSize,Q,Ret) ->
     Sub = #sub{pid = Pid,
                client_seq = CSeq,
-               qos = QoS,
-               client_seq = CSeq},
+               qos = QoS},
     iterator_from(From,WSize,Q,Ret,Sub).
 
 %% @doc
 %% Picking a subscription back up from where we left off
 %% @end
-iterator_from(_From = undefined,WSize,Q,Ret,Sub) ->
+iterator_from(undefined,WSize,Q,Ret,Sub) ->
     ResumeAt = {0,shared_queue:max_seq(Q)},
     iterator_from(ResumeAt,WSize,Q,Ret,Sub);
 
-iterator_from(_From = {RetSeq,QSeq},WSize,Q,Ret,Sub) ->
+iterator_from({RetSeq,QSeq},WSize,Q,Ret,Sub) ->
     ActualQSeq = max(QSeq,shared_queue:min_seq(Q)),
     Sub1 = Sub#sub{next_in_q = ActualQSeq},
     Sub2 = resume_retained(RetSeq,ActualQSeq,Ret,Sub1),

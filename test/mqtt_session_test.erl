@@ -18,7 +18,7 @@ setup_session() ->
     TestPacket = #packet{content = <<1>>,
                          retain = false,
                          topic = <<"TestFilter">>,
-                         ref = {q,1},
+                         seq = {q,1},
                          qos = ?QOS_1},
     [mqtt_session:new(2),TestPacket].
 
@@ -39,7 +39,8 @@ msg_test_() ->
             fun push_on_empty_buffer_emits_packet/1,
 
             %% Session
-            fun ack_on_full_session_emits_next_packet/1
+            fun ack_on_full_session_emits_next_packet/1,
+            fun rec_on_full_session_emits_next_packet/1
 %%            fun push_on_empty_session_emits_packet_2/1
 %%            fun msg_in_flight_qos1/1,
 %%            fun msg_in_flight_qos1_flow_complete/1,
@@ -84,7 +85,7 @@ push_on_empty_buffer_emits_packet([SO,Packet]) ->
 push_on_half_full_buffer_emits_packet([SO,Packet1]) ->
     Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
     SO1 = mqtt_session:subscribe([Sub],SO),
-    Packet2 = Packet1#packet{content = <<2>>, ref = {q,2}},
+    Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
     {_,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
     Result  = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
     ?_assertMatch(
@@ -94,8 +95,8 @@ push_on_half_full_buffer_emits_packet([SO,Packet1]) ->
 push_on_full_buffer_queues_packet([SO,Packet1]) ->
     Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
     SO1 = mqtt_session:subscribe([Sub],SO),
-    Packet2 = Packet1#packet{content = <<2>>, ref = {q,2}},
-    Packet3 = Packet2#packet{content = <<3>>, ref = {q,3}},
+    Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
+    Packet3 = Packet2#packet{content = <<3>>, seq = {q,3}},
     {_,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
     {_,SO3} = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
     Result  = mqtt_session:push(<<"TestFilter">>,Packet3,SO3),
@@ -111,8 +112,8 @@ ack_on_full_session_emits_next_packet([SO,Packet1]) ->
     Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
     SO1 = mqtt_session:subscribe([Sub],SO),
 
-    Packet2 = Packet1#packet{content = <<2>>, ref = {q,2}},
-    Packet3 = Packet2#packet{content = <<3>>, ref = {q,3}},
+    Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
+    Packet3 = Packet2#packet{content = <<3>>, seq = {q,3}},
 
     {[Pub1],SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
     {_,SO3}    = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
@@ -127,8 +128,8 @@ rec_on_full_session_emits_next_packet([SO,Packet1]) ->
     Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
     SO1 = mqtt_session:subscribe([Sub],SO),
 
-    Packet2 = Packet1#packet{content = <<2>>, ref = {q,2}},
-    Packet3 = Packet2#packet{content = <<3>>, ref = {q,3}},
+    Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
+    Packet3 = Packet2#packet{content = <<3>>, seq = {q,3}},
 
     {Pub1,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
     {_,SO3}    = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
@@ -154,8 +155,8 @@ push_emits_packet_w_correct_values([SO,Packet]) ->
         Result).
 
 fill_session(SO1,Packet1) ->
-    Packet2 = Packet1#packet{content = <<"Packet2">>, ref = {q,2}},
-    Packet3 = Packet2#packet{content = <<"Packet2">>, ref = {q,3}},
+    Packet2 = Packet1#packet{content = <<"Packet2">>, seq = {q,2}},
+    Packet3 = Packet2#packet{content = <<"Packet2">>, seq = {q,3}},
     {_,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
     {_,SO3} = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
     {_,SO4} = mqtt_session:push(<<"TestFilter">>,Packet3,SO3),

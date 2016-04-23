@@ -49,7 +49,7 @@
                                     %% This process assigns incremental integers to each new message
     client_seqs     ::min_val_tree:tree(client_id(),fun()),
     queue           ::any(),    %% Shared queue of messages
-    retained        ::shared_set:set(),   %% Dictionary of retained messages
+    retained =      shared_set:new() ::shared_set:set(),   %% Dictionary of retained messages
     garbage         ::any()     %% garbage stats from the queue
 }).
 
@@ -289,24 +289,24 @@ compare(A,B) when is_integer(A),
 
 handle_push(Packet,S = #state{filter = Filter,
                               live_subs = Subs,
-                              queue = SQ,
+                              queue = Q,
                               retained = Ret}) ->
-    SQ1 = shared_queue:pushr({Packet#packet.qos,Packet},SQ),
+    SQ1 = shared_queue:pushr({Packet#packet.qos,Packet},Q),
     NewSeq = shared_queue:max_seq(SQ1),
     Ret1 = maybe_store_retained(Packet,NewSeq,Ret),
-    {SendTo,Subs1} = dict:fold(update_waiting_subs(NewSeq),{[],Subs},Subs),
+    {SendTo,Subs1} = dict:fold(update_waiting_subs(Q),{[],Subs},Subs),
     S1 = S#state{live_subs = Subs1,
                  queue = SQ1,
                  retained = Ret1},
-    MQPacket = Packet#packet{retain = false,ref = {q,NewSeq}},
-    send_packet_to_clients(SendTo,Filter,MQPacket),
+    lists:foreach(fun({Pid,Ps}) -> send_packets_to_client(Pid,Filter,Ps) end,SendTo),
     {reply,{ok,NewSeq},S1}.
 
-update_waiting_subs(NewSeq) ->
+update_waiting_subs(Q) ->
     fun(ClientId,Sub,AccIn = {SendToAcc,SubsAcc}) ->
-        case mqtt_sub_state:maybe_update_waiting(NewSeq,Sub) of
-            {ok,Pid,Sub1} -> {[Pid|SendToAcc],dict:update(ClientId,Sub1,SubsAcc)};
-            _ -> AccIn
+        {Pid,Packets,Sub1} = mqtt_sub_state:maybe_take(Q,Sub),
+        case Packets of
+            [] ->  AccIn;
+            _ -> {[{Pid,Packets}|SendToAcc],dict:store(ClientId,Sub1,SubsAcc)}
         end
     end.
 
@@ -321,12 +321,12 @@ handle_pull(WSize,ClientId,S = #state{filter = Filter,
         error -> S
     end.
 
-handle_ack(ClientId,{q,QAck},S = #state{queue = Q,
-                                        garbage = Garbage}) ->
+handle_ack(ClientId,{_RetAck,QAck},S = #state{queue = Q,
+                                              garbage = Garbage}) ->
     {MoreGarbage,Q1} = shared_queue:forward(ClientId,QAck,Q),
-    S#state{queue = Q1,garbage = ?MONOID:as(Garbage,MoreGarbage)};
+    S#state{queue = Q1,garbage = ?MONOID:as(Garbage,MoreGarbage)}.
 
-handle_ack(_ClientId,{ret,_QAck},S) -> S. %% We don't do anything with ack-ed retained messages
+%% handle_ack(_ClientId,{ret,_QAck},S) -> S. %% We don't do anything with ack-ed retained messages
 
 
 maybe_store_retained(#packet{retain = false},_Seq,Ret)               -> Ret;
@@ -371,7 +371,7 @@ handle_sub(ClientId,CSeq,QoS,WSize,Pid,S = #state{filter = Filter,
                     {reply,duplicate,S};
                 false ->
                     mqtt_sub_repo:save_sub(Filter,NewSub),
-                    S1 = resubscribe(ClientId,QoS,NewSub,S),
+                    S1 = resubscribe(ClientId,QoS,Sub,S),
                     {reply,ok,S1}
             end
     end.
