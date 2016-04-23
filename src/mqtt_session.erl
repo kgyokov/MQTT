@@ -24,8 +24,7 @@
     msg_in_flight/1,
     new/0,
     new/1,
-    to_publish/4,
-    to_pubrel/1, find_sub/2]).
+    find_sub/2]).
 
 -define(DEFAULT_MAX_WINDOW,20).
 
@@ -137,7 +136,7 @@ should_accept(Filter,Subs) ->
     end.
 
 push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
-    Pub = to_publish(Packet,?QOS_0,undefined,false),
+    Pub = to_publish(Packet,undefined,false),
     {ToSend,SO1} = pull(SO),
     {[Pub|ToSend],SO1};
 
@@ -147,7 +146,7 @@ push_to_session(Packet = #packet{qos = QoS},SO) when QoS =:= ?QOS_1;
     PSeq1 = PSeq + 1,
     SO1 = add_to_outgoing(PSeq1,Packet,SO),
     SO2 = SO1#outgoing{packet_seq = PSeq1},
-    Pub = to_publish(Packet,QoS,PSeq1,false),
+    Pub = to_publish(Packet,PSeq1,false),
     {[Pub],SO2}.
 
 add_to_outgoing(PSeq,Packet = #packet{qos = ?QOS_1},SO) ->
@@ -163,7 +162,7 @@ add_to_outgoing(PSeq,Packet = #packet{qos = ?QOS_2},SO) ->
 %% ==================================================================
 
 -spec pub_ack(packet_id(),#outgoing{}) ->
-    duplicate | {continue|wait,#outgoing{}}.
+    {[#'PUBLISH'{}],#outgoing{}}.
 
 pub_ack(PacketId,SO = #outgoing{packet_seq = PSeq,
                                         qos1 = QoS1Msgs}) ->
@@ -176,6 +175,8 @@ pub_ack(PacketId,SO = #outgoing{packet_seq = PSeq,
             {[],SO}
     end.
 
+-spec pub_rec(packet_id(),#outgoing{}) ->
+    {[#'PUBREL'{}],#outgoing{}}.
 
 pub_rec(PacketId,SO) ->
     #outgoing{qos2 = Msgs,
@@ -216,10 +217,10 @@ pub_comp(PacketId,SO = #outgoing{packet_seq = PSeq,
 %% re-send any unacknowledged PUBLISH Packets (where QoS > 0) and PUBREL Packets using their original
 %% Packet Identifiers"
 msg_in_flight(#outgoing{qos1 = UnAck1,
-                           qos2 = UnAck2,
-                           qos2_rec = Rec}) ->
-    dict_to_pub_packets(UnAck1,?QOS_1) ++
-    dict_to_pub_packets(UnAck2,?QOS_2) ++
+                        qos2 = UnAck2,
+                        qos2_rec = Rec}) ->
+    dict_to_pub_packets(UnAck1) ++
+    dict_to_pub_packets(UnAck2) ++
     set_to_pubrel_packets(Rec).
 
 
@@ -227,8 +228,8 @@ msg_in_flight(#outgoing{qos1 = UnAck1,
 %% Just in case, we rely on the following properties to ensure that packets are re-sent sequentially:
 %% - user orddict ond ordsets to store packets and their states
 %% - use sequentially assigned PSeqs that map to and from PacketIds
-dict_to_pub_packets(Dict,QoS) ->
-    [to_publish(CTRPacket,QoS,PSeq,true) || {PSeq,CTRPacket}  <- orddict:to_list(Dict)].
+dict_to_pub_packets(Dict) ->
+    [to_publish(CTRPacket,PSeq,true) || {PSeq,CTRPacket}  <- orddict:to_list(Dict)].
 
 set_to_pubrel_packets(Rec) ->
     [to_pubrel(PSeq) || {PSeq,PSeq}  <- ordsets:to_list(Rec)].
@@ -236,9 +237,9 @@ set_to_pubrel_packets(Rec) ->
 to_publish(#packet{topic = Topic,
                    content = Content,
                    retain = Retain,
-                   qos = QoS},QoS,PSeq,Dup) ->
+                   qos = QoS},PSeq,Dup) ->
     #'PUBLISH'{content = Content,
-               packet_id = get_packet_id(PSeq),
+               packet_id = maybe_get_packet_id(PSeq),
                qos = QoS,
                topic = Topic,
                dup = Dup,
@@ -251,6 +252,10 @@ to_pubrel(PSeq) ->
 %% Maps a 16-bit PacketId to a potentially larger Sequence number
 %% @end
 get_ack_seq(PacketId,PSeq) -> ((PSeq band 16#ffff) bxor PSeq) bor PacketId.
+
+maybe_get_packet_id(undefined) -> undefined;
+maybe_get_packet_id(PSeq) -> get_packet_id(PSeq).
+
 %% @doc
 %% Maps a potentially large Sequence number to a PacketId
 %% @end

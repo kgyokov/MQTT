@@ -622,7 +622,8 @@ disconnect_client(_S,_Reason) ->
 %% ==========================================================
 
 auto_generate_client_id() ->
-    base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>).
+    StrId = base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>),
+    list_to_binary(StrId).
 
 combine_results(AuthResults, SubResults) ->
     lists:reverse(combine_results(AuthResults,SubResults,[])).

@@ -38,17 +38,20 @@
 
 -record(mqtt_sub,{
     id          ::{Filter   ::binary(),
-                   ClientId ::client_id()},
-    filter      ::binary(),
-    client_id   ::client_id(),
-    qos         ::qos(),
-    pid         ::pid(),
-    cseq = 1    ::non_neg_integer()
+                   ClientId ::client_id()} | match_spec(),
+    filter      ::binary() | match_spec(),
+    client_id   ::client_id() | match_spec(),
+    qos         ::qos() | match_spec(),
+    pid         ::pid() | match_spec(),
+    cseq = 1    ::non_neg_integer() | match_spec()
 }).
 
+%% avoid dialyzer warnings
+-opaque(match_spec()::  '_' | '$1' | '$2' | '$3' | '$4' | '$5' | '$6').
+
 -record(mqtt_sub_reg,{
-    filter  ::binary(),
-    pid     ::pid()
+    filter  ::binary() | match_spec(),
+    pid     ::pid() | match_spec()
 }).
 
 
