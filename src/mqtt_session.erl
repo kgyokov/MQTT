@@ -136,7 +136,7 @@ should_accept(Filter,Subs) ->
     end.
 
 push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
-    Pub = to_publish(Packet,undefined,false),
+    Pub = to_publish(Packet),
     {ToSend,SO1} = pull(SO),
     {[Pub|ToSend],SO1};
 
@@ -229,17 +229,22 @@ msg_in_flight(#outgoing{qos1 = UnAck1,
 %% - user orddict ond ordsets to store packets and their states
 %% - use sequentially assigned PSeqs that map to and from PacketIds
 dict_to_pub_packets(Dict) ->
-    [to_publish(CTRPacket,PSeq,true) || {PSeq,CTRPacket}  <- orddict:to_list(Dict)].
+    [to_publish(Packet,PSeq,true) || {PSeq,Packet}  <- orddict:to_list(Dict)].
 
 set_to_pubrel_packets(Rec) ->
     [to_pubrel(PSeq) || {PSeq,PSeq}  <- ordsets:to_list(Rec)].
 
-to_publish(#packet{topic = Topic,
-                   content = Content,
-                   retain = Retain,
-                   qos = QoS},PSeq,Dup) ->
+to_publish(Packet)          -> to_publish_msg(Packet,undefined,false).
+to_publish(Packet,PSeq,Dup) -> to_publish_msg(Packet,get_packet_id(PSeq),Dup).
+
+%%to_publish(Packet,PSeq,Dup) -> to_publish(Packet,get_packet_id(PSeq),Dup).
+
+to_publish_msg(#packet{topic = Topic,
+                       content = Content,
+                       retain = Retain,
+                       qos = QoS},PacketId,Dup) ->
     #'PUBLISH'{content = Content,
-               packet_id = maybe_get_packet_id(PSeq),
+               packet_id = PacketId,
                qos = QoS,
                topic = Topic,
                dup = Dup,
@@ -253,12 +258,12 @@ to_pubrel(PSeq) ->
 %% @end
 get_ack_seq(PacketId,PSeq) -> ((PSeq band 16#ffff) bxor PSeq) bor PacketId.
 
-maybe_get_packet_id(undefined) -> undefined;
-maybe_get_packet_id(PSeq) -> get_packet_id(PSeq).
-
 %% @doc
 %% Maps a potentially large Sequence number to a PacketId
 %% @end
+maybe_get_packet_id(undefined) -> undefined;
+maybe_get_packet_id(PSeq) -> get_packet_id(PSeq).
+
 get_packet_id(PSeq) -> PSeq band 16#ffff.
 
 new() -> new(?DEFAULT_MAX_WINDOW).
