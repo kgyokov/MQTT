@@ -150,7 +150,7 @@ init([Filter, _Repo]) ->
     {ok,#state{filter = Filter,
                live_subs = dict:new(),
                packet_seq = Seq,
-               queue = shared_queue:new(Seq,fun is_less_than/2),
+               queue = shared_queue:new(Seq),
                retained = shared_set:new()}}.
 
 %%--------------------------------------------------------------------
@@ -264,14 +264,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Handling Packets and Acks
 %%%===================================================================
 
--spec(is_less_than(client_seq(),client_seq()) -> boolean()).
-is_less_than(A,B) -> compare(A,B) =:= lt.
-
 -type(order() :: gt | lt | eq).
 -type(partial_order() :: order() | undefined).
 -type(client_seq():: undefined
                     | non_neg_integer()
                     | complete).
+
+-spec(is_less_than(client_seq(),client_seq()) -> boolean()).
+is_less_than(A,B) -> compare(A,B) =:= lt.
+
 -spec(compare(client_seq(),client_seq())-> order()).
 
 compare(A,A)               -> eq;
@@ -452,5 +453,6 @@ recover_sub({ClientId,_QoS,_CSeq,_ClientPid},Q) ->
     shared_queue:add(ClientId,0,Q).
 
 recover(SubRecord,S = #state{queue = Q}) ->
-    lists:foldl(fun recover_sub/2,Q,SubRecord).
+    Q1 = lists:foldl(fun recover_sub/2,Q,SubRecord),
+    S#state{queue = Q1}.
 
