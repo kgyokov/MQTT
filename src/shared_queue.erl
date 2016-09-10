@@ -10,20 +10,25 @@
 -author("Kalin").
 
 %% API
--export([new/2, pushr/2, remove/2, add/2, add/3, forward/3, whereis/2, min_seq/1, max_seq/1, take/3]).
+-export([new/1, pushr/2, remove/2, add/2, add/3, forward/3, min_seq/1, max_seq/1, take/3]).
 
 -define(SEQ_MONOID,sequence_monoid).
 
 -record(shared_q,{
     cur_seq :: non_neg_integer(), %% Sequence number of the latest item added to the queue
-    %% incremented with each new item
-    client_seqs :: any(),            %% how far each consumer is into the queue
-    %% (represented as the corresponding item's Sequence number)
-    queue       :: any()             %% the actual queue
+                                  %% incremented with each new item
+    client_seqs :: any(),         %% how far each consumer is into the queue
+                                  %% (represented as the corresponding item's Sequence number)
+    queue       :: any()          %% the actual queue
 }).
 
-new(Seq,Comp) ->
-    #shared_q{client_seqs = min_val_tree:new(Comp),
+
+%% @doc
+%% Creates a new shared queue starting from Seq, using the
+%% Comp comparison function
+%% @end
+new(Seq) ->
+    #shared_q{client_seqs = min_val_tree:new(),
               queue = monoid_sequence:empty(),
               cur_seq = Seq}.
 
@@ -35,8 +40,8 @@ forward(ClientId,ToSeq,SQ = #shared_q{client_seqs = Offsets}) ->
     Offsets1 = min_val_tree:store(ClientId,ToSeq,Offsets),
     maybe_truncate(Offsets1,SQ).
 
-whereis(ClientId,#shared_q{client_seqs = Offsets}) ->
-    min_val_tree:get_val(ClientId,Offsets).
+%%whereis(ClientId,#shared_q{client_seqs = Offsets}) ->
+%%    min_val_tree:get_val(ClientId,Offsets).
 
 remove(ClientId,SQ = #shared_q{client_seqs = Offsets}) ->
     Offsets1 = min_val_tree:remove(ClientId,Offsets),
@@ -69,4 +74,6 @@ take(FromSeq,ToSeq, #shared_q{queue = Q}) ->
     {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq =< ToSeq end, Rest),
     monoid_sequence:to_list(Interval).
 
-
+%%
+%% Private functions
+%%
