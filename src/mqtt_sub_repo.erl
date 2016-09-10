@@ -32,6 +32,7 @@
     -define(PERSISTENCE, disc_copies).
 -endif.
 
+-define(TO_SUB_ID(Filter,ClientId),(<<Filter/binary,ClientId/binary>>)).
 -define(SUB_RECORD, mqtt_sub).
 -define(SUB_REG_RECORD, mqtt_sub_reg).
 -define(ALL_TABLES,[?SUB_RECORD,?SUB_REG_RECORD]).
@@ -78,18 +79,17 @@
 %% @end
 
 -spec save_sub(ClientId::client_id(),
-    {
-        Filter::binary(),
-        QoS::qos(),
-        Seq::integer(),
-        ClientPid::pid()}
+    {Filter::binary(),
+     QoS::qos(),
+     Seq::integer(),
+     ClientPid::pid()}
 ) ->
     {ok,Result::any()}.
 
 save_sub(Filter,{ClientId,QoS,CSeq,ClientPid}) ->
     Fun =
         fun() ->
-             R = #mqtt_sub{id = {Filter,ClientId},
+             R = #mqtt_sub{id = ?TO_SUB_ID(Filter,ClientId),
                            filter = Filter,
                            client_id = ClientId,
                            cseq = CSeq,
@@ -123,7 +123,7 @@ clear_sub_pid(Filter,ClientId) ->
 remove_sub(Filter,ClientId) ->
     Fun =
         fun() ->
-            mnesia:delete({?SUB_RECORD,{Filter,ClientId}})
+            mnesia:delete({?SUB_RECORD,?TO_SUB_ID(Filter,ClientId)})
         end,
     mnesia_do(Fun).
 
