@@ -2,8 +2,8 @@
 %%% @author Kalin
 %%% @copyright (C) 2016, <COMPANY>
 %%% @doc
-%%% Maintains different versions of a dictionary based on sequence Key.
-%%% A memmory optimization so we can keep different lists of retained messages per
+%%% Maintains different versions of a dictionary based on sequential Version number.
+%%% A memory optimization so we can keep different lists of retained messages per client
 %%% Implemented in a NAIVE way right now - by using gb_trees with negative keys.
 %%% @end
 %%% Created : 30. Mar 2016 10:32 PM
@@ -24,35 +24,35 @@
 new() -> new(0,gb_trees:empty()).
 
 -spec(new(non_neg_integer(),gb_trees:tree()) -> set()).
-new(StartSeq,Tree) ->
-    #s_set{log = gb_trees:insert(-StartSeq,Tree,gb_trees:empty())}.
+new(StartVer,Tree) ->
+    #s_set{log = gb_trees:insert(-StartVer,Tree,gb_trees:empty())}.
 
 -spec(append(any(),any(),non_neg_integer(), set()) -> set()).
-append(Key,Val,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
-    {LastSeq,Last} = gb_trees:smallest(Log),
-    case LastSeq =< -Seq  of
-        true -> error({invalid_seq,LastSeq,Seq});
+append(Key,Val, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
+    {LastVer,Last} = gb_trees:smallest(Log),
+    case LastVer =< -Ver of
+        true -> error({invalid_seq, LastVer, Ver});
         false -> ok
     end,
     Next = gb_trees:enter(Key,Val,Last),
-    Set#s_set{log = gb_trees:insert(-Seq,Next,Log)}.
+    Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
 
-remove(Key,Seq,Set = #s_set{log = Log}) when is_integer(Seq),Seq > 0 ->
-    {LastSeq,Last} = gb_trees:smallest(Log),
-    case LastSeq =< -Seq  of
-        true -> error({invalid_seq,LastSeq,Seq});
+remove(Key, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
+    {LastVer,Last} = gb_trees:smallest(Log),
+    case LastVer =< -Ver of
+        true -> error({invalid_seq, LastVer, Ver});
         false -> ok
     end,
     Next = gb_trees:delete_any(Key,Last),
-    Set#s_set{log = gb_trees:insert(-Seq,Next,Log)}.
+    Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
 
 -spec(get_at(non_neg_integer(),set()) -> gb_trees:iter()).
-get_at(Seq,Set) when Seq > 0 ->
-    iterator_from(Seq,0,Set).
+get_at(Ver,Set) when Ver > 0 ->
+    iterator_from(Ver,0,Set).
 
 -spec(iterator_from(non_neg_integer(),non_neg_integer(),set()) -> gb_trees:iter()).
-iterator_from(Seq,Offset,Set) when Seq > 0 ->
-    gb_trees:iterator_from(Offset,get_tree_at(Seq,Set)).
+iterator_from(Ver,Offset,Set) when Ver > 0 ->
+    gb_trees:iterator_from(Offset,get_tree_at(Ver,Set)).
 
 take(Num,Iter) when Num >= 0->
     take(Num,Iter,[]).
@@ -66,17 +66,17 @@ take(Num,Iter,Acc) ->
         {_,Val,Iter1} -> take(Num-1,[Val|Acc],Iter1)
     end.
 
-get_tree_at(Seq,#s_set{log = Log}) ->
-    Iter = gb_trees:iterator_from(-Seq,Log), %% the whole reason for storing negative Sequence numbers
+get_tree_at(Ver,#s_set{log = Log}) ->
+    Iter = gb_trees:iterator_from(-Ver,Log), %% the whole reason for storing negative Sequence numbers
     case gb_trees:next(Iter) of
         none -> gb_trees:empty();
         {_,Val,_} -> Val
     end.
 
 -spec(truncate(non_neg_integer(), set()) -> set()).
-truncate(Seq,Set = #s_set{log = Log}) ->
+truncate(Ver,Set = #s_set{log = Log}) ->
     %% @todo: OPTIMIZE!!!
-    L = lists:takewhile(fun({Key,_}) -> Key =< -Seq end, gb_trees:to_list(Log)),
+    L = lists:takewhile(fun({Key,_}) -> Key =< -Ver end, gb_trees:to_list(Log)),
     T = lists:foldl(fun({Key,Val},T) -> gb_trees:insert(Key,Val,T) end,gb_trees:empty(),L),
     Set#s_set{log = T}.
 
