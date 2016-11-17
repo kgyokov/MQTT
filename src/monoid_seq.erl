@@ -4,23 +4,19 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 05. Mar 2016 12:21 AM
+%%% Created : 25. Apr 2016 7:38 PM
 %%%-------------------------------------------------------------------
--module(monoid_not_qos0).
+-module(monoid_seq).
 -author("Kalin").
-
--include("mqtt_internal_msgs.hrl").
 
 -behavior(gen_monoid).
 
 %% API
--export([id/0, as/2, ms/1]).
+-export([id/0, as/2, ms/1, annotate/2]).
+
 
 id() -> 0.
-as(NotQoS0_1,NotQoS0_2) -> NotQoS0_1 + NotQoS0_2.
-ms(#packet{qos = QoS}) ->
-    case QoS of
-        0 -> 0;
-        _ -> 1
-    end.
+as(A, B) -> max(A,B).
+ms({Seq,_}) -> Seq.
 
+annotate(Seq,El) -> {Seq,El}.
