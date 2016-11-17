@@ -31,7 +31,7 @@ new(StartVer,Tree) ->
 append(Key,Val, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
     {LastVer,Last} = gb_trees:smallest(Log),
     case LastVer =< -Ver of
-        true -> error({invalid_seq, LastVer, Ver});
+        true -> error({invalid_ver, LastVer, Ver});
         false -> ok
     end,
     Next = gb_trees:enter(Key,Val,Last),
@@ -40,7 +40,7 @@ append(Key,Val, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
 remove(Key, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
     {LastVer,Last} = gb_trees:smallest(Log),
     case LastVer =< -Ver of
-        true -> error({invalid_seq, LastVer, Ver});
+        true -> error({invalid_ver, LastVer, Ver});
         false -> ok
     end,
     Next = gb_trees:delete_any(Key,Last),
