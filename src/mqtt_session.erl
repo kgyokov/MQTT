@@ -226,7 +226,7 @@ msg_in_flight(#outgoing{qos1 = UnAck1,
 
 %% MQTT-4.6 is not amazingly clear on how re-sent messages need to be ordered.
 %% Just in case, we rely on the following properties to ensure that packets are re-sent sequentially:
-%% - user orddict ond ordsets to store packets and their states
+%% - user orddict and ordsets to store packets and their states
 %% - use sequentially assigned PSeqs that map to and from PacketIds
 dict_to_pub_packets(Dict) ->
     [to_publish(Packet,PSeq,true) || {PSeq,Packet}  <- orddict:to_list(Dict)].

@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2016, <COMPANY>
 %%% @doc
-%%%
+%%% Handles the state of a client's subscription to a particular filter
 %%% @end
 %%% Created : 06. Mar 2016 1:09 AM
 %%%-------------------------------------------------------------------
