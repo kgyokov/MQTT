@@ -39,10 +39,25 @@ merge_max(Maximals,NewMax) ->
 %% @end
 best_match(Subs,Topic) ->
     Matches = lists:filter(fun({Filter,_}) -> is_covered_by(Topic,Filter) end, Subs),
-    case lists:sort(fun({_,QoS1},{_,QoS2}) -> QoS1 >= QoS2 end, Matches) of
-        [H|_] -> {ok,H};
+    case Matches of
+        [_|_] -> {ok, match_with_max_qos(Matches)};
         []    -> error
     end.
+
+match_with_max_qos(Subs = [H|_]) ->
+    lists:foldl(fun(El = {Filter,QoS},Acc = {MinFilter,MaxQoS}) ->
+                    ElIsBetterMatch = QoS > MaxQoS
+                                        orelse (QoS == MaxQoS andalso
+                                                        (is_covered_by(Filter,MinFilter)
+                                                            orelse (not is_covered_by(MinFilter,Filter)
+                                                                        andalso Filter < MinFilter)
+                                                        )
+                                                ),
+                    case ElIsBetterMatch of
+                        true  -> El;
+                        false -> Acc
+                    end
+                end, H,Subs).
 
 %% normalize(<<Pattern/binary>>) ->
 %%     LPattern = split(Pattern),
