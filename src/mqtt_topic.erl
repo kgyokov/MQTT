@@ -18,15 +18,9 @@
 %% e.g. [ /A/B/+ , /A/B/C ] can be reduced to [/A/B/+]
 %% @end
 min_cover(Filters) ->
-    min_cover([],Filters).
+    lists:foldl(fun maybe_add_new_max/2,[],Filters).
 
-min_cover(Maximals,[]) ->
-    Maximals;
-
-min_cover(Maximals,[H|T]) ->
-    min_cover(merge_max(Maximals,H),T).
-
-merge_max(Maximals,NewMax) ->
+maybe_add_new_max(NewMax,Maximals) ->
     DedupL = [ Max || Max <- Maximals, not is_covered_by(Max,NewMax) ],
     case lists:any(fun(Max) -> is_covered_by(NewMax,Max) end, DedupL) of
         true    -> DedupL;
@@ -35,7 +29,11 @@ merge_max(Maximals,NewMax) ->
 
 
 %% @doc
-%% Picks a matching filter with highest QoS.
+%% Picks a the best matching Sub with highest QoS.
+%% Best means one that:
+%%      - matches the Topic
+%%      - has the highest QoS
+%%      - Plus some arbitrary criteria
 %% @end
 best_match(Subs,Topic) ->
     Matches = lists:filter(fun({Filter,_}) -> is_covered_by(Topic,Filter) end, Subs),
@@ -45,19 +43,21 @@ best_match(Subs,Topic) ->
     end.
 
 match_with_max_qos(Subs = [H|_]) ->
-    lists:foldl(fun(El = {Filter,QoS},Acc = {MinFilter,MaxQoS}) ->
-                    ElIsBetterMatch = QoS > MaxQoS
-                                        orelse (QoS == MaxQoS andalso
-                                                        (is_covered_by(Filter,MinFilter)
-                                                            orelse (not is_covered_by(MinFilter,Filter)
-                                                                        andalso Filter < MinFilter)
-                                                        )
-                                                ),
-                    case ElIsBetterMatch of
+    lists:foldl(fun(El,Acc) ->
+                    case is_better_match(El,Acc) of
                         true  -> El;
                         false -> Acc
                     end
-                end, H,Subs).
+                end,H,Subs).
+
+is_better_match({Filter,QoS},{MinFilter,MaxQoS}) ->
+    QoS > MaxQoS
+        orelse (QoS == MaxQoS andalso
+        (is_covered_by(Filter,MinFilter)
+            orelse (not is_covered_by(MinFilter,Filter)
+                andalso Filter < MinFilter)
+        )
+    ).
 
 %% normalize(<<Pattern/binary>>) ->
 %%     LPattern = split(Pattern),
