@@ -2,7 +2,9 @@
 %%% @author Kalin
 %%% @copyright (C) 2016, <COMPANY>
 %%% @doc
-%%% Maintains a set of {Key,Val} pairs where min(Val) can be updated/retrieved efficiently
+%%% Maintains a set of {Key,Val} pairs where min(Val) can be updated/retrieved efficiently.
+%%% NOTE: The Val for a key can be replaced only by a larger Val. See 'store' function.
+%%% @todo: Maybe factor that requirement out.
 %%% @todo: This is naive. Come up w/ a better data structure
 %%% @end
 %%% Created : 12. Jan 2016 12:27 AM
