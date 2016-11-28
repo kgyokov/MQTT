@@ -116,7 +116,7 @@ parse_packet(S)->
             {error,Reason}
     end.
 
-parse_packet_unsafe(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
+parse_packet_unsafe(S = #parse_state{buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
     %% get the remaining length of the packet
     {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
     %% READ the remaining length of the packet

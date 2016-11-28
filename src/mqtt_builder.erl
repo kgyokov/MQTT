@@ -46,7 +46,7 @@ build_packet_type(Packet)->
         #'UNSUBSCRIBE'{}-> ?UNSUBSCRIBE;
         #'UNSUBACK'{}   -> ?UNSUBACK;
         #'PINGREQ'{}    -> ?PINGREQ;
-        #'PINGRESP'{}   ->?PINGRESP;
+        #'PINGRESP'{}   -> ?PINGRESP;
         #'DISCONNECT'{} -> ?DISCONNECT
     end.
 
@@ -170,7 +170,7 @@ build_rest(#'SUBACK'{packet_id = PacketId, return_codes = ReturnCodes})->
 build_rest(#'UNSUBSCRIBE'{packet_id = PacketId, topic_filters = TopicFilters})->
     <<
     PacketId:16,
-    (list_to_binary(lists:map(fun(Filter)-> <<(build_string(Filter))/binary>> end, TopicFilters)))/binary
+    (list_to_binary(lists:map(fun build_string/1, TopicFilters)))/binary
     >>;
 
 build_rest(#'UNSUBACK'{packet_id = PacketId}) ->
