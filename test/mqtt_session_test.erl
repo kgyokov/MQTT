@@ -131,7 +131,7 @@ rec_on_full_session_emits_next_packet([SO,Packet1]) ->
     Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
     Packet3 = Packet2#packet{content = <<3>>, seq = {q,3}},
 
-    {Pub1,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
+    {[Pub1],SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
     {_,SO3}    = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
     {_,SO4}    = mqtt_session:push(<<"TestFilter">>,Packet3,SO3),
 
