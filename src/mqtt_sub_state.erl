@@ -9,13 +9,14 @@
 -module(mqtt_sub_state).
 -author("Kalin").
 
+-define(CURRY(Fun,Arg1),fun(Arg2) -> Fun(Arg1,Arg2) end).
 -include("mqtt_internal_msgs.hrl").
 
 %% API
 -export([take/3,
-    maybe_take/2,
+    take_any/2,
+    new/5,
     new/6,
-    new/7,
     resubscribe/4,
     is_old/2]).
 
@@ -35,7 +36,10 @@
 is_old(MsgCSeq,#sub{client_seq = CSeq}) when CSeq >= MsgCSeq -> true;
 is_old(_,_) -> false.
 
-maybe_take(Q,Sub) ->
+%% @doc
+%%
+%% @end
+take_any(Q,Sub) ->
     take(0,Q,Sub).
 
 %% @doc
@@ -44,32 +48,38 @@ maybe_take(Q,Sub) ->
 %% - The Client has consumed one or more package and has increased its window size
 %% - There may be new messages to send
 %% @end
-take(Num,Q,Sub = #sub{pid = Pid,window = LastWSize}) ->
-    TotalToTake = Num + LastWSize,
-    {RetPs,Sub1} = take_retained(TotalToTake,Sub),
+take(ToTake,Q,Sub) ->
+        take_all(ToTake,Sub,
+        [
+            fun take_retained/2,
+            fun(ToTake1,S1) -> take_queued(Q,ToTake1,S1) end
+        ]).
 
-    QToTake = TotalToTake - length(RetPs),
-    {QPs,Sub2} = take_queued(QToTake,Q,Sub1),
-    {Pid,RetPs ++ QPs,Sub2}.
 
-
-take_retained(TotalToTake,Sub = #sub{next_in_q = NextInQ,
-                                     retained_msgs = RetWaiting,
-                                     next_retained = RetSeq}) ->
-    {Taken,RetRest} = shared_set:take(TotalToTake,RetWaiting),
+take_retained(ToTake,Sub = #sub{next_in_q = NextInQ,
+                                retained_msgs = RetWaiting,
+                                next_retained = RetSeq}) ->
+    {Taken,RetRest} = shared_set:take(ToTake,RetWaiting),
     NumTaken = length(Taken),
     RetPs = enumerate(true,NextInQ,RetSeq,Taken),
     {RetPs,Sub#sub{retained_msgs = RetRest,
-                   next_retained = RetSeq + NumTaken,
-                   window = TotalToTake - NumTaken}}.
+                   next_retained = RetSeq + NumTaken}}.
 
-take_queued(RestWSize,Q,Sub = #sub{retained_msgs = RetSeq,
-                                   next_in_q = NextInQ}) ->
-    Taken = shared_queue:take(NextInQ,NextInQ + RestWSize,Q),
+take_queued(Q,ToTake,Sub = #sub{retained_msgs = RetSeq,
+                                next_in_q  = NextInQ}) ->
+    Taken = shared_queue:take(NextInQ,NextInQ + ToTake,Q),
     NumTaken = length(Taken),
     QPs = enumerate(false,NextInQ,RetSeq,Taken),
-    {QPs,Sub#sub{next_in_q = NextInQ + NumTaken ,
-                 window = RestWSize - NumTaken}}.
+    {QPs,Sub#sub{next_in_q = NextInQ + NumTaken}}.
+
+take_all(ToTake,S =#sub{window = WSize},Generators) ->
+    TotalToTake = ToTake + WSize,
+    {RestWsize,Taken,S1} = lists:foldl(fun concat/2,{TotalToTake,[],S},Generators),
+    {Taken,S1#sub{window = RestWsize}}.
+
+concat(Gen,{ToTakeAcc,TakenAcc,S}) ->
+    {Taken,S1} = Gen(ToTakeAcc,S),
+    {ToTakeAcc - length(Taken),Taken ++ TakenAcc,S1}.
 
 enumerate(IsRetained,QSeq,RetSeq,Packets) ->
     IncFun = inc_fun(IsRetained,RetSeq,QSeq),
@@ -83,12 +93,11 @@ inc_fun(true,RetSeq,_) ->
     fun({_,QSeq1}) -> {RetSeq,QSeq1 + 1} end.
 
 
-new(Pid,CSeq,QoS,WSize,Q,Ret) ->
-    new(Pid,CSeq,QoS,undefined,WSize,Q,Ret).
+new(CSeq,QoS,WSize,Q,Ret) ->
+    new(CSeq,QoS,undefined,WSize,Q,Ret).
 
-new(Pid,CSeq,QoS,From,WSize,Q,Ret) ->
-    Sub = #sub{pid = Pid,
-               client_seq = CSeq,
+new(CSeq,QoS,From,WSize,Q,Ret) ->
+    Sub = #sub{client_seq = CSeq,
                qos = QoS},
     iterator_from(From,WSize,Q,Ret,Sub).
 
