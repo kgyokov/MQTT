@@ -132,9 +132,9 @@ cannot_insert_w_lower_value() ->
             {c,7}
         ],
     T1 = store_pairs(Pairs),
-    T2 = min_val_tree:store(d,1,T1),
-    ?assertEqual(min_val_tree:min(T2),{ok,3}),
-    ?assertEqual(min_val_tree:get_val(d,T2),{ok,5}).
+    T2 = min_val_tree:store(b,1,T1),
+    ?assertEqual({ok,3},min_val_tree:min(T2)),
+    ?assertEqual({ok,3},min_val_tree:get_val(b,T2)).
 
 split_empty_tree() ->
     T1 = min_val_tree:new(),
