@@ -66,13 +66,16 @@ subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
     Subs1 = lists:foldl(fun maybe_add_sub/2,Subs,NewSubs),
     S#outgoing{subs = Subs1}.
 
-maybe_add_sub({Filter,QoS},Subs) ->
-    NewSub =
+maybe_add_sub({Filter,QoS,Seq},Subs) ->
+    ShouldInsert =
         case orddict:find(Filter,Subs) of
-            {ok,{_,Seq}} -> {QoS,Seq};
-            error        -> {QoS,undefined}
+            {ok,{_,SeqOld}} when SeqOld < Seq -> true;
+            _ -> true
         end,
-    orddict:store(Filter,NewSub,Subs).
+    if ShouldInsert -> orddict:store(Filter,{QoS,Seq},Subs);
+       true -> Subs
+    end.
+
 
 %% @doc
 %% Removes existing subscriptions from the session data
@@ -83,7 +86,7 @@ maybe_add_sub({Filter,QoS},Subs) ->
 
 unsubscribe(OldSubs,S = #outgoing{subs = Subs,queue = Q}) ->
     Subs1 = lists:foldl(fun orddict:erase/2,Subs,OldSubs),
-    S#outgoing{subs = Subs1, queue = flush_queue(OldSubs,Q)}.
+    S#outgoing{subs = Subs1,queue = flush_queue(OldSubs,Q)}.
 
 flush_queue(OldSubs,Q) ->
     queue:filter(fun({Filter,_}) -> lists:member(Filter,OldSubs) end,Q).
@@ -92,6 +95,8 @@ flush_queue(OldSubs,Q) ->
 %% =========================================================================
 %% MESSAGES
 %% =========================================================================
+
+-spec push(binary(),#packet{},#outgoing{}) -> {#'PUBLISH'{},#outgoing{}}.
 
 push(Filter,Packet = #packet{seq = Seq},SO = #outgoing{subs = Subs}) ->
     case should_accept(Filter,Subs) of
