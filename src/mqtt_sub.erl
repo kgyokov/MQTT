@@ -299,15 +299,18 @@ handle_push(Packet,S = #state{filter = Filter,
     S1 = S#state{live_subs = Subs1,
                  queue = SQ1,
                  retained = Ret1},
-    lists:foreach(fun({Pid,Ps}) -> send_packets_to_client(Pid,Filter,Ps) end,SendTo),
+    send_packets_to_clients(Filter,SendTo),
     {reply,{ok,NewSeq},S1}.
 
 update_waiting_subs(Q) ->
-    fun(ClientId,Sub,AccIn = {SendToAcc,SubsAcc}) ->
-        {Pid,Packets,Sub1} = mqtt_sub_state:maybe_take(Q,Sub),
+    fun(ClientId,{Pid,Sub},AccIn = {SendToAcc,SubsAcc}) ->
+        {Packets,Sub1} = mqtt_sub_state:take_any(Q,Sub),
         case Packets of
             [] ->  AccIn;
-            _ -> {[{Pid,Packets}|SendToAcc],dict:store(ClientId,Sub1,SubsAcc)}
+            _ ->
+                SubsAcc1 = dict:store(ClientId,{Pid,Sub1},SubsAcc),
+                SendToAcc1 = [{Pid,Packets}|SendToAcc],
+                {SendToAcc1,SubsAcc1}
         end
     end.
 
@@ -315,10 +318,11 @@ handle_pull(WSize,ClientId,S = #state{filter = Filter,
                                       live_subs = Subs,
                                       queue = SQ}) ->
     case dict:find(ClientId,Subs) of
-        {ok,Sub} ->
-            {Pid,Packets,Sub1} = mqtt_sub_state:take(WSize,SQ,Sub),
+        {ok,{Pid,Sub}} ->
+            {Packets,Sub1} = mqtt_sub_state:take(WSize,SQ,Sub),
+            S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs)},
             send_packets_to_client(Pid,Filter,Packets),
-            S#state{live_subs = dict:store(ClientId,Sub1,Subs)};
+            S1;
         error -> S
     end.
 
@@ -341,6 +345,9 @@ maybe_store_retained(Packet = #packet{topic = Topic},Seq,Ret)        -> shared_s
 send_packet_to_clients(CPids,Filter,Packet) ->
     [send_packet(CPid,Filter,Packet) || CPid <- CPids].
 
+send_packets_to_clients(Filter,SendTo) ->
+    lists:foreach(fun({Pid,Ps}) -> send_packets_to_client(Pid,Filter,Ps) end,SendTo).
+
 send_packets_to_client(CPid,Filter,Packets) ->
     [send_packet(CPid,Filter,P) || P <- Packets].
 
@@ -358,7 +365,7 @@ handle_sub(ClientId,CSeq,QoS,WSize,Pid,S = #state{filter = Filter,
             mqtt_sub_repo:save_sub(Filter,NewSub),
             S1 = insert_new_sub(NewSub,WSize,S),
             {reply,ok,S1};
-        {ok,Sub} ->
+        {ok,{Pid,Sub}} ->
             case mqtt_sub_state:is_old(CSeq,Sub) of
                 true ->
                     %% Message from an old process. Ignore it!
@@ -372,7 +379,7 @@ handle_sub(ClientId,CSeq,QoS,WSize,Pid,S = #state{filter = Filter,
                     {reply,duplicate,S};
                 false ->
                     mqtt_sub_repo:save_sub(Filter,NewSub),
-                    S1 = resubscribe(ClientId,QoS,Sub,S),
+                    S1 = resubscribe(ClientId,QoS,Pid,Sub,S),
                     {reply,ok,S1}
             end
     end.
@@ -385,7 +392,7 @@ handle_unsub(ClientId,CSeq, S = #state{filter = Filter,
     case dict:find(ClientId,Subs) of
         error ->
             {reply,ok,S};
-        {ok,Sub} ->
+        {ok,{_,Sub}} ->
             case mqtt_sub_state:is_old(CSeq,Sub) of
                 true ->
                     {reply,ok,S};
@@ -414,13 +421,13 @@ handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S = #state{filter = Filte
     ShouldResume =
         case dict:find(ClientId,Subs) of
             error -> true;
-            {ok,Sub} -> not mqtt_sub_state:is_old(CSeq,Sub)
+            {ok,{_,Sub}} -> not mqtt_sub_state:is_old(CSeq,Sub)
         end,
     case ShouldResume of
         true ->
-            {Pid,Packets,Sub1} = mqtt_sub_state:new(Pid,CSeq,QoS,ResumeFrom,WSize,SQ,Ret),
+            {Packets,Sub1} = mqtt_sub_state:new(CSeq,QoS,ResumeFrom,WSize,SQ,Ret),
             send_packets_to_client(Pid,Filter,Packets),
-            S#state{live_subs = dict:store(ClientId,Sub1,Subs)};
+            S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs)};
         _ -> S
     end.
 
@@ -428,21 +435,21 @@ insert_new_sub({ClientId,CSeq,QoS,Pid},WSize,S = #state{filter = Filter,
                                                         live_subs = Subs,
                                                         queue = Q,
                                                         retained = Ret}) ->
-    {Pid,Packets,Sub} = mqtt_sub_state:new(Pid,CSeq,QoS,WSize,Q,Ret),
+    {Packets,Sub} = mqtt_sub_state:new(Pid,CSeq,QoS,WSize,Q,Ret),
     send_packets_to_client(Pid,Filter,Packets),
-    S#state{live_subs = dict:store(ClientId,Sub,Subs),
+    S#state{live_subs = dict:store(ClientId,{Pid,Sub},Subs),
             queue = shared_queue:add(ClientId,Q)}.
 
 %%
 %% Only update existing properties - this is not a new subscription
 %%
-resubscribe(ClientId,QoS,Sub,S = #state{filter = Filter,
-                                        retained = Ret,
-                                        queue = Q,
-                                        live_subs = Subs}) ->
-    {Pid,Packets,Sub1} = mqtt_sub_state:resubscribe(QoS,Q,Ret,Sub),
+resubscribe(ClientId,QoS,Pid,Sub,S = #state{filter = Filter,
+                                            retained = Ret,
+                                            queue = Q,
+                                            live_subs = Subs}) ->
+    {Packets,Sub1} = mqtt_sub_state:resubscribe(QoS,Q,Ret,Sub),
     send_packets_to_client(Pid,Filter,Packets),
-    S#state{live_subs = dict:store(ClientId,Sub1,Subs)}.
+    S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs)}.
 
 %% @doc
 %% We know that a client is subscribed to a queue, we just don't know the index (Seq number)
