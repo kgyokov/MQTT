@@ -33,6 +33,8 @@ new(Compare) ->
 %% @doc
 %% Takes the Num smallest elements from the data structure and returns them plus the remainder
 %% @end
+-spec split(non_neg_integer(),tree(Key,Val)) -> {[{Key,Val}],tree(Key,Val)}.
+
 split(Num,Tree) ->
     case is_empty(Tree) of
         true -> {[],Tree};
@@ -49,6 +51,7 @@ split(Num,T,Acc) ->
         {H,T1} -> split(Num-1,T1,[H|Acc])
     end.
 
+-spec view(tree(Key,Val)) -> nil | {{Key,Val},tree(Key,Val)}.
 
 view({ByVal,ByKey,Comp}) ->
     case gb_trees:is_empty(ByVal) of
@@ -72,6 +75,8 @@ get_val(Key,{_,ByKey,_}) ->
         {ok,Val} -> {ok,Val}
     end.
 
+-spec remove(Key,tree(Key,Val)) -> tree(Key,Val).
+
 remove(Key,T = {ByVal,ByKey,Comp}) ->
     case dict:find(Key,ByKey) of
         error ->
@@ -81,6 +86,8 @@ remove(Key,T = {ByVal,ByKey,Comp}) ->
              dict:erase(Key,ByKey),
              Comp}
     end.
+
+-spec store(Key,Val,tree(Key,Val)) -> tree(Key,Val).
 
 store(Key,Val,T = {ByVal,ByKey,Comp}) ->
     case dict:find(Key,ByKey) of
@@ -92,11 +99,13 @@ store(Key,Val,T = {ByVal,ByKey,Comp}) ->
                     ByKey1 = dict:store(Key,Val,ByKey),
                     ByVal1 = delete_key_from_val_idx(Key,OldVal,ByVal),
                     ByVal2 = add_key_to_val_idx(Key,Val,ByVal1),
-                    {ByKey1,ByVal2,Comp};
+                    {ByVal2,ByKey1,Comp};
                 _ ->
-                    T %% maintain monotonicity of Val - it can only increase
+                    T %% maintain monotonicity of Val - it can only increase (should we really do this here?)
             end
     end.
+
+-spec is_empty(tree(_,_)) -> boolean().
 
 is_empty({ByVal,_ByKey,_Comp}) ->
     gb_trees:is_empty(ByVal).
@@ -104,6 +113,8 @@ is_empty({ByVal,_ByKey,_Comp}) ->
 %% @doc
 %% Gets the smallest value in the tree (may correspond to multiple keys, therefore we only return the Val)
 %% @end
+-spec min(tree(_,Val)) -> none | {ok,Val}.
+
 min({ByVal,_ByKey,_Comp}) ->
     case gb_trees:is_empty(ByVal) of
         true ->
@@ -117,6 +128,8 @@ min({ByVal,_ByKey,_Comp}) ->
 %% ===========================================================================================
 %% PRIVATE
 %% ===========================================================================================
+
+-spec insert(Key,Val,tree(Key,Val)) -> tree(Key,Val).
 
 insert(Key,Val,{ByVal,ByKey,Comp}) ->
     ByKey1 = dict:store(Key,Val,ByKey),
@@ -140,6 +153,6 @@ delete_key_from_val_idx(Key,Val,ByVal) ->
     end.
 
 add_key_to_val_idx(Key,Val,ByVal) ->
-    Keys = gb_trees:get(Val, ByVal),
+    Keys = gb_trees:get(Val,ByVal),
     Keys1 = gb_sets:add(Key,Keys),
     gb_trees:update(Val,Keys1, ByVal).
