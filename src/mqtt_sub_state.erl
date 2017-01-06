@@ -29,7 +29,7 @@
     %% last_ack = 0  ::non_neg_integer(),   %% the filter-assigned sequence number of the last message processed by this client,
     next_in_q = 0                       ::non_neg_integer(),    %% the last message sent to the client
     window = 0                          ::non_neg_integer(),    %% How many messages the client has requested
-    retained_msgs = shared_set:new()    ::shared_set:set(),                %% the retained messages to send to the client
+    retained_msgs = versioned_set:new()    :: versioned_set:set(),                %% the retained messages to send to the client
     next_retained = 0                   ::non_neg_integer()    %% the retained message sequence for this subscription
 }).
 
@@ -59,7 +59,7 @@ take(ToTake,Q,Sub) ->
 take_retained(ToTake,Sub = #sub{next_in_q = NextInQ,
                                 retained_msgs = RetWaiting,
                                 next_retained = RetSeq}) ->
-    {Taken,RetRest} = shared_set:take(ToTake,RetWaiting),
+    {Taken,RetRest} = versioned_set:take(ToTake,RetWaiting),
     NumTaken = length(Taken),
     RetPs = enumerate(true,NextInQ,RetSeq,Taken),
     {RetPs,Sub#sub{retained_msgs = RetRest,
@@ -123,6 +123,6 @@ resubscribe(QoS,Q,Ret,Sub = #sub{next_in_q = QSeq}) ->
     take(0,Q,Sub2).
 
 resume_retained(RetSeq,QSeq,Ret,Sub) ->
-    RetainedMsgs = shared_set:iterator_from(QSeq,RetSeq,Ret),
+    RetainedMsgs = versioned_set:iterator_from(QSeq,RetSeq,Ret),
     Sub#sub{retained_msgs = RetainedMsgs,
             next_retained = RetSeq}.

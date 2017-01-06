@@ -49,7 +49,7 @@
                                     %% This process assigns incremental integers to each new message
     client_seqs     ::min_val_tree:tree(client_id(),fun()),
     queue           ::any(),    %% Shared queue of messages
-    retained =      shared_set:new() ::shared_set:set(),   %% Dictionary of retained messages
+    retained =      versioned_set:new() :: versioned_set:set(),   %% Dictionary of retained messages
     garbage         ::any()     %% garbage stats from the queue
 }).
 
@@ -151,7 +151,7 @@ init([Filter, _Repo]) ->
                live_subs = dict:new(),
                packet_seq = Seq,
                queue = shared_queue:new(Seq),
-               retained = shared_set:new()}}.
+               retained = versioned_set:new()}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -335,8 +335,8 @@ handle_ack(ClientId,{_RetAck,QAck},S = #state{queue = Q,
 
 
 maybe_store_retained(#packet{retain = false},_Seq,Ret)               -> Ret;
-maybe_store_retained(#packet{topic = Topic,content = <<>>},Seq,Ret)  -> shared_set:remove(Topic,Seq,Ret);
-maybe_store_retained(Packet = #packet{topic = Topic},Seq,Ret)        -> shared_set:append(Topic,Packet,Seq,Ret).
+maybe_store_retained(#packet{topic = Topic,content = <<>>},Seq,Ret)  -> versioned_set:remove(Topic,Seq,Ret);
+maybe_store_retained(Packet = #packet{topic = Topic},Seq,Ret)        -> versioned_set:append(Topic,Packet,Seq,Ret).
 
 %% ===================================================================
 %% Packet Sending
@@ -401,7 +401,7 @@ handle_unsub(ClientId,CSeq, S = #state{filter = Filter,
                     Subs1 = dict:erase(ClientId,Subs),
                     {MoreGarbage,SQ1} = shared_queue:remove(ClientId,SQ),
                     MinSeq = shared_queue:min_seq(SQ1),
-                    Ret1 = shared_set:truncate(MinSeq,Ret),
+                    Ret1 = versioned_set:truncate(MinSeq,Ret),
                     S1 = S#state{live_subs = Subs1,
                                  queue = SQ1,
                                  retained = Ret1,

@@ -8,7 +8,7 @@
 %%% @end
 %%% Created : 30. Mar 2016 10:32 PM
 %%%-------------------------------------------------------------------
--module(shared_set).
+-module(versioned_set).
 -author("Kalin").
 
 %% API
@@ -28,7 +28,7 @@ new(StartVer,Tree) ->
     #s_set{log = gb_trees:insert(-StartVer,Tree,gb_trees:empty())}.
 
 -spec(append(any(),any(),non_neg_integer(), set()) -> set()).
-append(Key,Val, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
+append(Key,Val, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver >= 0 ->
     {LastVer,Last} = gb_trees:smallest(Log),
     case LastVer =< -Ver of
         true -> error({invalid_ver, LastVer, Ver});
@@ -37,7 +37,7 @@ append(Key,Val, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
     Next = gb_trees:enter(Key,Val,Last),
     Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
 
-remove(Key, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
+remove(Key, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver >= 0 ->
     {LastVer,Last} = gb_trees:smallest(Log),
     case LastVer =< -Ver of
         true -> error({invalid_ver, LastVer, Ver});
@@ -47,11 +47,11 @@ remove(Key, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver > 0 ->
     Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
 
 -spec(get_at(non_neg_integer(),set()) -> gb_trees:iter()).
-get_at(Ver,Set) when Ver > 0 ->
+get_at(Ver,Set) when Ver >= 0 ->
     iterator_from(Ver,0,Set).
 
 -spec(iterator_from(non_neg_integer(),non_neg_integer(),set()) -> gb_trees:iter()).
-iterator_from(Ver,Offset,Set) when Ver > 0 ->
+iterator_from(Ver,Offset,Set) when Ver >= 0 ->
     gb_trees:iterator_from(Offset,get_tree_at(Ver,Set)).
 
 take(Num,Iter) when Num >= 0->
@@ -59,6 +59,9 @@ take(Num,Iter) when Num >= 0->
 
 take(0,Iter,Acc) ->
     {Acc,Iter};
+
+take(_Num,nil,Acc) ->
+    {Acc,nil};
 
 take(Num,Iter,Acc) ->
     case gb_trees:next(Iter) of
