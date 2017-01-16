@@ -175,7 +175,7 @@ group_by_node(Regs) ->
 %% ========================================================================
 
 get_sub(Filter) ->
-    case mqtt_sub_repo:get_subs(Filter) of
+    case mqtt_sub_repo:get_filter_claim(Filter) of
         {ok,Pid} -> maybe_create_new_sub(Filter,Pid);
         error  -> create_new_sub(Filter)
     end.

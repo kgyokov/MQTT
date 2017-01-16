@@ -23,7 +23,7 @@
     unclaim_filter/2,
     claim_filter/2,
     load/1,
-    get_subs/1]).
+    get_filter_claim/1]).
 
 -ifdef(TEST).
     -export([clear_tables/0,delete_tables/0]).
@@ -190,9 +190,9 @@ unclaim_filter(Filter,Pid) ->
         end,
     mnesia_do(Fun).
 
-get_subs(Filter) ->
+get_filter_claim(Filter) ->
     Spec = [{
-        #mqtt_sub{filter = '$1', pid = '$2', _ = '_'},
+        #mqtt_sub_reg{filter = '$1', pid = '$2', _ = '_'},
         [{'=:=', '$1', Filter},{'=/=', '$2', undefined}],
         ['$2']
     }],
