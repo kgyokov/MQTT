@@ -109,9 +109,9 @@ unsubscribe(Filter,ClientId,Seq) ->
 
 
 resume_sub(ClientId,CSeq,_Sub = {Filter,QoS,From},WSize) ->
-         Pid = get_sub(Filter),
-         mqtt_sub:resume(Pid,ClientId,CSeq,QoS,From,WSize),
-         monitor(process,Pid).
+     Pid = get_sub(Filter),
+     mqtt_sub:resume(Pid,ClientId,CSeq,QoS,From,WSize),
+     monitor(process,Pid).
 
 %%resume_sub(ClientId,CSeq,Sub = {Filter,QoS}) ->
 %%    [begin
@@ -136,7 +136,7 @@ dedup_registered_clients(Regs) ->
     [{ClientId,QoS,Pid}|| {ClientId,{QoS,Pid}} <- dict:to_list(Dedups)].
 
 highest_qos_per_client(Regs) ->
-    lists:foldr(fun({ClientId,QoS,Pid}, D) ->
+    lists:foldl(fun({ClientId,QoS,Pid}, D) ->
         dict:update(ClientId,
             fun ({QoS_Old,_})       when QoS_Old < QoS -> {QoS,Pid};
                 (Old = {QoS_Old,_}) when QoS_Old >= QoS -> Old

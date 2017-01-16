@@ -13,7 +13,7 @@
 %% @doc
 %% The monotonically incrementing sequence of a client's subscription
 %% We maintain two sequence integers per subscription:
-%% RetSeq - a sequence number for all sent retained messages (i.e. messages sent as a result of of a 'SUB' request
+%% RetSeq - a sequence number for all sent retained messages (i.e. messages sent as a result of a 'SUB' request
 %% QSeq - a sequence number for all messages sent during a normal flow
 %% @end
 -type subscription_seq() :: {RetSeq::non_neg_integer()|-1,

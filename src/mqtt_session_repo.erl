@@ -29,7 +29,8 @@
 
 
 save(ClientId,Session) ->
-    Fun = fun() -> mnesia:dirty_write(#mqtt_session{client_id = ClientId, session = Session}) end,
+    SessionRec = #mqtt_session{client_id = ClientId, session = Session},
+    Fun = fun() -> mnesia:dirty_write(SessionRec) end,
     mnesia_do(Fun).
 
 load(ClientId) ->

@@ -54,14 +54,9 @@ get_at(Ver,Set) when Ver >= 0 ->
 iterator_from(Ver,Offset,Set) when Ver >= 0 ->
     gb_trees:iterator_from(Offset,get_tree_at(Ver,Set)).
 
-take(Num,Iter) when Num >= 0->
-    take(Num,Iter,[]).
-
-take(0,Iter,Acc) ->
-    {Acc,Iter};
-
-take(_Num,nil,Acc) ->
-    {Acc,nil};
+take(Num,Iter) when Num >= 0 -> take(Num,Iter,[]).
+take(0,Iter,Acc)             -> {Acc,Iter};
+take(_Num,nil,Acc)           -> {Acc,nil};
 
 take(Num,Iter,Acc) ->
     case gb_trees:next(Iter) of
@@ -82,6 +77,5 @@ truncate(Ver,Set = #s_set{log = Log}) ->
     L = lists:takewhile(fun({Key,_}) -> Key =< -Ver end, gb_trees:to_list(Log)),
     T = lists:foldl(fun({Key,Val},T) -> gb_trees:insert(Key,Val,T) end,gb_trees:empty(),L),
     Set#s_set{log = T}.
-
 
 size(#s_set{log=Log}) -> gb_trees:size(Log).

@@ -76,7 +76,7 @@ push(Pid,Filter,Packet) ->
     gen_server:cast(Pid,{push,Filter,Packet}).
 
 push_qos0(Pid, CTRPacket) ->
-    gen_server:cast(Pid,{push_0, CTRPacket}).
+    gen_server:cast(Pid,{push_0,CTRPacket}).
 
 push_reliable(Pid, CTRPacket,QoS) ->
     gen_server:call(Pid,{push_reliable,CTRPacket,QoS}).
