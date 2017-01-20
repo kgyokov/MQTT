@@ -10,18 +10,20 @@
 -author("Kalin").
 
 %% API
--export([new/1, pushr/2, remove/2, add/2, add/3, forward/3, min_seq/1, max_seq/1, take/3]).
+-export([new/0, new/1, pushr/2, remove/2, add_client/2, add_client/3, forward/3, min_seq/1, max_seq/1, take/3]).
 
 -define(SEQ_MONOID,sequence_monoid).
+-define(DEFAULT_SEQ,0).
 
 -record(shared_q,{
-    cur_seq :: non_neg_integer(), %% Sequence number of the latest item added to the queue
-                                  %% incremented with each new item
-    client_seqs :: any(),         %% how far each consumer is into the queue
-                                  %% (represented as the corresponding item's Sequence number)
-    queue       :: any()          %% the actual queue
+    last_seq :: non_neg_integer(),       %% Sequence number of the latest item added to the queue
+                                        %% incremented with each new item
+    client_seqs :: min_val_tree:tree(binary(),non_neg_integer()), %% How far each consumer is pointing into the queue
+                                        %% (represented as the corresponding item's Sequence number)
+    queue       :: any()                %% the actual queue
 }).
 
+new() -> new(?DEFAULT_SEQ).
 
 %% @doc
 %% Creates a new shared queue starting from Seq, using the
@@ -29,12 +31,12 @@
 %% @end
 new(Seq) ->
     #shared_q{client_seqs = min_val_tree:new(),
-              queue = monoid_sequence:empty(),
-              cur_seq = Seq}.
+              queue       = monoid_sequence:empty(),
+              last_seq    = Seq}.
 
-pushr(El,SQ = #shared_q{cur_seq = Seq,queue = Q}) ->
+pushr(El,SQ = #shared_q{last_seq = Seq,queue = Q}) ->
     Seq1 = Seq+1,
-    SQ#shared_q{cur_seq = Seq1,queue = monoid_sequence:pushr_w_seq(Seq1,El,Q)}.
+    SQ#shared_q{last_seq = Seq1,queue = monoid_sequence:pushr_w_seq(Seq1,El,Q)}.
 
 forward(ClientId,ToSeq,SQ = #shared_q{client_seqs = Offsets}) ->
     Offsets1 = min_val_tree:store(ClientId,ToSeq,Offsets),
@@ -47,12 +49,16 @@ remove(ClientId,SQ = #shared_q{client_seqs = Offsets}) ->
     Offsets1 = min_val_tree:remove(ClientId,Offsets),
     maybe_truncate(Offsets1,SQ).
 
-add(ClientId,SQ = #shared_q{cur_seq = CurSeq}) ->
-    add(ClientId,CurSeq,SQ).
+add_client(ClientId,SQ = #shared_q{last_seq = CurSeq}) ->
+    add_client(ClientId,CurSeq,SQ).
 
-add(ClientId,AtSeq,SQ = #shared_q{client_seqs = Offsets,cur_seq = CurSeq}) ->
+add_client(ClientId,AtSeq,SQ = #shared_q{client_seqs = Offsets, last_seq = CurSeq}) ->
     %%@todo: Should we sanitize the input???
-    ActualSeq = max(min_val_tree:min(Offsets),min(CurSeq,AtSeq)),
+    MinVal = case min_val_tree:min(Offsets) of
+                none -> ?DEFAULT_SEQ;
+                {ok,Seq} -> Seq
+            end,
+    ActualSeq = max(MinVal,min(CurSeq,AtSeq)),
     SQ#shared_q{client_seqs = min_val_tree:store(ClientId,ActualSeq,Offsets)}.
 
 maybe_truncate(NewOffsets, SQ = #shared_q{queue = Q}) ->
@@ -64,15 +70,15 @@ maybe_truncate(NewOffsets, SQ = #shared_q{queue = Q}) ->
 min_seq(Q = #shared_q{client_seqs = Offsets}) ->
     case min_val_tree:min(Offsets) of
         none -> max_seq(Q);
-        Seq  -> Seq
+        {ok,Seq}  -> Seq
     end.
 
-max_seq(#shared_q{cur_seq = Seq}) -> Seq.
+max_seq(#shared_q{last_seq = Seq}) -> Seq.
 
-take(FromSeq,ToSeq, #shared_q{queue = Q}) ->
-    {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq >= FromSeq end, Q),
-    {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq =< ToSeq end, Rest),
-    monoid_sequence:to_list(Interval).
+take(FromSeq, Num, #shared_q{queue = Q}) ->
+    {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > FromSeq end, Q),
+    {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq =< FromSeq + Num end, Rest),
+    lists:map(fun monoid_sequence:extract_val/1, monoid_sequence:to_list(Interval)).
 
 %%
 %% Private functions
