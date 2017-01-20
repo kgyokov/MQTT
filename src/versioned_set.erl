@@ -19,6 +19,7 @@
 }).
 
 -type(set()::#s_set{}).
+-opaque(iter()::gb_trees:iter()|nil).
 
 -spec(new() -> set()).
 new() -> new(0,gb_trees:empty()).
@@ -46,24 +47,27 @@ remove(Key, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver >= 0 ->
     Next = gb_trees:delete_any(Key,Last),
     Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
 
--spec(get_at(non_neg_integer(),set()) -> gb_trees:iter()).
+-spec get_at(non_neg_integer(),set()) -> gb_trees:iter().
 get_at(Ver,Set) when Ver >= 0 ->
     iterator_from(Ver,0,Set).
 
--spec(iterator_from(non_neg_integer(),non_neg_integer(),set()) -> gb_trees:iter()).
+-spec iterator_from(non_neg_integer(),non_neg_integer(),set()) -> gb_trees:iter().
 iterator_from(Ver,Offset,Set) when Ver >= 0 ->
-    gb_trees:iterator_from(Offset,get_tree_at(Ver,Set)).
+    TreeAtVer = get_tree_at(Ver,Set),
+    gb_trees:iterator_from(Offset,TreeAtVer).
 
+-spec take(non_neg_integer(),iter()) -> {[any()],iter()}.
 take(Num,Iter) when Num >= 0 -> take(Num,Iter,[]).
+
 take(0,Iter,Acc)             -> {Acc,Iter};
 take(_Num,nil,Acc)           -> {Acc,nil};
-
 take(Num,Iter,Acc) ->
     case gb_trees:next(Iter) of
         none -> {Acc,nil};
         {_,Val,Iter1} -> take(Num-1,[Val|Acc],Iter1)
     end.
 
+-spec get_tree_at(non_neg_integer(),set()) -> gb_trees:tree().
 get_tree_at(Ver,#s_set{log = Log}) ->
     Iter = gb_trees:iterator_from(-Ver,Log), %% the whole reason for storing negative Sequence numbers
     case gb_trees:next(Iter) of
