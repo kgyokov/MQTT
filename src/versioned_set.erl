@@ -29,23 +29,13 @@ new(StartVer,Tree) ->
     #s_set{log = gb_trees:insert(-StartVer,Tree,gb_trees:empty())}.
 
 -spec(append(any(),any(),non_neg_integer(), set()) -> set()).
-append(Key,Val, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver >= 0 ->
-    {LastVer,Last} = gb_trees:smallest(Log),
-    case LastVer =< -Ver of
-        true -> error({invalid_ver, LastVer, Ver});
-        false -> ok
-    end,
-    Next = gb_trees:enter(Key,Val,Last),
-    Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
+append(Key,Val,Ver,Set) ->
+    UpdateFun = fun(Last) -> gb_trees:enter(Key,Val,Last) end,
+    add_new_version(Ver,Set,UpdateFun).
 
-remove(Key, Ver,Set = #s_set{log = Log}) when is_integer(Ver), Ver >= 0 ->
-    {LastVer,Last} = gb_trees:smallest(Log),
-    case LastVer =< -Ver of
-        true -> error({invalid_ver, LastVer, Ver});
-        false -> ok
-    end,
-    Next = gb_trees:delete_any(Key,Last),
-    Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
+remove(Key, Ver,Set) ->
+    UpdateFun = fun(Last) -> gb_trees:delete_any(Key,Last) end,
+    add_new_version(Ver,Set,UpdateFun).
 
 -spec get_at(non_neg_integer(),set()) -> gb_trees:iter().
 get_at(Ver,Set) when Ver >= 0 ->
@@ -74,14 +64,13 @@ to_list(Iter,Acc) ->
         none -> Acc
     end.
 
-
 next(Iter) -> gb_trees:next(Iter).
 
 -spec take(non_neg_integer(),iter()) -> {[any()],iter()}.
 take(Num,Iter) when Num >= 0 -> take(Num,Iter,[]).
 
-take(0,Iter,Acc)             -> {Acc,Iter};
-take(_Num,nil,Acc)           -> {Acc,nil};
+take(0,Iter,Acc)   -> {Acc,Iter};
+take(_Num,nil,Acc) -> {Acc,nil};
 take(Num,Iter,Acc) ->
     case gb_trees:next(Iter) of
         none -> {Acc,nil};
@@ -93,6 +82,14 @@ take(Num,Iter,Acc) ->
 %% Iterator operations.
 %% ===========================================================================
 
+add_new_version(Ver,Set = #s_set{log = Log},Fun) when is_integer(Ver), Ver >= 0 ->
+    {LastVer,Last} = gb_trees:smallest(Log),
+    case LastVer =< -Ver of
+        true -> error({invalid_ver, LastVer, Ver});
+        false -> ok
+    end,
+    Next = Fun(Last),
+    Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
 
 -spec get_tree_at(non_neg_integer(),set()) -> gb_trees:tree().
 get_tree_at(Ver,#s_set{log = Log}) ->
