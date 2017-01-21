@@ -12,7 +12,7 @@
 -author("Kalin").
 
 %% API
--export([new/0, new/2, append/4, get_at/2, iterator_from/3, truncate/2, size/1, remove/3, take/2]).
+-export([new/0, new/2, append/4, get_at/2, iterator_from/3, truncate/2, size/1, remove/3, take/2, next/1, to_list/1]).
 
 -record(s_set,{
     log :: gb_trees:tree(neg_integer()|0,gb_trees:tree())
@@ -56,6 +56,27 @@ iterator_from(Ver,Offset,Set) when Ver >= 0 ->
     TreeAtVer = get_tree_at(Ver,Set),
     gb_trees:iterator_from(Offset,TreeAtVer).
 
+%% ===========================================================================
+%%
+%%
+%% Iterator operations.
+%% TODO: Move to_list, next and take to a generic lazy lists implementation
+%%
+%% ===========================================================================
+
+-spec to_list(iter()) -> [].
+to_list(Iter) ->
+    to_list(Iter,[]).
+
+to_list(Iter,Acc) ->
+    case next(Iter) of
+        {_,Val,Iter1} -> to_list(Iter1,[Val|Acc]);
+        none -> Acc
+    end.
+
+
+next(Iter) -> gb_trees:next(Iter).
+
 -spec take(non_neg_integer(),iter()) -> {[any()],iter()}.
 take(Num,Iter) when Num >= 0 -> take(Num,Iter,[]).
 
@@ -66,6 +87,12 @@ take(Num,Iter,Acc) ->
         none -> {Acc,nil};
         {_,Val,Iter1} -> take(Num-1,[Val|Acc],Iter1)
     end.
+
+
+%% ===========================================================================
+%% Iterator operations.
+%% ===========================================================================
+
 
 -spec get_tree_at(non_neg_integer(),set()) -> gb_trees:tree().
 get_tree_at(Ver,#s_set{log = Log}) ->

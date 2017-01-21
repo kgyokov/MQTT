@@ -33,23 +33,23 @@ all_test_() ->
 
 empty_after_creation() ->
     N = versioned_set:new(),
-    ?assertEqual(0,length((versioned_set:get_at(1,N)))),
-    ?assertEqual(0,length(versioned_set:get_at(2,N))).
+    ?assertEqual(0,length((get_list(1,N)))),
+    ?assertEqual(0,length(get_list(2,N))).
 
 error_when_accessing_at_0_index() ->
     N = versioned_set:new(),
-    ?assertError(_,length(versioned_set:get_at(0,N))).
+    ?assertEqual(0,length(get_list(0,N))).
 
 empty_result_when_accessing_at_less_than_smallest_index() ->
     N = versioned_set:new(),
     N1 = versioned_set:append(key1,val1,2,N),
-    ?assertEqual(0,length(versioned_set:get_at(1,N1))).
+    ?assertEqual(0,length(get_list(1,N1))).
 
 correct_result_when_accessing_at_smallest_index() ->
     N = versioned_set:new(),
     N1 = versioned_set:append(key2,val2,2,N),
     N2 = versioned_set:append(key3,val3,3,N1),
-    ValAt2 = versioned_set:get_at(2,N2),
+    ValAt2 = get_list(2,N2),
     ?assertEqual(1,length(ValAt2)),
     ?lists_are_equal([val2],ValAt2).
 
@@ -57,7 +57,7 @@ correct_result_when_accessing_at_largest_index() ->
     N = versioned_set:new(),
     N1 = versioned_set:append(key2,val2,2,N),
     N2 = versioned_set:append(key3,val3,3,N1),
-    ValAt3 = versioned_set:get_at(3,N2),
+    ValAt3 = get_list(3,N2),
     ?assertEqual(2,length(ValAt3)),
     ?lists_are_equal([val2,val3],ValAt3).
 
@@ -65,7 +65,7 @@ correct_result_when_accessing_above_largest_index() ->
     N = versioned_set:new(),
     N1 = versioned_set:append(key2,val2,2,N),
     N2 = versioned_set:append(key3,val3,3,N1),
-    ValAt3 = versioned_set:get_at(4,N2),
+    ValAt3 = get_list(4,N2),
     ?assertEqual(2,length(ValAt3)),
     ?lists_are_equal([val2,val3],ValAt3).
 
@@ -89,7 +89,7 @@ truncate_at_maximum_leaves_last_element() ->
     N2 = versioned_set:append(key3,val3,3,N1),
     Truncated = versioned_set:truncate(3,N2),
     ?assertEqual(1, versioned_set:size(Truncated)),
-    ?lists_are_equal([val2,val3], versioned_set:get_at(3,Truncated)).
+    ?lists_are_equal([val2,val3], get_list(3,Truncated)).
 
 correct_result_when_truncating() ->
     N = versioned_set:new(),
@@ -98,7 +98,7 @@ correct_result_when_truncating() ->
     N3 = versioned_set:append(key4,val4,4,N2),
     Truncated = versioned_set:truncate(3,N3),
     ?assertEqual(2, versioned_set:size(Truncated)),
-    ?lists_are_equal([val2,val3,val4], versioned_set:get_at(4,Truncated)).
+    ?lists_are_equal([val2,val3,val4], get_list(4,Truncated)).
 
 remove_erases_the_key_from_corresponding_version() ->
     N = versioned_set:new(),
@@ -106,8 +106,8 @@ remove_erases_the_key_from_corresponding_version() ->
     N2 = versioned_set:append(key3,val3,3,N1),
     N3 = versioned_set:append(key4,val4,4,N2),
     N4 = versioned_set:remove(key3,5,N3),
-    ?lists_are_equal([val2,val4], versioned_set:get_at(5,N4)),
-    ?lists_are_equal([val2,val3,val4], versioned_set:get_at(4,N3)).
+    ?lists_are_equal([val2,val4], get_list(5,N4)),
+    ?lists_are_equal([val2,val3,val4], get_list(4,N3)).
 
 removing_same_key_twice() ->
     N = versioned_set:new(),
@@ -116,4 +116,10 @@ removing_same_key_twice() ->
     N3 = versioned_set:append(key4,val4,4,N2),
     N4 = versioned_set:remove(key3,5,N3),
     N5 = versioned_set:remove(key3,6,N4),
-    ?lists_are_equal([val2,val4], versioned_set:get_at(6,N5)).
+    ?lists_are_equal([val2,val4], get_list(6,N5)).
+
+get_list(Ver,Set) ->
+    Iter = versioned_set:get_at(Ver,Set),
+    versioned_set:to_list(Iter).
+
+
