@@ -75,9 +75,9 @@ min_seq(Q = #shared_q{client_seqs = Offsets}) ->
 
 max_seq(#shared_q{last_seq = Seq}) -> Seq.
 
-take(FromSeq, Num, #shared_q{queue = Q}) ->
-    {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > FromSeq end, Q),
-    {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq =< FromSeq + Num end, Rest),
+take(AfterSeq, Num, #shared_q{queue = Q}) ->
+    {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq end, Q),
+    {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq + Num end, Rest),
     lists:map(fun monoid_sequence:extract_val/1, monoid_sequence:to_list(Interval)).
 
 %%
