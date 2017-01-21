@@ -51,6 +51,12 @@
 find_sub(Filter,#outgoing{subs = Subs}) ->
     orddict:find(Filter,Subs).
 
+sub_exists(Filter,Subs) ->
+    case orddict:find(Filter,Subs) of
+        {ok,_Sub} -> true;
+        error     -> false
+    end.
+
 -spec(get_subs(#outgoing{}) -> [{binary(),qos(),any()}]).
 
 get_subs(#outgoing{subs = Subs}) ->
@@ -66,16 +72,13 @@ subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
     Subs1 = lists:foldl(fun maybe_add_sub/2,Subs,NewSubs),
     S#outgoing{subs = Subs1}.
 
-maybe_add_sub({Filter,QoS,Seq},Subs) ->
-    ShouldInsert =
+maybe_add_sub({Filter,QoS},Subs) ->
+    NewSub =
         case orddict:find(Filter,Subs) of
-            {ok,{_,SeqOld}} when SeqOld < Seq -> true;
-            _ -> true
+            {ok,{_,Seq}} -> {QoS,Seq};
+            error        -> {QoS,undefined}
         end,
-    if ShouldInsert -> orddict:store(Filter,{QoS,Seq},Subs);
-       true -> Subs
-    end.
-
+    orddict:store(Filter,NewSub,Subs).
 
 %% @doc
 %% Removes existing subscriptions from the session data
@@ -96,35 +99,35 @@ flush_queue(OldSubs,Q) ->
 %% MESSAGES
 %% =========================================================================
 
--spec push(binary(),#packet{},#outgoing{}) -> {#'PUBLISH'{},#outgoing{}}.
+-spec push(binary(),#packet{},#outgoing{}) -> {[#'PUBLISH'{}],#outgoing{}}.
 
 push(Filter,Packet = #packet{seq = Seq},SO = #outgoing{subs = Subs}) ->
-    case should_accept(Filter,Subs) of
+    case sub_exists(Filter,Subs) of
         false -> {[],SO};
         true ->
             SO1 = SO#outgoing{subs = orddict:update(Filter,
                                             fun({QoS,_}) -> {QoS,Seq} end,
                                     Subs)},
-            maybe_enqueue(Packet,SO1)
+            send_or_enqueue(Packet,SO1)
     end.
 
-maybe_enqueue(Msg,S = #outgoing{queue = Q,window_size = WSize}) when WSize =<0 ->
-    {[],S#outgoing{queue = queue:cons(Msg,Q)}};
+send_or_enqueue(Msg,S = #outgoing{window_size = WSize}) when WSize > 0 ->
+    do_send(Msg,S#outgoing{window_size = WSize - 1});
 
-maybe_enqueue(Msg,S = #outgoing{window_size = WSize}) ->
-    move_to_session(Msg,S#outgoing{window_size = WSize - 1}).
+send_or_enqueue(Msg,S = #outgoing{queue = Q})->
+    {[],S#outgoing{queue = queue:cons(Msg,Q)}}.
 
-move_to_session(Packet,SO = #outgoing{subs = Subs}) ->
+do_send(Packet,SO = #outgoing{subs = Subs}) ->
     Packet1 = set_actual_qos(Subs,Packet),
     push_to_session(Packet1,SO).
 
-pull(S = #outgoing{queue = Q,window_size = WSize}) ->
+pop(S = #outgoing{queue = Q,window_size = WSize}) ->
     case queue:is_empty(Q) of
         true -> {[],S#outgoing{window_size = WSize+1}};
         false ->
             S1 = S#outgoing{queue = queue:tail(Q)},
             Msg = queue:head(Q),
-            move_to_session(Msg,S1)
+            do_send(Msg,S1)
     end.
 
 set_actual_qos(Subs,Packet = #packet{topic = Topic,
@@ -134,15 +137,9 @@ set_actual_qos(Subs,Packet = #packet{topic = Topic,
     ActualQoS = min(MsgQoS,SubQos),
     Packet#packet{qos = ActualQoS}.
 
-should_accept(Filter,Subs) ->
-    case orddict:find(Filter,Subs) of
-        {ok,_Sub} -> true;
-        error     -> false
-    end.
-
 push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
     Pub = to_publish(Packet),
-    {ToSend,SO1} = pull(SO),
+    {ToSend,SO1} = pop(SO),
     {[Pub|ToSend],SO1};
 
 push_to_session(Packet = #packet{qos = QoS},SO) when QoS =:= ?QOS_1;
@@ -170,12 +167,12 @@ add_to_outgoing(PSeq,Packet = #packet{qos = ?QOS_2},SO) ->
     {[#'PUBLISH'{}],#outgoing{}}.
 
 pub_ack(PacketId,SO = #outgoing{packet_seq = PSeq,
-                                        qos1 = QoS1Msgs}) ->
+                                qos1 = QoS1Msgs}) ->
     AckSeq = get_ack_seq(PacketId,PSeq),
     case orddict:find(AckSeq,QoS1Msgs) of
         {ok,_} ->
             SO1 = SO#outgoing{qos1 = orddict:erase(AckSeq,QoS1Msgs)},
-            pull(SO1);
+            pop(SO1);
         error ->
             {[],SO}
     end.
@@ -209,7 +206,7 @@ pub_comp(PacketId,SO = #outgoing{packet_seq = PSeq,
     case ordsets:is_element(AckSeq,Ack) of
         true ->
             SO1 = SO#outgoing{qos2_rec = ordsets:del_element(AckSeq,Ack)},
-            pull(SO1);
+            pop(SO1);
         false ->
             {[],SO}
     end.
@@ -263,11 +260,11 @@ to_pubrel(PSeq) ->
 %% @end
 get_ack_seq(PacketId,PSeq) -> ((PSeq band 16#ffff) bxor PSeq) bor PacketId.
 
-%% @doc
-%% Maps a potentially large Sequence number to a PacketId
-%% @end
-maybe_get_packet_id(undefined) -> undefined;
-maybe_get_packet_id(PSeq) -> get_packet_id(PSeq).
+%%%% @doc
+%%%% Maps a potentially large Sequence number to a PacketId
+%%%% @end
+%%maybe_get_packet_id(undefined) -> undefined;
+%%maybe_get_packet_id(PSeq) -> get_packet_id(PSeq).
 
 get_packet_id(PSeq) -> PSeq band 16#ffff.
 

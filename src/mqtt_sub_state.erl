@@ -27,8 +27,8 @@
     %% last_ack = 0  ::non_neg_integer(),   %% the filter-assigned sequence number of the last message processed by this client,
     last_in_q = 0                       ::non_neg_integer(),    %% the last message sent to the client
     window = 0                          ::non_neg_integer(),    %% How many messages the client has requested
-    retained_msgs = versioned_set:new()    :: versioned_set:set(),                %% the retained messages to send to the client
-    next_retained = 0                   ::non_neg_integer()    %% the retained message sequence for this subscription
+    retained_iter = versioned_set:new()    :: versioned_set:set(),                %% the retained messages to send to the client
+    last_retained = 0                   ::non_neg_integer()    %% the retained message sequence for this subscription
 }).
 
 is_old(MsgCSeq,#sub{client_seq = CSeq}) when CSeq >= MsgCSeq -> true;
@@ -47,35 +47,35 @@ take_any(Q,Sub) ->
 %% - There may be new messages to send
 %% @end
 take(ToTake,Q,Sub) ->
-        take_all(ToTake,Sub,
+        take_all(ToTake,Q,Sub,
         [
-            fun take_retained/2,
-            fun(ToTake1,S1) -> take_queued(Q,ToTake1,S1) end
+            fun take_retained/3,
+            fun take_queued/3
         ]).
 
 
-take_retained(ToTake,Sub = #sub{last_in_q     = LastInQ,
-                                retained_msgs = RetWaiting,
-                                next_retained = RetSeq}) ->
-    {Taken,RetRest} = versioned_set:take(ToTake,RetWaiting),
+take_retained(ToTake,_Q,Sub = #sub{last_in_q     = LastInQ,
+                                   retained_iter = RetIter,
+                                   last_retained = RetSeq}) ->
+    {Taken,RetRest} = versioned_set:take(ToTake,RetIter),
     RetPs = enumerate(true,{RetSeq,LastInQ},Taken),
-    {RetPs,Sub#sub{retained_msgs = RetRest,
-                   next_retained = RetSeq + length(Taken)}}.
+    {RetPs,Sub#sub{retained_iter = RetRest,
+                   last_retained = RetSeq + length(Taken)}}.
 
-take_queued(Q,ToTake,Sub = #sub{next_retained = RetSeq,
+take_queued(ToTake,Q,Sub = #sub{last_retained = RetSeq,
                                 last_in_q     = LastInQ}) ->
     Taken = shared_queue:take(LastInQ,ToTake,Q),
     QPs = enumerate(false,{RetSeq,LastInQ},Taken),
     {QPs,Sub#sub{last_in_q = LastInQ + length(Taken)}}.
 
-take_all(ToTake,S = #sub{window = WSize},Generators) ->
-    TotalToTake = ToTake + WSize,
-    {RestWSize,Taken,S1} = lists:foldl(fun concat/2,{TotalToTake,[],S},Generators),
+take_all(ToTake,Q,S = #sub{window = WSize},Generators) ->
+    AccStart = {ToTake + WSize,[],Q,S},
+    {RestWSize,Taken,_,S1} = lists:foldl(fun concat/2,AccStart,Generators),
     {Taken,S1#sub{window = RestWSize}}.
 
-concat(Gen,{ToTakeAcc,TakenAcc,S}) ->
-    {Taken,S1} = Gen(ToTakeAcc,S),
-    {ToTakeAcc - length(Taken),TakenAcc ++ Taken,S1}.
+concat(Gen,{ToTakeAcc,TakenAcc,Q,S}) ->
+    {Taken,S1} = Gen(ToTakeAcc,Q,S),
+    {ToTakeAcc - length(Taken),TakenAcc ++ Taken,Q,S1}.
 
 enumerate(IsRetained,Seq,Packets) ->
     IncFun = inc_fun(IsRetained,Seq),
@@ -118,6 +118,6 @@ resubscribe(QoS,Q,Ret,Sub = #sub{last_in_q = QSeq}) ->
     take(0,Q,Sub2).
 
 resume_retained(RetSeq,QSeq,Ret,Sub) ->
-    RetainedMsgs = versioned_set:iterator_from(QSeq,RetSeq,Ret),
-    Sub#sub{retained_msgs = RetainedMsgs,
-            next_retained = RetSeq}.
+    RetIter = versioned_set:iterator_from(QSeq,RetSeq,Ret),
+    Sub#sub{retained_iter = RetIter,
+            last_retained = RetSeq}.

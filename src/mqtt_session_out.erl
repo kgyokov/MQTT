@@ -137,8 +137,8 @@ subscription_created(Pid,Sub) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([ConnPid,ClientId,CleanSession]) ->
-    NewSeq = claim_client_id(ClientId),
     self() ! async_init,
+    NewSeq = claim_client_id(ClientId),
     %%todo: should this be async? Do we want to send a CONNACK before clearing the session???
     IsPersistent = not CleanSession,
     Persist =
@@ -338,15 +338,18 @@ claim_client_id(ClientId) ->
     NewSeq.
 
 
+%%init_session(ClientId,_IsPersistent = false,NewSeq) ->
+%%    ok.
+
 %% Either load an existing session of create a new one
 load_session(ClientId,_IsPersistent = true,_) ->
     SO1 =
         case mqtt_session_repo:load(ClientId) of
-            {error,not_found} ->
-                mqtt_session:new();
+            {error,not_found} -> mqtt_session:new();
             {ok,SO} -> SO
         end,
-    mqtt_session_repo:save(ClientId,SO1);
+    mqtt_session_repo:save(ClientId,SO1),
+    SO1;
 
 load_session(ClientId,_IsPersistent = false,NewSeq) ->
     case mqtt_session_repo:load(ClientId) of
