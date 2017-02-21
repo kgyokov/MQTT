@@ -18,6 +18,7 @@ all_test_() ->
         [
             fun min_is_correct_after_several_inserts/0,
             fun min_is_correct_after_single_insert/0,
+            fun min_is_correct_after_duplicate_key_instered/0,
             fun min_is_none_for_new_tree/0,
             fun min_is_none_after_removal_of_all_elements/0,
             fun removal_on_empty_does_not_error/0,
@@ -48,6 +49,14 @@ min_is_correct_after_several_inserts() ->
 
 min_is_correct_after_single_insert() ->
     store_pairs_and_test_min([{a,5}],{ok,5}).
+
+min_is_correct_after_duplicate_key_instered() ->
+    store_pairs_and_test_min(
+        [
+            {a,3},
+            {b,4},
+            {a,5}
+        ],{ok,4}).
 
 min_is_none_for_new_tree() ->
     store_pairs_and_test_min([],none).
@@ -196,5 +205,3 @@ store_pairs_and_test_min(Pairs,ExpectedMin) ->
     T1 = store_pairs(Pairs),
     Min = min_val_tree:min(T1),
     ?assertEqual(Min,ExpectedMin).
-
-

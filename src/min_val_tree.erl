@@ -96,9 +96,9 @@ store(Key,Val,T = {ByVal,ByKey,Comp}) ->
         {ok,OldVal}  ->
             case Comp(OldVal,Val) of
                 true ->
-                    ByKey1 = dict:store(Key,Val,ByKey),
                     ByVal1 = delete_key_from_val_idx(Key,OldVal,ByVal),
-                    ByVal2 = add_key_to_val_idx(Key,Val,ByVal1),
+                    ByVal2 = upsert_val_idx(Key,Val,ByVal1),
+                    ByKey1 = dict:store(Key,Val,ByKey),
                     {ByVal2,ByKey1,Comp};
                 _ ->
                     T %% maintain monotonicity of Val - it can only increase (should we really do this here?)
@@ -132,17 +132,23 @@ min({ByVal,_ByKey,_Comp}) ->
 -spec insert(Key,Val,tree(Key,Val)) -> tree(Key,Val).
 
 insert(Key,Val,{ByVal,ByKey,Comp}) ->
+    ByVal1 = upsert_val_idx(Key,Val,ByVal),
     ByKey1 = dict:store(Key,Val,ByKey),
-    ByVal1 =
-        case gb_trees:is_defined(Val, ByVal) of
-            true ->
-                add_key_to_val_idx(Key,Val,ByVal);
-            false ->
-                Keys = gb_sets:insert(Key,gb_sets:new()),
-                gb_trees:insert(Val,Keys, ByVal)
-        end,
     {ByVal1,ByKey1,Comp}.
 
+upsert_val_idx(Key,Val,ByVal) ->
+    case gb_trees:is_defined(Val,ByVal) of
+        true ->
+            add_key_to_val_idx(Key,Val,ByVal);
+        false ->
+            Keys = gb_sets:insert(Key,gb_sets:new()),
+            gb_trees:insert(Val,Keys,ByVal)
+    end.
+
+add_key_to_val_idx(Key,Val,ByVal) ->
+    Keys = gb_trees:get(Val,ByVal),
+    Keys1 = gb_sets:add(Key,Keys),
+    gb_trees:update(Val,Keys1, ByVal).
 
 delete_key_from_val_idx(Key,Val,ByVal) ->
     Keys = gb_trees:get(Val,ByVal),
@@ -151,8 +157,3 @@ delete_key_from_val_idx(Key,Val,ByVal) ->
         0 -> gb_trees:delete(Val,ByVal);
         _ -> gb_trees:update(Val,Keys1,ByVal)
     end.
-
-add_key_to_val_idx(Key,Val,ByVal) ->
-    Keys = gb_trees:get(Val,ByVal),
-    Keys1 = gb_sets:add(Key,Keys),
-    gb_trees:update(Val,Keys1, ByVal).
