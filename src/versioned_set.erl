@@ -5,6 +5,7 @@
 %%% Maintains different versions of a dictionary based on sequential Version number.
 %%% A memory optimization so we can keep different lists of retained messages per client
 %%% Implemented in a NAIVE way right now - by using gb_trees with negative keys.
+%%% @todo: more generic implementation
 %%% @end
 %%% Created : 30. Mar 2016 10:32 PM
 %%%-------------------------------------------------------------------
@@ -50,7 +51,7 @@ iterator_from(Ver,Offset,Set) when Ver >= 0 ->
 %%
 %%
 %% Iterator operations.
-%% TODO: Move to_list, next and take to a generic lazy lists implementation
+%% @todo: Move to_list, next and take to a generic lazy lists implementation
 %%
 %% ===========================================================================
 
@@ -74,7 +75,7 @@ take(_Num,nil,Acc) -> {Acc,nil};
 take(Num,Iter,Acc) ->
     case gb_trees:next(Iter) of
         none -> {Acc,nil};
-        {_,Val,Iter1} -> take(Num-1,[Val|Acc],Iter1)
+        {_,Val,Iter1} -> take(Num-1,Iter1,[Val|Acc])
     end.
 
 

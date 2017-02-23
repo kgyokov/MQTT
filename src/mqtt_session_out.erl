@@ -9,6 +9,8 @@
 -module(mqtt_session_out).
 -author("Kalin").
 
+-include("mqtt_internal_msgs.hrl").
+
 -behaviour(gen_server).
 
 %% API
@@ -18,7 +20,7 @@
     pub_rec/2,
     pub_comp/2,
     subscribe/2,
-    subscribe/4,
+    subscribe/5,
     unsubscribe/2,
     unsubscribe/3,
     push_qos0/2,
@@ -27,7 +29,8 @@
     close/1,
     new/4,
     subscription_created/2,
-    push/3]).
+    push/3,
+    resume/4]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -73,8 +76,10 @@ start_link(ConnPid,ClientId,CleanSession) ->
     gen_server:start_link(?MODULE, [ConnPid,ClientId,CleanSession], []).
 
 push(Pid,Filter,Packet) ->
-    gen_server:cast(Pid,{push,Filter,Packet}).
+    error_logger:info_msg("Pushing packet ~p to pid ~p which is ~p~n",[Packet,Pid, is_process_alive(Pid)]),
+    gen_server:cast(Pid,{push,Packet,Filter,self()}).
 
+%% todo: get rid of the other 'push' functions
 push_qos0(Pid, CTRPacket) ->
     gen_server:cast(Pid,{push_0,CTRPacket}).
 
@@ -143,7 +148,7 @@ init([ConnPid,ClientId,CleanSession]) ->
     IsPersistent = not CleanSession,
     Persist =
         if  IsPersistent -> fun(SO) -> mqtt_session_repo:save(ClientId,SO),SO end;
-            true    -> fun(SO) -> SO end
+            true    ->      fun(SO) -> SO end
         end,
     SO1 = load_session(ClientId,IsPersistent,NewSeq),
     S = #state{client_id = ClientId,
@@ -186,8 +191,9 @@ handle_call({pub_rec,PacketId}, _From,  S = #state{session = SO,
 
 handle_call({pub_comp,PacketId}, _From,  S = #state{session = SO,
                                                     persist = Persist}) ->
-    SO1 = mqtt_session:pub_comp(PacketId,SO),
+    {ToSend,SO1} = mqtt_session:pub_comp(PacketId,SO),
     Persist(SO1),
+    send_to_client(S,ToSend),
     {reply,ok,S#state{session = SO1}};
 
 handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
@@ -198,6 +204,7 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
     QoSResults = [{ok,QoS} || {_,QoS} <- NewSubs], %% @todo: do we even need this?
     Persist(SO1),
     _Results = p_subscribe(ClientId,Seq,NewSubs),
+    error_logger:info_msg("Successfully subscribed ~p to ~p~n",[self(),NewSubs]),
     {reply,QoSResults,S#state{session = SO1}};
 
 handle_call({unsub,OldSubs}, _From, S = #state{session = SO,
@@ -232,13 +239,15 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_cast({push,Packet,Filter,{FromPid,Ref}},S = #state{session = SO,
-                                                          persist = Persist,
-                                                          client_id = ClientId}) ->
+handle_cast({push,Packet = #packet{seq = Seq},Filter,FromPid},S = #state{session = SO,
+                                                                         persist = Persist,
+                                                                         client_id = ClientId}) ->
+    error_logger:info_msg("Received {push,~p}~n",[Packet]),
     {ToSend,SO1} = mqtt_session:push(Filter,Packet,SO),
     Persist(SO1),
+    error_logger:info_msg("Sending packages ~p~n",[ToSend]),
     %% @todo: maybe combine the two casts into one???
-    mqtt_router:ack(FromPid,ClientId,Ref),
+    mqtt_router:ack(FromPid,ClientId,Seq),
     mqtt_router:pull(FromPid,1,ClientId),
     send_to_client(S,ToSend),
     {noreply,S#state{session = SO1}};
@@ -306,7 +315,8 @@ handle_info(_Info, State) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
 
-terminate(_Reason,S) ->
+terminate(Reason,S) ->
+    error_logger:info_msg("Terminating ~p for reason ~p~n",[self(),Reason]),
     cleanup(S).
 
 %%--------------------------------------------------------------------
@@ -363,10 +373,10 @@ load_session(ClientId,_IsPersistent = false,NewSeq) ->
     SO1.
 
 p_subscribe(ClientId,Seq,Subs) ->
-    rpc:pmap({?MODULE,subscribe},[ClientId,Seq,?DEFAULT_WSZIE],Subs).
+    rpc:pmap({?MODULE,subscribe},[self(),ClientId,Seq,?DEFAULT_WSZIE],Subs).
 
-subscribe({Filter,QoS},ClientId,CSeq,WSize) ->
-    mqtt_router:subscribe(Filter,ClientId,QoS,CSeq,WSize).
+subscribe({Filter,QoS},Pid,ClientId,CSeq,WSize) ->
+    mqtt_router:subscribe(Filter,Pid,ClientId,CSeq,QoS,WSize).
 
 p_unsubscribe(ClientId,CSeq,Filters) ->
     rpc:pmap({?MODULE,unsubscribe},[ClientId,CSeq],Filters).
@@ -375,6 +385,7 @@ unsubscribe(Filter,ClientId,Seq) ->
     mqtt_router:unsubscribe(Filter,ClientId,Seq).
 
 p_resume(ClientId,CSeq,Subs) ->
+    error_logger:info_msg("Now Going to resume sub ~p for clientId ~p~n",[Subs,ClientId]),
     Mons = rpc:pmap({?MODULE,resume},[ClientId,CSeq,?DEFAULT_WSZIE],Subs),
     Filters = [Filter || {Filter,_,_} <- Subs],
     dict:from_list(lists:zip(Mons,Filters)).

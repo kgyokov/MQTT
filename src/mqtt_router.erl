@@ -22,11 +22,11 @@
     fwd_message/2,
     call_msg_local/2,
     cast_msg_local/2,
-    subscribe/5,
+    subscribe/6,
     unsubscribe/3,
     resume_sub/4,
     ack/3,
-    pull/3]).
+    pull/3, get_retained/1]).
 
 -ifdef(TEST).
     -export([get_batches_to_send/2]).
@@ -43,17 +43,31 @@
 global_route(#mqtt_message{topic = Topic,
                            qos = MsgQoS,
                            retain = Retain,
-                           content = Content}) ->
+                           content = Content} = M) ->
     Subs = get_matching_subs(Topic),
     Packet = #packet{topic = Topic,
                      content = Content,
                      qos = MsgQoS,
                      retain = Retain},
+    mqtt_topic_repo:enqueue(Topic,M),
+    error_logger:info_msg("Pushing message ~p to subs ~p~n",[M,Subs]),
     [mqtt_sub:push(Sub,Packet) || Sub <- Subs],
     ok.
 
-ack(FromPid,ClientId,Ref) ->
-    mqtt_sub:ack(FromPid,ClientId,Ref).
+%% Hiding mqtt_topic_repo for consistency
+get_retained(Filters) ->
+    [#packet{topic = Topic,
+             retain = true,
+             seq = Seq,
+             content = Content,
+             qos = QoS}||
+            #mqtt_message{topic = Topic,
+                          seq = Seq,
+                          content = Content,
+                          qos = QoS} <- mqtt_topic_repo:get_retained(Filters)].
+
+ack(FromPid,ClientId,Seq) ->
+    mqtt_sub:ack(FromPid,ClientId,Seq).
 
 pull(FromPid,WSize,ClientId) ->
     mqtt_sub:pull(FromPid,WSize,ClientId).
@@ -98,17 +112,17 @@ fwd_message(Reg = {_,QoS,Pid},CTRPacket) ->
 %%        [mqtt_sub:get_live_clients(Sub) || Sub <- get_matching_subs(Topic)]
 %%    ).
 
-subscribe(Filter,ClientId,CSeq,QoS,WSize) ->
+subscribe(Filter,SubPid,ClientId,CSeq,QoS,WSize) ->
     Pid = get_sub(Filter),
-    mqtt_sub:subscribe_self(Pid,ClientId,CSeq,QoS,WSize).
-
+    mqtt_sub:subscribe_self(Pid,SubPid,ClientId,CSeq,QoS,WSize).
 
 unsubscribe(Filter,ClientId,Seq) ->
     Pid = get_sub(Filter),
     mqtt_sub:cancel(Pid,ClientId,Seq).
 
 
-resume_sub(ClientId,CSeq,_Sub = {Filter,QoS,From},WSize) ->
+resume_sub(ClientId,CSeq,Sub = {Filter,QoS,From},WSize) ->
+     error_logger:info_msg("Now Resuming sub ~p~n",[Sub]),
      Pid = get_sub(Filter),
      mqtt_sub:resume(Pid,ClientId,CSeq,QoS,From,WSize),
      monitor(process,Pid).
@@ -147,7 +161,7 @@ highest_qos_per_client(Regs) ->
 batch_per_node(ClientRegs) ->
     RegsPerNode = group_by_node(ClientRegs),
     lists:flatmap(fun({Node,NodeRegs}) ->
-        [{Node,Batch} || Batch <-split_into_batches(?BATCH_SIZE,NodeRegs)]
+        [{Node,Batch} || Batch <- split_into_batches(?BATCH_SIZE,NodeRegs)]
     end,
         RegsPerNode).
 
@@ -165,7 +179,7 @@ split_into_batches(Len,L,B) when length(L) =< Len ->
 
 group_by_node(Regs) ->
     NodeRegs = [{node(Pid), Reg} || Reg = {_,_,Pid} <- Regs],
-    Groups = lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end, dict:new(), NodeRegs),
+    Groups = lists:foldl(fun({K,V}, D) -> dict:append(K, V, D) end, dict:new(), NodeRegs),
     dict:to_list(Groups).
 
 

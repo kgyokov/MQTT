@@ -27,7 +27,7 @@
     %% last_ack = 0  ::non_neg_integer(),   %% the filter-assigned sequence number of the last message processed by this client,
     last_in_q = 0                       ::non_neg_integer(),    %% the last message sent to the client
     window = 0                          ::non_neg_integer(),    %% How many messages the client has requested
-    retained_iter = versioned_set:new()    :: versioned_set:set(),                %% the retained messages to send to the client
+    retained_iter                       :: versioned_set:iter(),                %% the retained messages to send to the client
     last_retained = 0                   ::non_neg_integer()    %% the retained message sequence for this subscription
 }).
 
@@ -79,6 +79,7 @@ concat(Gen,{ToTakeAcc,TakenAcc,Q,S}) ->
 
 enumerate(IsRetained,Seq,Packets) ->
     IncFun = inc_fun(IsRetained,Seq),
+    error_logger:info_msg("enumerating ~p~n",[Packets]),
     {EnumPs,_} = lists:mapfoldl(fun(P,Seq) -> {P#packet{retain = IsRetained, seq = Seq},IncFun(Seq)} end,Seq,Packets),
     EnumPs.
 
@@ -106,7 +107,7 @@ iterator_from(undefined,WSize,Q,Ret,Sub) ->
 iterator_from({RetSeq,QSeq},WSize,Q,Ret,Sub) ->
     ActualQSeq = max(QSeq,shared_queue:min_seq(Q)),
     Sub1 = Sub#sub{last_in_q = ActualQSeq},
-    Sub2 = resume_retained(RetSeq,ActualQSeq,Ret,Sub1),
+    Sub2 = resume_retained({RetSeq,ActualQSeq},Ret,Sub1),
     take(WSize,Q,Sub2).
 
 %% @doc
@@ -114,10 +115,10 @@ iterator_from({RetSeq,QSeq},WSize,Q,Ret,Sub) ->
 %% @end
 resubscribe(QoS,Q,Ret,Sub = #sub{last_in_q = QSeq}) ->
     Sub1 = Sub#sub{qos = QoS},
-    Sub2 = resume_retained(0,QSeq,Ret,Sub1),
+    Sub2 = resume_retained({0,QSeq},Ret,Sub1),
     take(0,Q,Sub2).
 
-resume_retained(RetSeq,QSeq,Ret,Sub) ->
+resume_retained({RetSeq,QSeq},Ret,Sub) ->
     RetIter = versioned_set:iterator_from(QSeq,RetSeq,Ret),
     Sub#sub{retained_iter = RetIter,
             last_retained = RetSeq}.

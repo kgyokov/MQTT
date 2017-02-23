@@ -55,27 +55,27 @@ push_on_no_subscriptions_drops_packet([SO,Packet]) ->
     ?_assertMatch({[],SO},Result).
 
 push_from_unknown_filter_drops_packet([SO,Packet]) ->
-    Sub = {<<"TestFilter">>,?QOS_1,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter">>,?QOS_1},
     SO1 = mqtt_session:subscribe([Sub],SO),
     Result = mqtt_session:push(<<"Not_TestFilter">>,Packet,SO1),
     ?_assertMatch({[],SO1},Result).
 
 push_of_duplicate_packet_drops_packet([SO,Packet]) ->
-    Sub = {<<"TestFilter">>,?QOS_1,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter">>,?QOS_1},
     SO1 = mqtt_session:subscribe([Sub],SO),
     {_,SO2} = mqtt_session:push(<<"Not_TestFilter">>,Packet,SO1),
     Result = mqtt_session:push(<<"Not_TestFilter">>,Packet,SO2),
     ?_assertMatch({[],SO1},Result).
 
 push_from_matching_filter_emits_packet([SO,Packet]) ->
-    Sub = {<<"TestFilter/+">>,?QOS_1,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter/+">>,?QOS_1},
     SO1 = mqtt_session:subscribe([Sub],SO),
     Packet1 = Packet#packet{topic = <<"TestFilter/A">>},
     Result = mqtt_session:push(<<"TestFilter/+">>,Packet1,SO1),
     ?_assertMatch({[#'PUBLISH'{}],_SO2},Result).
 
 push_on_empty_buffer_emits_packet([SO,Packet]) ->
-    Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter">>,?QOS_2},
     SO1 = mqtt_session:subscribe([Sub],SO),
     Result = mqtt_session:push(<<"TestFilter">>,Packet,SO1),
     ?_assertMatch(
@@ -83,7 +83,7 @@ push_on_empty_buffer_emits_packet([SO,Packet]) ->
         Result).
 
 push_on_half_full_buffer_emits_packet([SO,Packet1]) ->
-    Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter">>,?QOS_2},
     SO1 = mqtt_session:subscribe([Sub],SO),
     Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
     {_,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
@@ -93,7 +93,7 @@ push_on_half_full_buffer_emits_packet([SO,Packet1]) ->
         Result).
 
 push_on_full_buffer_queues_packet([SO,Packet1]) ->
-    Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter">>,?QOS_2},
     SO1 = mqtt_session:subscribe([Sub],SO),
     Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
     Packet3 = Packet2#packet{content = <<3>>, seq = {q,3}},
@@ -109,7 +109,7 @@ push_on_full_buffer_queues_packet([SO,Packet1]) ->
 %% =====================================================================================
 
 ack_on_full_session_emits_next_packet([SO,Packet1]) ->
-    Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter">>,?QOS_2},
     SO1 = mqtt_session:subscribe([Sub],SO),
 
     Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
@@ -125,7 +125,7 @@ ack_on_full_session_emits_next_packet([SO,Packet1]) ->
         Result).
 
 rec_on_full_session_emits_next_packet([SO,Packet1]) ->
-    Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter">>,?QOS_2},
     SO1 = mqtt_session:subscribe([Sub],SO),
 
     Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
@@ -141,7 +141,7 @@ rec_on_full_session_emits_next_packet([SO,Packet1]) ->
         Result).
 
 push_emits_packet_w_correct_values([SO,Packet]) ->
-    Sub = {<<"TestFilter">>,?QOS_2,mqtt_seq:bottom()},
+    Sub = {<<"TestFilter">>,?QOS_2},
     SO1 = mqtt_session:subscribe([Sub],SO),
     Result= mqtt_session:push(<<"TestFilter">>,Packet,SO1),
     ?_assertMatch(

@@ -188,10 +188,8 @@ pub_rec(PacketId,SO) ->
     SO1 =
         case orddict:find(AckSeq,Msgs) of
             {ok,_} ->
-                {ok,
-                    SO#outgoing{qos2 = orddict:erase(AckSeq,Msgs),
-                                qos2_rec = ordsets:add_element(AckSeq,Ack)}
-                };
+                SO#outgoing{qos2 = orddict:erase(AckSeq,Msgs),
+                            qos2_rec = ordsets:add_element(AckSeq,Ack)};
             error -> SO
         end,
     {[to_pubrel(PacketId)],SO1}.

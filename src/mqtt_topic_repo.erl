@@ -12,7 +12,7 @@
 -include("mqtt_internal_msgs.hrl").
 
 
--export([enqueue/2, get_retained/1, new/1]).
+-export([enqueue/2, get_retained/1]).
 
 -record(queue_msg,{
     retained    ::boolean(),
@@ -63,16 +63,13 @@ delete_tables() ->
 %% ====================================================================
 %%  API
 %% ====================================================================
-new(Topic) ->
-    #mqtt_topic{topic = Topic}.
-
 
 enqueue(Topic, Msg) ->
     Fun =
         fun() ->
             R =
                 case mnesia:read(?TOPIC_RECORD, Topic, write) of
-                    [] ->   new(Topic);
+                    [] ->   #mqtt_topic{topic = Topic};
                     [S]->   S
                 end,
             mqtt_filter_index:add_topic(Topic),
@@ -92,7 +89,11 @@ get_retained(Filters) ->
           }|| Topic <- Topics],
     RetainedMsgs = mnesia:dirty_select(?TOPIC_RECORD,Ms),
     error_logger:info_msg("Read msgs ~p",[RetainedMsgs]),
-    [{Topic,Content,ClientSeq,QoS}
+    [#mqtt_message{content = Content,
+                   qos = QoS,
+                   seq = ClientSeq,
+                   topic = Topic,
+                   retain = true}
      || [Topic, #queue_msg{qos = QoS,
                            content = Content,
                            client_seq = ClientSeq,
