@@ -622,5 +622,5 @@ combine_results([{error,_}|ART], SubResults, Acc) ->
 combine_results([ok|ART], [{ok,QoS}|SRT], Acc) ->
     combine_results(ART,SRT,[QoS|Acc]);
 
-combine_results([ok|ART], [{error,_} |SRT], Acc) ->
+combine_results([ok|ART], [{error,_}|SRT], Acc) ->
     combine_results(ART,SRT,[?SUBSCRIPTION_FAILURE|Acc]).

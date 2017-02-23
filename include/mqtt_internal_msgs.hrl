@@ -34,6 +34,6 @@
     content     ::content(),
     retain      ::boolean(),
     qos         ::qos(),
-    seq ::any()
+    seq         ::any()
 }).
 

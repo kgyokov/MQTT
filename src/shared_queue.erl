@@ -12,7 +12,6 @@
 %% API
 -export([new/0, new/1, pushr/2, remove/2, add_client/2, add_client/3, forward/3, min_seq/1, max_seq/1, take/3]).
 
--define(SEQ_MONOID,sequence_monoid).
 -define(DEFAULT_SEQ,0).
 
 -record(shared_q,{
