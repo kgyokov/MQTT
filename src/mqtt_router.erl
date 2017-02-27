@@ -22,9 +22,9 @@
     fwd_message/2,
     call_msg_local/2,
     cast_msg_local/2,
-    subscribe/6,
+    %%subscribe/6,
     unsubscribe/3,
-    resume_sub/4,
+    resume_sub/5,
     ack/3,
     pull/3, get_retained/1]).
 
@@ -112,20 +112,20 @@ fwd_message(Reg = {_,QoS,Pid},CTRPacket) ->
 %%        [mqtt_sub:get_live_clients(Sub) || Sub <- get_matching_subs(Topic)]
 %%    ).
 
-subscribe(Filter,SubPid,ClientId,CSeq,QoS,WSize) ->
-    Pid = get_sub(Filter),
-    mqtt_sub:subscribe_self(Pid,SubPid,ClientId,CSeq,QoS,WSize).
-
 unsubscribe(Filter,ClientId,Seq) ->
     Pid = get_sub(Filter),
     mqtt_sub:cancel(Pid,ClientId,Seq).
 
+resume_sub(SubPid,ClientId,CSeq,{Filter,QoS,pending},WSize) ->
+    Pid = get_sub(Filter),
+    {ok,ResumingFrom} = mqtt_sub:subscribe_self(Pid,SubPid,ClientId,CSeq,QoS,WSize),
+    {ok,ResumingFrom,monitor(process,Pid)};
 
-resume_sub(ClientId,CSeq,Sub = {Filter,QoS,From},WSize) ->
+resume_sub(SubPid,ClientId,CSeq,Sub = {Filter,QoS,From},WSize) ->
      error_logger:info_msg("Now Resuming sub ~p~n",[Sub]),
      Pid = get_sub(Filter),
-     mqtt_sub:resume(Pid,ClientId,CSeq,QoS,From,WSize),
-     monitor(process,Pid).
+     {ok,ResumingFrom} = mqtt_sub:resume(Pid,SubPid,ClientId,CSeq,QoS,From,WSize),
+     {ok,ResumingFrom,monitor(process,Pid)}.
 
 %%resume_sub(ClientId,CSeq,Sub = {Filter,QoS}) ->
 %%    [begin

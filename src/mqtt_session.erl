@@ -24,7 +24,8 @@
     msg_in_flight/1,
     new/0,
     new/1,
-    find_sub/2]).
+    find_sub/2,
+    set_seq/2]).
 
 -define(DEFAULT_MAX_WINDOW,20).
 
@@ -42,7 +43,7 @@
     qos2_rec
 }).
 
-
+%% @todo: simplify
 
 %% ================================================================================
 %% SUBSCRIPTIONS
@@ -69,16 +70,26 @@ get_subs(#outgoing{subs = Subs}) ->
     #outgoing{}.
 
 subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
-    Subs1 = lists:foldl(fun maybe_add_sub/2,Subs,NewSubs),
-    S#outgoing{subs = Subs1}.
+    {Results,Subs1} = lists:mapfoldl(fun maybe_add_sub/2,Subs,NewSubs),
+    {Results, S#outgoing{subs = Subs1}}.
 
 maybe_add_sub({Filter,QoS},Subs) ->
     NewSub =
         case orddict:find(Filter,Subs) of
             {ok,{_,Seq}} -> {QoS,Seq};
-            error        -> {QoS,undefined}
+            error        -> {QoS,pending}
         end,
-    orddict:store(Filter,NewSub,Subs).
+    {QoS1,Seq1} = NewSub,
+    {{Filter,QoS1,Seq1},orddict:store(Filter,NewSub,Subs)}.
+
+set_seq(FiltersSeq,S = #outgoing{subs = Subs}) ->
+    S#outgoing{subs = lists:foldl(fun set_seq_for_filter/2,Subs,FiltersSeq)}.
+
+set_seq_for_filter({Filter,Seq},Subs) ->
+    case orddict:find(Filter,Subs) of
+        {ok,{QoS,_}} -> orddict:store(Filter,{QoS,Seq},Subs);
+        _ -> Subs
+    end.
 
 %% @doc
 %% Removes existing subscriptions from the session data
@@ -105,9 +116,7 @@ push(Filter,Packet = #packet{seq = Seq},SO = #outgoing{subs = Subs}) ->
     case sub_exists(Filter,Subs) of
         false -> {[],SO};
         true ->
-            SO1 = SO#outgoing{subs = orddict:update(Filter,
-                                            fun({QoS,_}) -> {QoS,Seq} end,
-                                    Subs)},
+            SO1 = SO#outgoing{subs = set_seq_for_filter({Filter,Seq},Subs)},
             send_or_enqueue(Packet,SO1)
     end.
 

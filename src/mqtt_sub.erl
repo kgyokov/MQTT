@@ -27,7 +27,8 @@
     pull/3,
     ack/3,
     push/2,
-    new/1, resume/6]).
+    new/1,
+    resume/7]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -76,7 +77,7 @@ start_link(Filter,Repo) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a Client subscription
+%% Creates a Client subscription @todo: Maybe treat subscribe and resume the same???
 %% @end
 %%--------------------------------------------------------------------
 -spec(subscribe_self(Pid::pid(),SubPid::pid(),ClientId::client_id(),CSeq::non_neg_integer(),
@@ -85,11 +86,11 @@ start_link(Filter,Repo) ->
 subscribe_self(Pid,SubPid,ClientId,CSeq,QoS,WSize) ->
     gen_server:call(Pid,{sub,SubPid,ClientId,CSeq,QoS,WSize}).
 
--spec(resume(Pid::pid(), ClientId::client_id(), CSeq::non_neg_integer(),
+-spec(resume(Pid::pid(), SubPid::pid(), ClientId::client_id(), CSeq::non_neg_integer(),
              Qos::qos(), ResumeFrom::any(), WSize::non_neg_integer())
         -> ok).
-resume(Pid,ClientId,CSeq,QoS,ResumeFrom,WSize) ->
-    gen_server:call(Pid,{resume,ClientId,CSeq,QoS,ResumeFrom,WSize}).
+resume(Pid,SubPid,ClientId,CSeq,QoS,ResumeFrom,WSize) ->
+    gen_server:call(Pid,{resume,SubPid,ClientId,CSeq,QoS,ResumeFrom,WSize}).
 
 
 %%%===================================================================
@@ -174,8 +175,8 @@ init([Filter, _Repo]) ->
 handle_call({sub,SubPid,ClientId,CSeq,QoS,WSize},_,S) ->
     handle_sub(ClientId,CSeq,QoS,WSize,SubPid,S);
 
-handle_call({resume,ClientId,CSeq,QoS,ResumeFrom,WSize},{Pid,_},S) ->
-    handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S);
+handle_call({resume,SubPid,ClientId,CSeq,QoS,ResumeFrom,WSize},_From,S) ->
+    handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},SubPid,S);
 
 handle_call({unsub,ClientId,Seq}, _From,S) ->
     error_logger:info_msg("Received handle unsub for client_id ~p~n",[ClientId]),
@@ -370,8 +371,7 @@ handle_sub(ClientId,CSeq,QoS,WSize,Pid,S = #state{filter = Filter,
         error ->
             error_logger:info_msg("Saving brand new subscription ~p~n",[NewSub]),
             mqtt_sub_repo:save_sub(Filter,NewSub),
-            S1 = insert_new_sub(NewSub,WSize,S),
-            {reply,ok,S1};
+            insert_new_sub(NewSub,WSize,S);
         {ok,{_,Sub}} ->
             error_logger:info_msg("Detecting existing subscription ~p~n",[Sub]),
             case mqtt_sub_state:is_old(CSeq,Sub) of
@@ -389,8 +389,7 @@ handle_sub(ClientId,CSeq,QoS,WSize,Pid,S = #state{filter = Filter,
                 false ->
                     error_logger:info_msg("Saving new subscription ~p~n",[NewSub]),
                     mqtt_sub_repo:save_sub(Filter,NewSub),
-                    S1 = resubscribe(ClientId,QoS,Pid,Sub,S),
-                    {reply,ok,S1}
+                    resubscribe(ClientId,QoS,Pid,Sub,S)
             end
     end.
 
@@ -417,7 +416,7 @@ handle_unsub(ClientId,CSeq, S = #state{filter = Filter,
                                  retained = Ret1,
                                  garbage = ?MONOID:as(Garbage,MoreGarbage)},
                     case dict:size(Subs1) of
-                        %0 -> {stop,no_subs,ok,S1}; %% @todo; hibernate???
+                        %0 -> {stop,no_subs,ok,S1}; %% @todo: hibernate???
                         _ -> {reply,ok,S1}
                     end
 
@@ -433,26 +432,29 @@ handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S = #state{filter = Filte
             error -> true;
             {ok,{_,Sub}} -> not mqtt_sub_state:is_old(CSeq,Sub)
         end,
-    S2 = case ShouldResume of
-            true ->
-                {Packets,Sub1} = mqtt_sub_state:new(CSeq,QoS,ResumeFrom,WSize,SQ,Ret),
-                error_logger:info_msg("Resuming existing sub from ~p, sending messages for filter ~p ~p ,queue = ~p retained = ~p~n",[ResumeFrom,Filter,Packets,SQ,Ret]),
-                S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs)},
-                send_packets_to_client(Pid,Filter,Packets),
-                S1;
-            _ -> S
-        end,
-    {reply,ok,S2}.
+    case ShouldResume of
+        true ->
+            {ResumingFrom,Sub1} = mqtt_sub_state:new(CSeq,QoS,ResumeFrom,SQ,Ret),
+            {Packets,Sub2} = mqtt_sub_state:take(WSize,SQ,Sub1),
+            error_logger:info_msg("Resuming existing sub from ~p, sending messages for filter ~p ~p ,queue = ~p retained = ~p~n",[ResumeFrom,Filter,Packets,SQ,Ret]),
+            S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub2},Subs)},
+            send_packets_to_client(Pid,Filter,Packets),
+            {reply,{ok,ResumingFrom},S1};
+        _ ->
+            {reply,duplicate,S}
+    end.
 
 insert_new_sub({ClientId,CSeq,QoS,Pid},WSize,S = #state{filter = Filter,
                                                         live_subs = Subs,
                                                         queue = Q,
                                                         retained = Ret}) ->
-    {Packets,Sub} = mqtt_sub_state:new(CSeq,QoS,WSize,Q,Ret),
+    {ResumingFrom,Sub} = mqtt_sub_state:new(CSeq,QoS,Q,Ret),
+    {Packets,Sub1} = mqtt_sub_state:take(WSize,Q,Sub),
     error_logger:info_msg("Subscribed to new sub ~p with window size ~p, sending retained messages for filter ~p ~p from ~p~n",[Sub,WSize,Filter,Packets,Ret]),
+    S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs),
+                 queue = shared_queue:add_client(ClientId,Q)},
     send_packets_to_client(Pid,Filter,Packets),
-    S#state{live_subs = dict:store(ClientId,{Pid,Sub},Subs),
-            queue = shared_queue:add_client(ClientId,Q)}.
+    {reply,{ok,ResumingFrom},S1}.
 
 %%
 %% Only update existing properties - this is not a new subscription
@@ -461,10 +463,12 @@ resubscribe(ClientId,QoS,Pid,Sub,S = #state{filter = Filter,
                                             retained = Ret,
                                             queue = Q,
                                             live_subs = Subs}) ->
-    {Packets,Sub1} = mqtt_sub_state:resubscribe(QoS,Q,Ret,Sub),
+    {ResumingFrom,Sub1} = mqtt_sub_state:resubscribe(QoS,Ret,Sub),
+    {Packets,Sub2} = mqtt_sub_state:take_any(Q,Sub1),
     error_logger:info_msg("Resubscribed to old sub with window size ~p, sending retained messages for filter ~p ~p or ~p~n",[Filter,Packets,Ret]),
+    S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub2},Subs)},
     send_packets_to_client(Pid,Filter,Packets),
-    S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs)}.
+    {reply,{ok,ResumingFrom},S1}.
 
 %% @doc
 %% We know that a client is subscribed to a queue, we just don't know the index (Seq number)

@@ -14,9 +14,9 @@
 %% API
 -export([take/3,
     take_any/2,
+    new/4,
     new/5,
-    new/6,
-    resubscribe/4,
+    resubscribe/3,
     is_old/2]).
 
 -record(sub, {
@@ -89,36 +89,36 @@ inc_fun(false,{_,QSeq}) ->
 inc_fun(true,{RetSeq,_}) ->
     fun({_,QSeq1}) -> {RetSeq,QSeq1 + 1} end.
 
-new(CSeq,QoS,WSize,Q,Ret) ->
-    new(CSeq,QoS,undefined,WSize,Q,Ret).
+new(CSeq,QoS,Q,Ret) ->
+    new(CSeq,QoS,undefined,Q,Ret).
 
-new(CSeq,QoS,From,WSize,Q,Ret) ->
+new(CSeq,QoS,From,Q,Ret) ->
     Sub = #sub{client_seq = CSeq,
                qos = QoS},
-    iterator_from(From,WSize,Q,Ret,Sub).
+    iterator_from(From,Q,Ret,Sub).
 
 %% @doc
 %% Picking a subscription back up from where we left off
 %% @end
-iterator_from(undefined,WSize,Q,Ret,Sub) ->
-    ResumeAt = {0,shared_queue:max_seq(Q)},
-    iterator_from(ResumeAt,WSize,Q,Ret,Sub);
+iterator_from(undefined,Q,Ret,Sub) ->
+    Seq = {0,shared_queue:max_seq(Q)},
+    iterator_from(Seq,Q,Ret,Sub);
 
-iterator_from({RetSeq,QSeq},WSize,Q,Ret,Sub) ->
+iterator_from({RetSeq,QSeq},Q,Ret,Sub) ->
     ActualQSeq = max(QSeq,shared_queue:min_seq(Q)),
+    ActualSeq = {RetSeq,ActualQSeq},
     Sub1 = Sub#sub{last_in_q = ActualQSeq},
-    Sub2 = resume_retained({RetSeq,ActualQSeq},Ret,Sub1),
-    take(WSize,Q,Sub2).
+    resume_retained(ActualSeq,Ret,Sub1).
 
 %% @doc
 %% Re-subscribing to existing subscription
 %% @end
-resubscribe(QoS,Q,Ret,Sub = #sub{last_in_q = QSeq}) ->
+resubscribe(QoS,Ret,Sub = #sub{last_in_q = QSeq}) ->
     Sub1 = Sub#sub{qos = QoS},
-    Sub2 = resume_retained({0,QSeq},Ret,Sub1),
-    take(0,Q,Sub2).
+    Seq = {0,QSeq},
+    resume_retained(Seq,Ret,Sub1).
 
-resume_retained({RetSeq,QSeq},Ret,Sub) ->
+resume_retained(Seq = {RetSeq,QSeq},Ret,Sub) ->
     RetIter = versioned_set:iterator_from(QSeq,RetSeq,Ret),
-    Sub#sub{retained_iter = RetIter,
-            last_retained = RetSeq}.
+    {Seq, Sub#sub{retained_iter = RetIter,
+                  last_retained = RetSeq}}.
