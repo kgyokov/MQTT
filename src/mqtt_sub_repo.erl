@@ -196,7 +196,7 @@ get_filter_claim(Filter) ->
         [{'=:=', '$1', Filter},{'=/=', '$2', undefined}],
         ['$2']
     }],
-    case mnesia:dirty_select(?SUB_RECORD, Spec) of
+    case mnesia:dirty_select(?SUB_REG_RECORD, Spec) of
         [] -> error;
         [Pid] -> {ok,Pid}
     end.
