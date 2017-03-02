@@ -33,9 +33,13 @@ new(Seq) ->
               queue       = monoid_sequence:empty(),
               last_seq    = Seq}.
 
-pushr(El,SQ = #shared_q{last_seq = Seq,queue = Q}) ->
+pushr(El,SQ = #shared_q{last_seq = Seq,queue = Q,client_seqs = Offsets}) ->
     Seq1 = Seq+1,
-    SQ#shared_q{last_seq = Seq1,queue = monoid_sequence:pushr_w_seq(Seq1,El,Q)}.
+    Q1 = case min_val_tree:is_empty(Offsets) of
+             true -> monoid_sequence:pushr_w_seq(Seq1,El,Q);
+             false -> Q
+         end,
+    SQ#shared_q{last_seq = Seq1,queue = Q1}.
 
 forward(ClientId,ToSeq,SQ = #shared_q{client_seqs = Offsets}) ->
     Offsets1 = min_val_tree:store(ClientId,ToSeq,Offsets),
