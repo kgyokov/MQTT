@@ -208,7 +208,7 @@ handle_call({sub,NewSubs}, _From,  S = #state{session = SO,
     Persist(SO1),
     Results = p_resume(ClientId,CSeq,Subs),
     S1 = resume_results(Results,Mons,SO1,S),
-    Persist(S#state.session),
+    Persist(S1#state.session),
     error_logger:info_msg("Successfully subscribed ~p to ~p~n",[self(),NewSubs]),
     {reply,QoSResults,S1};
 

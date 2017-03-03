@@ -126,6 +126,13 @@ sub_persistence_test_() ->
                             mqtt_sub_repo:claim_filter(<<"/A/+">>, OtherPid),
                             ?lists_are_equal([{<<"/+/1">>, self()},{<<"/A/+">>, OtherPid}], mqtt_sub_repo:get_matching_subs(<<"/A/1">>))
                         end
+                    },
+                    {spawn,
+                        fun() ->
+                            Pid = self(),
+                            mqtt_sub_repo:claim_filter(<<"/+/1">>, Pid),
+                            ?assertEqual({ok,Pid},mqtt_sub_repo:get_filter_claim(<<"/+/1">>))
+                        end
                     }
                 ]
             %%}
