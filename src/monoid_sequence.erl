@@ -10,33 +10,26 @@
 -author("Kalin").
 
 -behavior(gen_monoid).
--export([id/0, as/2, ms/1,
-    split_by_seq/2,
-    pushr_w_seq/3,
-    get_monoid_val/2, extract_val/1]).
+
+-export([id/0, as/2, ms/1]).
+-export([split_by_seq/2,pushr_w_seq/3,get_monoid_val/2,extract_val/1]).
 
 -include("mqtt_internal_msgs.hrl").
 -include("finger_tree.hrl").
 
 %% MONOID implementation
 
-id() -> {0,0,0}.
-as({MaxSeq1,Count1,NotQoS0_1},
-   {MaxSeq2,Count2,NotQoS0_2}) ->
-    {max(MaxSeq1,MaxSeq2),
-     Count1 + Count2,
-     NotQoS0_1 + NotQoS0_2}.
-ms({Seq,#packet{qos = QoS}}) ->
-    {Seq,
-        1,
-        case QoS of
-            0 -> 0;
-            _ -> 1
-        end}.
+%% @doc
+%% @todo: optimize
+%% @end
+-define(MONOIDS,[monoid_seq,monoid_not_qos0]).
 
-get_monoid_val(sequence, {Val,_,_}) -> Val;
-get_monoid_val(count,    {_,Val,_}) -> Val;
-get_monoid_val(not_qos0, {_,_,Val}) -> Val.
+id()    -> [M:id()     || M <- ?MONOIDS].
+as(A,B) -> [M:as(A,B)  || M <- ?MONOIDS].
+ms(A)   -> [M:ms(A)    || M <- ?MONOIDS].
+
+get_monoid_val(seq,     [Val,_]) -> Val;
+get_monoid_val(not_qos0,[_,Val]) -> Val.
 
 %% Helper methods
 
@@ -44,6 +37,6 @@ pushr_w_seq(Seq,El,Q) ->
     pushr(Q,{Seq,El}).
 
 split_by_seq(Fun,Q) ->
-    split(fun({Seq,_,_}) -> Fun(Seq) end,Q).
+    split(fun({Seq,_}) -> Fun(Seq) end,Q).
 
-extract_val({Seq,Val}) -> Val.
+extract_val({_,Val}) -> Val.

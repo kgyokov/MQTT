@@ -9,5 +9,12 @@
 -module(monoid_count).
 -author("Kalin").
 
+-behavior(gen_monoid).
+
 %% API
--export([]).
+-export([id/0, as/2, ms/1]).
+
+
+id() -> 0.
+as(A, B) -> A + B.
+ms(_) -> 1.

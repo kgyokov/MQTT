@@ -18,7 +18,7 @@
 
 id() -> 0.
 as(NotQoS0_1,NotQoS0_2) -> NotQoS0_1 + NotQoS0_2.
-ms(#packet{qos = QoS}) ->
+ms({_,#packet{qos = QoS}}) ->
     case QoS of
         0 -> 0;
         _ -> 1
