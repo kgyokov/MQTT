@@ -9,7 +9,7 @@
 -module(mqtt_monoid_queue).
 -author("Kalin").
 
--behavior(gen_monoid).
+-behavior(monoid).
 
 %% API
 -export([id/0, as/2, ms/1]).

@@ -1,14 +1,13 @@
 %%%-------------------------------------------------------------------
 %%% @author Kalin
-%%% @copyright (C) 2016, <COMPANY>
+%%% @copyright (C) 2017, <COMPANY>
 %%% @doc
 %%%
 %%% @end
-%%% Created : 02. Mar 2016 11:51 PM
+%%% Created : 03. Mar 2017 8:33 PM
 %%%-------------------------------------------------------------------
--module(gen_monoid).
+-module(monoid_gb_tree).
 -author("Kalin").
 
--callback id() -> any().
--callback as(A::E,B::E) -> C::E.
--callback ms(A) -> A.
+%% API
+-export([]).
