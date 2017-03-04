@@ -398,11 +398,15 @@ unsubscribe(Filter,ClientId,Seq) ->
 %%    {ok,ResumingFrom,Mon} = mqtt_router:subscribe(Filter,Pid,ClientId,CSeq,QoS,WSize),
 %%    {Filter,ResumingFrom,Mon}.
 
+
 p_resume(ClientId,CSeq,Subs) ->
-    error_logger:info_msg("Now Going to resume sub ~p for clientId ~p~n",[Subs,ClientId]),
-    rpc:pmap({?MODULE,resume},[self(),ClientId,CSeq,?DEFAULT_WSZIE],Subs).
+    p_sub_or_resume(resume,ClientId,CSeq,Subs).
+
+p_sub_or_resume(Action,ClientId,CSeq,Subs) ->
+    rpc:pmap({?MODULE,Action},[self(),ClientId,CSeq,?DEFAULT_WSZIE],Subs).
 
 resume(Sub = {Filter,_,_},SubPid,ClientId,CSeq,WSize) ->
+    error_logger:info_msg("Now Going to resume sub ~p for clientId ~p~n",[Sub,ClientId]),
     {ok,ResumingFrom,Mon} = mqtt_router:resume_sub(SubPid,ClientId,CSeq,Sub,WSize),
     {Filter,ResumingFrom,Mon}.
 

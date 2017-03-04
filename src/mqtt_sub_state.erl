@@ -14,8 +14,8 @@
 %% API
 -export([take/3,
     take_any/2,
+    new/3,
     new/4,
-    new/5,
     resubscribe/3,
     is_old/2]).
 
@@ -25,10 +25,9 @@
     %% (incremented every time a new client process is spawned, used to choose
     %% between different instances of a Client in case of race conditions)
     %% last_ack = 0  ::non_neg_integer(),   %% the filter-assigned sequence number of the last message processed by this client,
-    last_in_q = 0                       ::non_neg_integer(),    %% the last message sent to the client
+    idx = {0,0}                         :: {non_neg_integer(),non_neg_integer()},
     window = 0                          ::non_neg_integer(),    %% How many messages the client has requested
-    retained_iter                       :: versioned_set:iter(),                %% the retained messages to send to the client
-    last_retained = 0                   ::non_neg_integer()    %% the retained message sequence for this subscription
+    retained_iter                       :: versioned_set:iter() %% the retained messages to send to the client
 }).
 
 is_old(MsgCSeq,#sub{client_seq = CSeq}) when CSeq >= MsgCSeq -> true;
@@ -54,19 +53,17 @@ take(ToTake,Q,Sub) ->
         ]).
 
 
-take_retained(ToTake,_Q,Sub = #sub{last_in_q     = LastInQ,
-                                   retained_iter = RetIter,
-                                   last_retained = RetSeq}) ->
-    {Taken,RetRest} = versioned_gb_tree:take(ToTake,RetIter),
+take_retained(ToTake,_Q,Sub = #sub{idx = {RetSeq,LastInQ},
+                                   retained_iter = RetIter}) ->
+    {Taken,RetRest} = gb_trees:take(ToTake,RetIter),
     RetPs = enumerate(true,{RetSeq,LastInQ},Taken),
     {RetPs,Sub#sub{retained_iter = RetRest,
-                   last_retained = RetSeq + length(Taken)}}.
+                   idx = {RetSeq + length(Taken),LastInQ}}}.
 
-take_queued(ToTake,Q,Sub = #sub{last_retained = RetSeq,
-                                last_in_q     = LastInQ}) ->
+take_queued(ToTake,Q,Sub = #sub{idx = {RetSeq,LastInQ}}) ->
     Taken = shared_queue:take(LastInQ,ToTake,Q),
     QPs = enumerate(false,{RetSeq,LastInQ},Taken),
-    {QPs,Sub#sub{last_in_q = LastInQ + length(Taken)}}.
+    {QPs,Sub#sub{idx = {RetSeq,LastInQ + length(Taken)}}}.
 
 take_all(ToTake,Q,S = #sub{window = WSize},Generators) ->
     AccStart = {ToTake + WSize,[],Q,S},
@@ -89,33 +86,34 @@ inc_fun(false,{_,QSeq}) ->
 inc_fun(true,{RetSeq,_}) ->
     fun({_,QSeq1}) -> {RetSeq,QSeq1 + 1} end.
 
-new(CSeq,QoS,Q,Ret) ->
-    new(CSeq,QoS,undefined,Q,Ret).
+new(CSeq,QoS,Q) ->
+    new(CSeq,QoS,undefined,Q).
 
-new(CSeq,QoS,From,Q,Ret) ->
+new(CSeq,QoS,From,Q) ->
     Sub = #sub{client_seq = CSeq,
                qos = QoS},
-    iterator_from(From,Q,Ret,Sub).
+    iterator_from(From,Q,Sub).
 
 %% @doc
 %% Picking a subscription back up from where we left off
 %% @end
-iterator_from(undefined,Q,Ret,Sub) ->
-    iterator_from({0,shared_queue:max_offset(Q)},Q,Ret,Sub);
+iterator_from(undefined,Q,Sub) ->
+    iterator_from({0,shared_queue:max_offset(Q)},Q,Sub);
 
-iterator_from({RetSeq,QSeq},Q,Ret,Sub) ->
+iterator_from({RetSeq,QSeq},Q,Sub) ->
     ActualQSeq = max(QSeq,shared_queue:min_offset(Q)),
-    Sub1 = Sub#sub{last_in_q = ActualQSeq},
-    resume_retained({RetSeq,ActualQSeq},Ret,Sub1).
+    resume_retained({RetSeq,ActualQSeq},Q,Sub).
 
 %% @doc
 %% Re-subscribing to existing subscription
 %% @end
-resubscribe(QoS,Ret,Sub = #sub{last_in_q = QSeq}) ->
+resubscribe(QoS,Q,Sub = #sub{idx  = {_,QSeq}}) ->
     Sub1 = Sub#sub{qos = QoS},
-    resume_retained({0,QSeq},Ret,Sub1).
+    resume_retained({0,QSeq},Q,Sub1).
 
-resume_retained(Seq = {RetSeq,QSeq},Ret,Sub) ->
-    RetIter = versioned_gb_tree:iterator_from(QSeq,RetSeq,Ret),
+resume_retained(Seq = {RetSeq,QSeq},Q,Sub) ->
+    {First,_} = shared_queue:split_by_seq(fun(Seq) -> Seq > QSeq end,Q),
+    Tree = shared_queue:get_back_acc(First),
+    RetIter = gb_trees:iterator_from(RetSeq,Tree),
     {Seq, Sub#sub{retained_iter = RetIter,
-                  last_retained = RetSeq}}.
+                  idx = Seq}}.
