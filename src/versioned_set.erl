@@ -13,23 +13,25 @@
 -author("Kalin").
 
 %% API
--export([new/0, new/2, append/4, get_at/2, iterator_from/3, truncate/2, size/1, remove/3, take/2, next/1, to_list/1]).
+-export([new/0, new/2, append/4, get_at/2, iterator_from/3, truncate/2, size/1, remove/3, take/2, next/1, to_list/1, update/3]).
+
+-export_type([set/1]).
 
 -record(s_set,{
-    log :: gb_trees:tree(neg_integer()|0,gb_trees:tree())
+    log :: gb_trees:tree(neg_integer()|0,_)
 }).
 
--type(set()::#s_set{}).
+-opaque set(Struct)::#s_set{log:: gb_trees:tree(neg_integer()|0,Struct)}.
 -opaque(iter()::gb_trees:iter()|nil).
 
--spec(new() -> set()).
+-spec(new() -> set(_)).
 new() -> new(0,gb_trees:empty()).
 
--spec(new(non_neg_integer(),gb_trees:tree()) -> set()).
+-spec(new(non_neg_integer(),Struct) -> set(Struct)).
 new(StartVer,Tree) ->
     #s_set{log = gb_trees:insert(-StartVer,Tree,gb_trees:empty())}.
 
--spec(append(any(),any(),non_neg_integer(), set()) -> set()).
+-spec(append(any(),any(),non_neg_integer(), set(Struct)) -> set(Struct)).
 append(Key,Val,Ver,Set) ->
     UpdateFun = fun(Last) -> gb_trees:enter(Key,Val,Last) end,
     add_new_version(Ver,Set,UpdateFun).
@@ -38,11 +40,15 @@ remove(Key, Ver,Set) ->
     UpdateFun = fun(Last) -> gb_trees:delete_any(Key,Last) end,
     add_new_version(Ver,Set,UpdateFun).
 
--spec get_at(non_neg_integer(),set()) -> gb_trees:iter().
+-spec update(non_neg_integer(),fun((Struct) -> Struct),set(Struct)) -> set(Struct).
+update(Ver,UpdateFun,Set) ->
+    add_new_version(Ver,Set,UpdateFun).
+
+-spec get_at(non_neg_integer(),set(_)) -> gb_trees:iter().
 get_at(Ver,Set) when Ver >= 0 ->
     iterator_from(Ver,0,Set).
 
--spec iterator_from(non_neg_integer(),non_neg_integer(),set()) -> gb_trees:iter().
+-spec iterator_from(non_neg_integer(),non_neg_integer(),set(_)) -> gb_trees:iter().
 iterator_from(Ver,Offset,Set) when Ver >= 0 ->
     TreeAtVer = get_tree_at(Ver,Set),
     gb_trees:iterator_from(Offset,TreeAtVer).
@@ -92,19 +98,28 @@ add_new_version(Ver,Set = #s_set{log = Log},Fun) when is_integer(Ver), Ver >= 0 
     Next = Fun(Last),
     Set#s_set{log = gb_trees:insert(-Ver,Next,Log)}.
 
--spec get_tree_at(non_neg_integer(),set()) -> gb_trees:tree().
+-spec get_tree_at(non_neg_integer(),set(Struct)) -> gb_trees:tree(Struct).
 get_tree_at(Ver,#s_set{log = Log}) ->
     Iter = gb_trees:iterator_from(-Ver,Log), %% the whole reason for storing negative Sequence numbers
     case gb_trees:next(Iter) of
-        none -> gb_trees:empty();
+        none ->
+            {_,LastVal} = gb_trees:smallest(Log),
+            LastVal;
         {_,Val,_} -> Val
     end.
 
--spec(truncate(non_neg_integer(), set()) -> set()).
+-spec(truncate(non_neg_integer(), set(Struct)) -> set(Struct)).
 truncate(Ver,Set = #s_set{log = Log}) ->
     %% @todo: OPTIMIZE!!!
     L = lists:takewhile(fun({Key,_}) -> Key =< -Ver end, gb_trees:to_list(Log)),
-    T = lists:foldl(fun({Key,Val},T) -> gb_trees:insert(Key,Val,T) end,gb_trees:empty(),L),
-    Set#s_set{log = T}.
+    T = gb_trees:from_orddict(L), %%lists:foldl(fun({Key,Val},T) -> gb_trees:insert(Key,Val,T) end,gb_trees:empty(),L),
+    NewLog =
+        case gb_trees:is_empty(T) of
+            true ->
+                {LastVer,LastVal} = gb_trees:smallest(Log),
+                gb_trees:insert(LastVer,LastVal,T);
+            false -> T
+        end,
+    Set#s_set{log = NewLog}.
 
 size(#s_set{log=Log}) -> gb_trees:size(Log).

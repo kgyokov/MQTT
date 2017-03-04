@@ -81,7 +81,8 @@ truncate_above_maximum_leaves_last_element() ->
     N1 = versioned_set:append(key2,val2,2,N),
     N2 = versioned_set:append(key3,val3,3,N1),
     Truncated = versioned_set:truncate(4,N2),
-    ?assertEqual(0, versioned_set:size(Truncated)).
+    ?assertEqual(1, versioned_set:size(Truncated)),
+    ?lists_are_equal([val2,val3], get_list_at(4,Truncated)).
 
 truncate_at_maximum_leaves_last_element() ->
     N = versioned_set:new(),
