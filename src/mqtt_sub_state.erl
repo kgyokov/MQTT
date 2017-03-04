@@ -57,7 +57,7 @@ take(ToTake,Q,Sub) ->
 take_retained(ToTake,_Q,Sub = #sub{last_in_q     = LastInQ,
                                    retained_iter = RetIter,
                                    last_retained = RetSeq}) ->
-    {Taken,RetRest} = versioned_set:take(ToTake,RetIter),
+    {Taken,RetRest} = versioned_gb_tree:take(ToTake,RetIter),
     RetPs = enumerate(true,{RetSeq,LastInQ},Taken),
     {RetPs,Sub#sub{retained_iter = RetRest,
                    last_retained = RetSeq + length(Taken)}}.
@@ -101,24 +101,21 @@ new(CSeq,QoS,From,Q,Ret) ->
 %% Picking a subscription back up from where we left off
 %% @end
 iterator_from(undefined,Q,Ret,Sub) ->
-    Seq = {0,shared_queue:max_seq(Q)},
-    iterator_from(Seq,Q,Ret,Sub);
+    iterator_from({0,shared_queue:max_offset(Q)},Q,Ret,Sub);
 
 iterator_from({RetSeq,QSeq},Q,Ret,Sub) ->
-    ActualQSeq = max(QSeq,shared_queue:min_seq(Q)),
-    ActualSeq = {RetSeq,ActualQSeq},
+    ActualQSeq = max(QSeq,shared_queue:min_offset(Q)),
     Sub1 = Sub#sub{last_in_q = ActualQSeq},
-    resume_retained(ActualSeq,Ret,Sub1).
+    resume_retained({RetSeq,ActualQSeq},Ret,Sub1).
 
 %% @doc
 %% Re-subscribing to existing subscription
 %% @end
 resubscribe(QoS,Ret,Sub = #sub{last_in_q = QSeq}) ->
     Sub1 = Sub#sub{qos = QoS},
-    Seq = {0,QSeq},
-    resume_retained(Seq,Ret,Sub1).
+    resume_retained({0,QSeq},Ret,Sub1).
 
 resume_retained(Seq = {RetSeq,QSeq},Ret,Sub) ->
-    RetIter = versioned_set:iterator_from(QSeq,RetSeq,Ret),
+    RetIter = versioned_gb_tree:iterator_from(QSeq,RetSeq,Ret),
     {Seq, Sub#sub{retained_iter = RetIter,
                   last_retained = RetSeq}}.
