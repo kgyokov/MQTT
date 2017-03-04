@@ -6,10 +6,10 @@
 %%% @end
 %%% Created : 05. Mar 2016 12:23 AM
 %%%-------------------------------------------------------------------
--module(mqtt_monoid_queue).
+-module(monoid_composable).
 -author("Kalin").
 
--behavior(monoid).
+-behavior(gen_monoid).
 
 %% API
 -export([id/0, as/2, ms/1]).
