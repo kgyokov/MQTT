@@ -12,11 +12,9 @@
 -behavior(gen_monoid).
 
 %% API
--export([id/0, as/2, ms/1, annotate/2]).
+-export([id/0, as/2, ms/1]).
 
 
 id() -> 0.
 as(A, B) -> max(A,B).
-ms({Seq,_}) -> Seq.
-
-annotate(Seq,El) -> {Seq,El}.
+ms({Seq,_,_}) -> Seq.

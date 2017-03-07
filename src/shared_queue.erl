@@ -23,17 +23,6 @@
     queue   :: {any(),any(),any()}                %% the actual queue
 }).
 
-
-%% Fragmented queues - one for disk, one for memory
-take_clients_before(Seq,Offsets) ->
-    {min_val_tree:iterator(Offsets),Seq}.
-
-next({Iter,Seq}) ->
-    case min_val_tree:next(Iter) of
-        {ClientId,Val} when Val =< Seq -> {ClientId,Val};
-        _ -> nil
-    end.
-
 new() -> new(?DEFAULT_SEQ).
 
 %% @doc
@@ -107,9 +96,12 @@ min_offset(#shared_q{offsets = Offsets, last_seq = LastSeq}) ->
 max_offset(#shared_q{last_seq = Seq}) -> Seq.
 
 take(AfterSeq,Num,#shared_q{queue = Q}) ->
-    {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq end, Q),
-    {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq + Num end, Rest),
-    lists:map(fun monoid_sequence:extract_val/1, monoid_sequence:to_list(Interval)).
+    {_,Rest}     = monoid_sequence:split(fun({Seq,_,_}) -> Seq > AfterSeq end, Q),
+    {Interval,_} = monoid_sequence:split(fun({Seq,_,_}) -> Seq > AfterSeq + Num end, Rest),
+    lists:map(fun({_,El,_}) -> El end, monoid_sequence:to_list(Interval)).
+
+
+
 
 %%add_seq(infinity,_) -> infinity;
 %%add_seq(_,infinity) -> infinity;
