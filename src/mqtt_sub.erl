@@ -452,7 +452,7 @@ insert_new_sub({ClientId,CSeq,QoS,Pid},WSize,S = #state{filter = Filter,
 resubscribe(ClientId,QoS,Pid,Sub,S = #state{filter = Filter,
                                             queue = Q,
                                             live_subs = Subs}) ->
-    {ResumingFrom,Sub1} = mqtt_sub_state:resubscribe(QoS,Q,Sub),
+    {ResumingFrom,Sub1} = mqtt_sub_state:reset(QoS,Q,Sub),
     {Packets,Sub2} = mqtt_sub_state:take_any(Q,Sub1),
     error_logger:info_msg("Resubscribed to old sub with window size ~p, sending retained messages for filter ~p ~p or ~p~n",[Filter,Packets]),
     S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub2},Subs)},
