@@ -32,7 +32,9 @@ all_test_() ->
             fun split_empty_tree/0,
             fun split_tree_w_smaller_than_min_value/0,
             fun split_tree_w_zero/0,
-            fun split_tree_general_case/0
+            fun split_tree_general_case/0,
+            fun iterator_empty_tree/0,
+            fun iterator_general_case/0
         ].
 
 min_is_correct_after_several_inserts() ->
@@ -188,17 +190,35 @@ split_tree_general_case() ->
     ?assertEqual([{d,2},{b,3}],L),
     ?assertEqual({ok,5},min_val_tree:min(T2)).
 
+iterator_empty_tree() ->
+    T = min_val_tree:new(),
+    Iter = min_val_tree:iterator(T),
+    ?assertEqual([],iter:to_list(Iter)).
+
+iterator_general_case() ->
+    Pairs =
+        [
+            {five,5},
+            {three,1},
+            {two,2},
+            {seven,7},
+            {three,3}
+        ],
+    T = store_pairs(Pairs),
+    Iter = min_val_tree:iterator(T),
+    ?assertEqual([{two,2},{three,3},{five,5},{seven,7}],iter:to_list(Iter)).
+
 %% ===========================================================================
 %% HELPERS
 %% ===========================================================================
 
 store_pairs(Pairs) ->
-    lists:foldr(fun({Key,Val},T) -> min_val_tree:store(Key,Val,T) end,
+    lists:foldl(fun({Key,Val},T) -> min_val_tree:store(Key,Val,T) end,
         min_val_tree:new(),
         Pairs).
 
 remove_keys(ToRemove,T) ->
-    lists:foldr(fun(Key,T) -> min_val_tree:remove(Key,T) end,
+    lists:foldl(fun(Key,T) -> min_val_tree:remove(Key,T) end,
         T,ToRemove).
 
 store_pairs_and_test_min(Pairs,ExpectedMin) ->
