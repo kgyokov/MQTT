@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([new/0, new/1, pushr/2, remove/2, add_client/2, add_client/3, forward/3, min_offset/1, max_offset/1, take/3, split_by_seq/2, get_queue/1, get_front_acc/1, get_back_acc/1]).
+-export([new/0, new/1, pushr/2, remove/2, add_client/2, add_client/3, forward/3, min_offset/1, max_offset/1, take/3, split_by_seq/2, get_queue/1, get_front_acc/1, get_back_acc/1, take_values/3]).
 
 -define(DEFAULT_SEQ,0).
 -define(ACCUMULATORS,accumulator_gb_tree).
@@ -39,24 +39,32 @@ new(Seq,StartAcc) ->
 
 pushr(El,SQ = #shared_q{last_seq = Seq, queue = Q, offsets = Offsets}) ->
     Seq1 = Seq+1,
-    Q1 = case min_val_tree:is_empty(Offsets) of
-             true -> pushr_w_acc(Seq1,El,Q);
-             false -> Q
-         end,
+%%    Q1 = case min_val_tree:is_empty(Offsets) of
+%%             true -> pushr_w_acc(Seq1,El,Q);
+%%             false -> Q
+%%         end,
+    Q1 = pushr_w_acc(Seq1,El,Q),
     SQ#shared_q{last_seq = Seq1,queue = Q1}.
 
 pushr_w_acc(Seq,El,{AccF,AccB,Q}) ->
     AccB1 = ?ACCUMULATORS:acc(El,AccB),
-    {AccF,AccB1,monoid_sequence:pushr({Seq,El,AccB1},Q)}.
+    {AccF,AccB1,monoid_sequence:pushr(Q,{Seq,El,AccB1})}.
 
 split_by_seq(Fun,{AccF,AccB,Q}) ->
-    {First,Second} = monoid_sequence:split(fun({Seq,_,_}) -> Fun(Seq) end,Q),
+    {First,Second} = monoid_sequence:split_by_seq(Fun,Q),
     AccB2 =
         case monoid_sequence:is_empty(First) of
             true -> AccF;
-            false -> monoid_sequence:headr(Second)
-            end,
+            false ->
+                {_,_,LastAcc} = monoid_sequence:headr(First),
+                LastAcc
+        end,
     {{AccF,AccB2,First},{AccB2,AccB,Second}}.
+
+take(AfterSeq,Num,SQ = #shared_q{queue = Q}) ->
+    {_,Rest} = split_by_seq(fun(Seq) -> Seq  > AfterSeq end,Q),
+    {InterVal = {_,_,_},_} = split_by_seq(fun(Seq) -> Seq > AfterSeq + Num end,Rest),
+    SQ#shared_q{queue = InterVal,last_seq = 0}.
 
 forward(ClientId,ToSeq,SQ = #shared_q{offsets = Offsets}) ->
     Offsets1 = min_val_tree:store(ClientId,ToSeq,Offsets),
@@ -95,10 +103,10 @@ min_offset(#shared_q{offsets = Offsets, last_seq = LastSeq}) ->
 
 max_offset(#shared_q{last_seq = Seq}) -> Seq.
 
-take(AfterSeq,Num,#shared_q{queue = Q}) ->
-    {_,Rest}     = monoid_sequence:split(fun({Seq,_,_}) -> Seq > AfterSeq end, Q),
-    {Interval,_} = monoid_sequence:split(fun({Seq,_,_}) -> Seq > AfterSeq + Num end, Rest),
-    lists:map(fun({_,El,_}) -> El end, monoid_sequence:to_list(Interval)).
+take_values(AfterSeq,Num,#shared_q{queue = {_,_,Q}}) ->
+    {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq end, Q),
+    {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq + Num end, Rest),
+    lists:map(fun({_,Val,_}) -> Val end, monoid_sequence:to_list(Interval)).
 
 
 
