@@ -12,7 +12,7 @@
 -define(LAZY(T),fun() -> T end).
 
 %% API
--export([head/1, tail/1, take/2, concat/1, foldl/3, seq/1, to_list/1, map/2, from_list/1, to_iter/4, to_iter/2, take_while/2]).
+-export([head/1, tail/1, take/2, concat/1, foldl/3, seq/1, to_list/1, map/2, from_list/1, to_iter/4, to_iter/2, take_while/2, gb_tree_to_iter/1]).
 
 head({H,_})  -> H.
 tail({_,T}) -> T().
@@ -57,10 +57,16 @@ to_iter(Iter,Mod) -> to_iter1(Mod:next(Iter),Mod).
 to_iter1(none,_)   -> nil;
 to_iter1({H,T},Mod) -> {H,?LAZY(to_iter1(Mod:next(T),Mod))}.
 
+-spec to_iter(any(),fun((any()) -> {any(),any()}),module(),any()) -> any().
 to_iter(none,_,_,_)       -> nil;
 to_iter(Iter,Map,Mod,Fun) ->
     {H,T} = Map(Iter),
     {H,?LAZY(to_iter(Mod:Fun(T),Map,Mod,Fun))}.
+
+gb_tree_to_iter(GbIter) -> gb_tree_to_iter1(gb_trees:next(GbIter)).
+
+gb_tree_to_iter1(none)      -> nil;
+gb_tree_to_iter1({K,V,T})   -> {{K,V},?LAZY(gb_tree_to_iter1(gb_trees:next(T)))}.
 
 to_list(L) -> lists:reverse(to_list(L,[])).
 to_list(nil,Acc) -> Acc;

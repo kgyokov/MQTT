@@ -32,7 +32,7 @@ new(Compare) ->
 
 iterator({ByVal,_,_}) ->
     GbIter = gb_trees:iterator(ByVal),
-    Iter = gb_tree_to_iter(GbIter),
+    Iter = iter:gb_tree_to_iter(GbIter),
     Iter1 = iter:map(fun gb_set_to_iter/1,Iter),
     iter:concat(Iter1).
 
@@ -40,11 +40,6 @@ gb_set_to_iter({Val,Keys}) ->
     GbIter = gb_sets:iterator(Keys),
     Iter = iter:to_iter(GbIter,gb_sets),
     iter:map(fun(Key) -> {Key,Val} end,Iter).
-
-gb_tree_to_iter(GbIter) -> gb_tree_to_iter1(gb_trees:next(GbIter)).
-
-gb_tree_to_iter1(none)      -> nil;
-gb_tree_to_iter1({K,V,T})   -> {{K,V},fun() -> gb_tree_to_iter1(gb_trees:next(T)) end}.
 
 %%next(Iter = {_,_,_}) -> next_key(Iter);
 %%next(ValIter)        -> next_val(ValIter).
