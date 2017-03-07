@@ -12,7 +12,7 @@
 -define(LAZY(T),fun() -> T end).
 
 %% API
--export([head/1, tail/1, take/2, concat/1, foldl/3, to_iter/3, seq/1, to_list/1, map/2, from_list/1]).
+-export([head/1, tail/1, take/2, concat/1, foldl/3, seq/1, to_list/1, map/2, from_list/1, to_iter/4, to_iter/2, take_while/2]).
 
 head({H,_})  -> H.
 tail({_,T}) -> T().
@@ -22,6 +22,13 @@ seq(Start) -> {Start,?LAZY(seq(Start+1))}.
 take(0,_)     -> nil;
 take(_,nil)   -> nil;
 take(N,{H,T}) -> {H,?LAZY(take(N-1,T()))}.
+
+take_while(_,nil)     -> nil;
+take_while(Fun,{H,T})   ->
+    case Fun(H) of
+        true  -> {H,?LAZY(take_while(Fun,T()))};
+        false -> nil
+    end.
 
 
 concat(nil)     -> nil;
@@ -45,8 +52,15 @@ map(Fun,{H,T}) -> {Fun(H),?LAZY(map(Fun,T()))}.
 %%    {H,T} = Fun(BasicIter),
 %%    {H,?LAZY(to_iter(Mod:next(T),Mod))}.
 
-to_iter(none,_,_)        -> nil;
-to_iter({H,T},Mod,Fun)   -> {H,?LAZY(to_iter(Mod:Fun(T),Mod,Fun))}.
+to_iter(Iter,Mod) -> to_iter1(Mod:next(Iter),Mod).
+
+to_iter1(none,_)   -> nil;
+to_iter1({H,T},Mod) -> {H,?LAZY(to_iter1(Mod:next(T),Mod))}.
+
+to_iter(none,_,_,_)       -> nil;
+to_iter(Iter,Map,Mod,Fun) ->
+    {H,T} = Map(Iter),
+    {H,?LAZY(to_iter(Mod:Fun(T),Map,Mod,Fun))}.
 
 to_list(L) -> lists:reverse(to_list(L,[])).
 to_list(nil,Acc) -> Acc;

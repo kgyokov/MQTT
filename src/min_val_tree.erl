@@ -13,7 +13,7 @@
 -author("Kalin").
 
 %% API
--export([store/3, min/1, split/2, remove/2, new/0, new/1, get_val/2, is_empty/1]).
+-export([store/3, min/1, split/2, remove/2, new/0, new/1, get_val/2, is_empty/1, iterator/1]).
 
 -opaque tree(Key,Val) :: {gb_trees:tree(Val,Key), dict:dict(Val,Key), fun((Val,Val) -> boolean())}.
 -opaque tree() :: tree(_,_).
@@ -29,6 +29,44 @@ new(Compare) ->
         dict:new(),         %% A tree of Keys, Every key has one corresponding Val associated with it,
         Compare             %% A function to compare the Vals (true if A =< B)
     }.
+
+iterator({ByVal,_,_}) ->
+    GbIter = gb_trees:iterator(ByVal),
+    Iter = gb_tree_to_iter(GbIter),
+    Iter1 = iter:map(fun gb_set_to_iter/1,Iter),
+    iter:concat(Iter1).
+
+gb_set_to_iter({Val,Keys}) ->
+    GbIter = gb_sets:iterator(Keys),
+    Iter = iter:to_iter(GbIter,gb_sets),
+    iter:map(fun(Key) -> {Key,Val} end,Iter).
+
+gb_tree_to_iter(GbIter) -> gb_tree_to_iter1(gb_trees:next(GbIter)).
+
+gb_tree_to_iter1(none)      -> nil;
+gb_tree_to_iter1({K,V,T})   -> {{K,V},fun() -> gb_tree_to_iter1(gb_trees:next(T)) end}.
+
+%%next(Iter = {_,_,_}) -> next_key(Iter);
+%%next(ValIter)        -> next_val(ValIter).
+%%
+%%next_key({Val,KeyIter,ValIter}) ->
+%%    case gb_sets:next(KeyIter) of
+%%        {Key,KeyIter1} -> {{Key,Val},{Val,KeyIter1,ValIter}};
+%%        none -> next_val(ValIter)
+%%    end.
+%%
+%%next_val(ValIter) ->
+%%    case gb_trees:next(ValIter) of
+%%        none -> nil;
+%%        {Val1,Keys,ValIter1} ->
+%%            next_key({Val1,gb_sets:iterator(Keys),ValIter1})
+%%    end.
+%%
+%%
+%%
+%%append1(none,T2)    -> append2(next(T2));
+%%append1({H1,T1},T2) -> {H1,append1(next(T1),T2)}.
+%%append2({H,T2})     -> append1(next(H),T2).
 
 %% @doc
 %% Takes the Num smallest elements from the data structure and returns them plus the remainder
