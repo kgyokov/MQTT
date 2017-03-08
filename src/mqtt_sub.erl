@@ -471,6 +471,6 @@ recover_sub({ClientId,_QoS,_CSeq,_ClientPid},Offsets) ->
 recover(SubL,RetL,S = #state{client_offsets = Offsets}) ->
     Acc = lists:foldl(fun accumulator_gb_tree:acc/2,accumulator_gb_tree:id(),RetL),
     Q = shared_queue:new(0,Acc),
-    Q1 = lists:foldl(fun recover_sub/2,Offsets,SubL),
-    S#state{queue = Q1}.
+    Offsets1 = lists:foldl(fun recover_sub/2,Offsets,SubL),
+    S#state{client_offsets = Offsets1, queue = Q}.
 
