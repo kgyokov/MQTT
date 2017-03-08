@@ -46,11 +46,8 @@
 -record(state, {
     filter          ::binary(), %% Filter handled by this process (e.g. /A/B/+)
     live_subs       ::dict(),    %% dictionary of {ClientId::binary(),#client_reg{}}
-    %% packet_seq      ::non_neg_integer(),%% A sequence number assigned to each Message from a topic covered by this filter.
-                                    %% This process assigns incremental integers to each new message
     client_offsets ::min_val_tree:tree(client_id(),fun()),
     queue           ::any(),    %% Shared queue of messages
-    %%retained =      versioned_gb_tree:new() :: versioned_gb_tree:set(),   %% Dictionary of retained messages
     garbage         ::any()     %% garbage stats from the queue
 }).
 
