@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([new/0, new/1, pushr/2, get_current_seq/1, take/3, split_by_seq/2, get_queue/1, get_front_acc/1, get_back_acc/1, take_values/3, truncate/2, get_min_offset/1]).
+-export([new/0, new/1,new/2, pushr/2, get_current_seq/1, take/3, split_by_seq/2, get_queue/1, get_front_acc/1, get_back_acc/1, take_values/3, truncate/2, get_min_offset/1]).
 
 -define(DEFAULT_SEQ,0).
 -define(ACCUMULATORS,accumulator_gb_tree).

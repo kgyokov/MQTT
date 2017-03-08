@@ -116,7 +116,7 @@ unsubscribe(Filter,ClientId,Seq) ->
     Pid = get_sub(Filter),
     mqtt_sub:cancel(Pid,ClientId,Seq).
 
-resume_sub(SubPid,ClientId,CSeq,{Filter,QoS,pending},WSize) ->
+resume_sub(SubPid,ClientId,CSeq,{Filter,QoS,undefined},WSize) ->
     Pid = get_sub(Filter),
     {ok,ResumingFrom} = mqtt_sub:subscribe_self(Pid,SubPid,ClientId,CSeq,QoS,WSize),
     {ok,ResumingFrom,monitor(process,Pid)};

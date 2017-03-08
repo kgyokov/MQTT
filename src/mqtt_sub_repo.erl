@@ -32,14 +32,14 @@
     -define(PERSISTENCE, disc_copies).
 -endif.
 
+%% @todo: Better way to stre subscription ids
 -define(TO_SUB_ID(Filter,ClientId),(<<Filter/binary,ClientId/binary>>)).
 -define(SUB_RECORD, mqtt_sub).
 -define(SUB_REG_RECORD, mqtt_sub_reg).
 -define(ALL_TABLES,[?SUB_RECORD,?SUB_REG_RECORD]).
 
 -record(mqtt_sub,{
-    id          ::{Filter   ::binary(),
-                   ClientId ::client_id()} | match_spec(),
+    id          ::binary() | match_spec(),
     filter      ::binary() | match_spec(),
     client_id   ::client_id() | match_spec(),
     qos         ::qos() | match_spec(),
@@ -78,8 +78,8 @@
 %% Appends a new subscription OR replaces an existing one with a new QoS
 %% @end
 
--spec save_sub(ClientId::client_id(),
-    {Filter::binary(),
+-spec save_sub(Filter::binary(),
+    {ClientId::client_id(),
      QoS::qos(),
      Seq::integer(),
      ClientPid::pid()}

@@ -67,7 +67,7 @@ get_subs(#outgoing{subs = Subs}) ->
 %% Adds new subscriptions to the session data
 %% @end
 -spec subscribe(NewSubs::[{binary(),qos()}],#outgoing{}) ->
-    #outgoing{}.
+    {[{binary(),qos(),any()}], #outgoing{}}.
 
 subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
     {Results,Subs1} = lists:mapfoldl(fun maybe_add_sub/2,Subs,NewSubs),

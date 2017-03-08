@@ -82,13 +82,13 @@ start_link(Filter,Repo) ->
 %%--------------------------------------------------------------------
 -spec(subscribe_self(Pid::pid(),SubPid::pid(),ClientId::client_id(),CSeq::non_neg_integer(),
                      QoS::qos(),WSize::non_neg_integer())
-        -> ok).
+        -> {ok,ResumingFrom::any()}).
 subscribe_self(Pid,SubPid,ClientId,CSeq,QoS,WSize) ->
     gen_server:call(Pid,{sub,SubPid,ClientId,CSeq,QoS,WSize}).
 
 -spec(resume(Pid::pid(), SubPid::pid(), ClientId::client_id(), CSeq::non_neg_integer(),
-             Qos::qos(), ResumeFrom::any(), WSize::non_neg_integer())
-        -> ok).
+             Qos::qos(), ResumeFrom::A, WSize::non_neg_integer())
+        -> {ok,ResumingFrom::A}).
 resume(Pid,SubPid,ClientId,CSeq,QoS,ResumeFrom,WSize) ->
     gen_server:call(Pid,{resume,SubPid,ClientId,CSeq,QoS,ResumeFrom,WSize}).
 
@@ -331,7 +331,7 @@ process_pull(WSize,ClientId,S = #state{live_subs = Subs,
                 error_logger:info_msg("Found sub ~p client '~p', contents of queue = ~p ~n",[Sub,ClientId,SQ]),
                 {Packets,Sub1} = mqtt_sub_state:take(WSize,SQ,Sub),
                 S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs)},
-                [{Pid,P}|| P <- Packets,S1];
+                {[{Pid,P}|| P <- Packets],S1};
             error -> {[],S}
         end.
 
