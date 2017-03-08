@@ -13,9 +13,7 @@
 -include("mqtt_packets.hrl").
 
 %% API
--export([parse_packet/1
-    %% ,read/1, read/3, read_at_least/2, parse_string/1, parse_variable_length/1
-    , parse_string/1, parse_variable_length/1]).
+-export([parse_packet/1, parse_string/1, parse_variable_length/1]).
 
 
 %% ========================================================
@@ -51,7 +49,7 @@ read(ReadFun, _MaxBufferSize, Buffer) ->
     end.
 
 read(S = #parse_state{max_buffer_size = MaxBufferSize, buffer = Buffer, readfun = ReadFun}) ->
-    S#parse_state{ buffer =  read(ReadFun, MaxBufferSize, Buffer)}.
+    S#parse_state{buffer =  read(ReadFun, MaxBufferSize, Buffer)}.
 
 %% ========================================================
 %%      PRIMITIVES:
@@ -78,17 +76,10 @@ parse_string(<<StrLen:16,Str:StrLen/bytes,Rest/binary>>) ->
     {ok,Str,Rest};
 
 parse_string(_PartialString) ->
-    {error,incomplete}
-.
+    {error,incomplete}.
 
-parse_string_maybe(Flag, Buffer) ->
-    case Flag of
-        0 ->
-            {undefined,Buffer};
-        1 ->
-            {ok, Str, Rest} =  parse_string(Buffer),
-            {Str,Rest}
-    end.
+maybe_parse_string(0, Buffer) -> {ok,undefined,Buffer};
+maybe_parse_string(1, Buffer) -> parse_string(Buffer).
 
 %%
 %% Parses integer using variable length-encoding
@@ -99,7 +90,7 @@ parse_variable_length(S) ->
 
 parse_variable_length(S = #parse_state{buffer = <<HasMore:1,Length:7, Rest/binary>>},
                       Sum,
-                      Multiplier)->
+                      Multiplier) ->
 
     NewSum = Sum + Length * Multiplier,
     if HasMore =:= 1 ->
@@ -125,7 +116,7 @@ parse_packet(S)->
             {error,Reason}
     end.
 
-parse_packet_unsafe(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
+parse_packet_unsafe(S = #parse_state{buffer = <<Type:4,Flags:4/bits,Rest/binary>>})->
     %% get the remaining length of the packet
     {ok,Length,Rest1} = parse_variable_length(S#parse_state{buffer = Rest}),
     %% READ the remaining length of the packet
@@ -137,8 +128,7 @@ parse_packet_unsafe(S = #parse_state { buffer = <<Type:4,Flags:4/bits,Rest/binar
 
 %% Insufficient data in Buffer
 parse_packet_unsafe(S)->
-    parse_packet_unsafe(read(S))
-.
+    parse_packet_unsafe(read(S)).
 
 %% ========================================================
 %% CONNECT -- COMPLETE!!!
@@ -156,10 +146,10 @@ parse_specific_type(?CONNECT,
     KeepAlive:16,
     Payload/binary>>}) ->
 
-    {ok,ClientId, Rest} = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
-    {ok, WillDetails,Rest3} = parse_will_details_maybe(WillFlag,WillRetain,WillQoS,Rest),
-    {Username,Rest4} = parse_string_maybe(UsernameFlag,Rest3),
-    {Password,<<>>} =  parse_string_maybe(PasswordFlag,Rest4),
+    {ok,ClientId,Rest}      = parse_string(S#parse_state{buffer=Payload}), %% 3.1.3.1 does not place strict limitations on the ClientId
+    {ok,WillDetails,Rest1}  = maybe_parse_will_details(WillFlag,WillRetain,WillQoS,Rest),
+    {ok,Username,Rest2}     = maybe_parse_string(UsernameFlag,Rest1),
+    {ok,Password,<<>>}      = maybe_parse_string(PasswordFlag,Rest2),
     #'CONNECT'{
         protocol_name = ProtocolName,
         protocol_version = ProtocolLevel,
@@ -194,12 +184,10 @@ parse_specific_type(?PINGRESP,<<0:4>>,_S) ->
 
 parse_specific_type(?PUBLISH,<<Dup:1,QoS:2,Retain:1>>,S) when QoS =< 2 ->
 
-    %% validate flags - should we do that here? or in the connection process???
-    case {Dup,QoS,Retain} of
-        {1,0,_}->
-            throw({error,invalid_flags});
-        _ ->
-            ok
+    %% validate flags - @todo: should we do that here? or in the connection process???
+    case {Dup,QoS} of
+        {1,0} -> throw({error,invalid_flags});
+        _     -> ok
     end,
 
     %#parse_state{buffer = Rest } = S,
@@ -304,12 +292,12 @@ parse_topic_subscriptions(_Buffer, _Subscriptions) ->
     throw({error,malformed_packet}).
 
 %% If the Will Flag is set to 0, then the Will QoS MUST be set to 0 (0x00) [MQTT-3.1.2-13]
-parse_will_details_maybe(_WillFlag = 0,_WillRetain,_WillQoS = 0,Buffer) ->
+maybe_parse_will_details(_WillFlag = 0,_WillRetain,_WillQoS = 0,Buffer) ->
     {ok,undefined,Buffer};
 
-parse_will_details_maybe(_WillFlag = 1,WillRetain,WillQoS,Buffer) when WillQoS =< 2 ->
-    {ok,WillTopic, Rest1} =  parse_string(Buffer),
-    {ok,WillMessage, Rest2} =  parse_string(Rest1),
+maybe_parse_will_details(_WillFlag = 1,WillRetain,WillQoS,Buffer) when WillQoS =< 2 ->
+    {ok,WillTopic,Rest1}   =  parse_string(Buffer),
+    {ok,WillMessage,Rest2} =  parse_string(Rest1),
     {
         ok,
         #will_details{

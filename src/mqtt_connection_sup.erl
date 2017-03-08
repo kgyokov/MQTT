@@ -68,7 +68,7 @@
 %%   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(TRS = {Transport,_Ref,Socket},Options) ->
     {ok, SupPid} = supervisor:start_link(?MODULE, []), %% Will return after both Sender and Receiver have been initialized
-    {ok, SenderPid } = supervisor:start_child(SupPid,
+    {ok, SenderPid} = supervisor:start_child(SupPid,
         ?SENDER_SPEC(Transport,Socket)),
     {ok, ConnPid} = supervisor:start_child(SupPid,
         ?CONN_SPEC(SenderPid,Options)),

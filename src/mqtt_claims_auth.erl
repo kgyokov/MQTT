@@ -49,7 +49,7 @@ authorize(AuthCtx, Action, Resource) ->
 
 acc_all_claims(ClaimsLists) ->
     AllClaims = lists:concat(ClaimsLists),
-    lists:foldr(
+    lists:foldl(
         fun({ClaimType,ClaimVal},Dict)-> dict:append_list(ClaimType,ClaimVal,Dict) end,
         dict:new(), AllClaims
     ).

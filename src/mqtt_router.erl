@@ -17,12 +17,21 @@
 -include("mqtt_internal_msgs.hrl").
 
 %% API
--export([global_route/1, fwd_message/2, call_msg_local/2, cast_msg_local/2,
-    subscribe/4, unsubscribe/3, refresh_subs/3]).
+-export([
+    global_route/1,
+    fwd_message/2,
+    call_msg_local/2,
+    cast_msg_local/2,
+    %%subscribe/6,
+    unsubscribe/3,
+    resume_sub/5,
+    ack/3,
+    pull/3, get_retained/1]).
 
 -ifdef(TEST).
     -export([get_batches_to_send/2]).
 -endif.
+
 
 %% @doc
 %% Takes a message and:
@@ -30,32 +39,38 @@
 %%  - Finds Pids for connected clients
 %%  - Sends messages to those Pids
 %% @end
-global_route(Msg = #mqtt_message{topic = Topic,qos = MsgQoS,
-                                 content = Content,seq = Seq}) ->
-    %% Side effects
-    mqtt_topic_repo:enqueue(Topic,Msg),
-    Regs = get_registered_clients(Topic),
 
-    %% Pure
-    %% @todo: determine min QoS
-    {QoS_0_PerNode,QoS_Rel_PerNode} = get_batches_to_send(Regs,MsgQoS),
+global_route(#mqtt_message{topic = Topic,
+                           qos = MsgQoS,
+                           retain = Retain,
+                           content = Content} = M) ->
+    Subs = get_matching_subs(Topic),
+    Packet = #packet{topic = Topic,
+                     content = Content,
+                     qos = MsgQoS,
+                     retain = Retain},
+    mqtt_topic_repo:enqueue(Topic,M),
+    error_logger:info_msg("Pushing message ~p to subs ~p~n",[M,Subs]),
+    [mqtt_sub:push(Sub,Packet) || Sub <- Subs],
+    ok.
 
-    CTRPacket = {Topic,Content,Seq},
+%% Hiding mqtt_topic_repo for consistency
+get_retained(Filters) ->
+    [#packet{topic = Topic,
+             retain = true,
+             seq = Seq,
+             content = Content,
+             qos = QoS}||
+            #mqtt_message{topic = Topic,
+                          seq = Seq,
+                          content = Content,
+                          qos = QoS} <- mqtt_topic_repo:get_retained(Filters)].
 
-    %% Side effects
-    %% Send out QoS messages, do NOT wait for response
-    [cast_msg(NodeRegs ,CTRPacket) || NodeRegs <- QoS_0_PerNode],
-    %% Send out QoS 1/2 messages to registered processes and wait for response
-    SyncResults = lists:flatten([call_msg(NodeRegs ,CTRPacket) || NodeRegs  <- QoS_Rel_PerNode]),
+ack(FromPid,ClientId,Seq) ->
+    mqtt_sub:ack(FromPid,ClientId,Seq).
 
-    %% Handle results
-    %% @todo: Fault tolerance
-    FailedRegs = [Reg || {error,_Reason,Reg} <- SyncResults],
-    case FailedRegs of
-        []  -> ok;
-        _   -> error({failed_delivery,FailedRegs})
-    end.
-
+pull(FromPid,WSize,ClientId) ->
+    mqtt_sub:pull(FromPid,WSize,ClientId).
 
 cast_msg({Node,Regs},CTRPacket) ->
     rpc:cast(Node,?MODULE,cast_msg_local,[Regs,CTRPacket]).
@@ -86,32 +101,38 @@ fwd_message(Reg = {_,QoS,Pid},CTRPacket) ->
 %%% Wrap mqtt_sub and mqtt_sub_repo interaction
 %%%===================================================================
 
-%% @doc
-%% Get the Pids of connected clients matching the topic
-%%
-%% @end
--spec get_registered_clients(binary()) ->
-    [client_reg()].
-get_registered_clients(Topic) ->
-    lists:flatten(
-        [mqtt_sub:get_live_clients(Sub) || Sub <- get_matching_subs(Topic)]
-    ).
-
-subscribe(Filter,ClientId,QoS,Seq) ->
-    Pid = get_sub(Filter),
-    mqtt_sub:subscribe_self(Pid,ClientId,QoS,Seq).
-
+%%%% @doc
+%%%% Get the Pids of connected clients matching the topic
+%%%%
+%%%% @end
+%%-spec get_registered_clients(binary()) ->
+%%    [client_reg()].
+%%get_registered_clients(Topic) ->
+%%    lists:flatten(
+%%        [mqtt_sub:get_live_clients(Sub) || Sub <- get_matching_subs(Topic)]
+%%    ).
 
 unsubscribe(Filter,ClientId,Seq) ->
     Pid = get_sub(Filter),
-    mqtt_sub:unsubscribe(Pid,ClientId,Seq).
+    mqtt_sub:cancel(Pid,ClientId,Seq).
 
-refresh_subs(ClientId,Seq,Subs) ->
-    [begin
-         Pid = get_sub(Filter),
-         mqtt_sub:subscribe_self(Pid,ClientId,QoS,Seq),
-         Pid
-     end || {Filter,QoS} <- Subs].
+resume_sub(SubPid,ClientId,CSeq,{Filter,QoS,undefined},WSize) ->
+    Pid = get_sub(Filter),
+    {ok,ResumingFrom} = mqtt_sub:subscribe_self(Pid,SubPid,ClientId,CSeq,QoS,WSize),
+    {ok,ResumingFrom,monitor(process,Pid)};
+
+resume_sub(SubPid,ClientId,CSeq,Sub = {Filter,QoS,From},WSize) ->
+     error_logger:info_msg("Now Resuming sub ~p~n",[Sub]),
+     Pid = get_sub(Filter),
+     {ok,ResumingFrom} = mqtt_sub:resume(Pid,SubPid,ClientId,CSeq,QoS,From,WSize),
+     {ok,ResumingFrom,monitor(process,Pid)}.
+
+%%resume_sub(ClientId,CSeq,Sub = {Filter,QoS}) ->
+%%    [begin
+%%         Pid = get_sub(Filter),
+%%         mqtt_sub:resume(Pid,ClientId,CSeq,QoS,),
+%%         Pid
+%%     end || {Filter,QoS} <- Subs].
 
 
 %% ========================================================================
@@ -129,7 +150,7 @@ dedup_registered_clients(Regs) ->
     [{ClientId,QoS,Pid}|| {ClientId,{QoS,Pid}} <- dict:to_list(Dedups)].
 
 highest_qos_per_client(Regs) ->
-    lists:foldr(fun({ClientId,QoS,Pid}, D) ->
+    lists:foldl(fun({ClientId,QoS,Pid}, D) ->
         dict:update(ClientId,
             fun ({QoS_Old,_})       when QoS_Old < QoS -> {QoS,Pid};
                 (Old = {QoS_Old,_}) when QoS_Old >= QoS -> Old
@@ -140,7 +161,7 @@ highest_qos_per_client(Regs) ->
 batch_per_node(ClientRegs) ->
     RegsPerNode = group_by_node(ClientRegs),
     lists:flatmap(fun({Node,NodeRegs}) ->
-        [{Node,Batch} || Batch <-split_into_batches(?BATCH_SIZE,NodeRegs)]
+        [{Node,Batch} || Batch <- split_into_batches(?BATCH_SIZE,NodeRegs)]
     end,
         RegsPerNode).
 
@@ -158,7 +179,7 @@ split_into_batches(Len,L,B) when length(L) =< Len ->
 
 group_by_node(Regs) ->
     NodeRegs = [{node(Pid), Reg} || Reg = {_,_,Pid} <- Regs],
-    Groups = lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end, dict:new(), NodeRegs),
+    Groups = lists:foldl(fun({K,V}, D) -> dict:append(K, V, D) end, dict:new(), NodeRegs),
     dict:to_list(Groups).
 
 
@@ -168,7 +189,7 @@ group_by_node(Regs) ->
 %% ========================================================================
 
 get_sub(Filter) ->
-    case mqtt_sub_repo:get_sub(Filter) of
+    case mqtt_sub_repo:get_filter_claim(Filter) of
         {ok,Pid} -> maybe_create_new_sub(Filter,Pid);
         error  -> create_new_sub(Filter)
     end.

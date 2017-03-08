@@ -12,3 +12,5 @@ out/
 .idea/workspace.xml
 Mnesia.nonode@nohost/
 MnesiaCore.nonode*
+Mnesia.test_node*
+mnesia_console/

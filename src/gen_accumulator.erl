@@ -1,12 +1,13 @@
 %%%-------------------------------------------------------------------
 %%% @author Kalin
-%%% @copyright (C) 2015, <COMPANY>
+%%% @copyright (C) 2017, <COMPANY>
 %%% @doc
 %%%
 %%% @end
-%%% Created : 19. May 2015 12:43 AM
+%%% Created : 03. Mar 2017 11:17 PM
 %%%-------------------------------------------------------------------
+-module(gen_accumulator).
 -author("Kalin").
 
-
-
+-callback acc(_,Acc) -> Acc.
+-callback id() -> any().

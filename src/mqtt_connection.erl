@@ -309,16 +309,16 @@ handle_packet(Packet = #'PUBLISH'{topic = Topic},
 
 
 handle_packet(#'PUBACK'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-     mqtt_session_out:message_ack(SessionOut,PacketId),
+     mqtt_session_out:pub_ack(SessionOut,PacketId),
     {noreply,S};
 
 handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-    mqtt_session_out:message_pub_rec(SessionOut,PacketId),
+    mqtt_session_out:pub_rec(SessionOut,PacketId),
 %%     send_to_client(SenderPid,#'PUBREL'{packet_id = PacketId}),
     {noreply,S};
 
 handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-     mqtt_session_out:message_pub_comp(SessionOut,PacketId),
+     mqtt_session_out:pub_comp(SessionOut,PacketId),
     {noreply,S};
 
 handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn}) ->
@@ -446,21 +446,6 @@ map_publish_to_msg(#'PUBLISH'{packet_id = PacketId,
                   qos       = Qos,
                   retain    = Retain,
                   topic     = Topic}.
-
-%% map_msg_to_publish(#mqtt_message{packet_id = PacketId,
-%%                                  client_id = ClientId,
-%%                                  content = Content,
-%%                                  dup = Dup,
-%%                                  qos = Qos,
-%%                                  retain = Retain,
-%%                                  topic = Topic}) ->
-%%     #'PUBLISH'{packet_id = PacketId,
-%%                retain = Retain,
-%%                qos = Qos,
-%%                content = Content,
-%%                dup = Dup,
-%%                topic = Topic}.
-
 
 
 %%%===================================================================
@@ -622,7 +607,8 @@ disconnect_client(_S,_Reason) ->
 %% ==========================================================
 
 auto_generate_client_id() ->
-    base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>).
+    StrId = base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>),
+    list_to_binary(StrId).
 
 combine_results(AuthResults, SubResults) ->
     lists:reverse(combine_results(AuthResults,SubResults,[])).
@@ -636,5 +622,5 @@ combine_results([{error,_}|ART], SubResults, Acc) ->
 combine_results([ok|ART], [{ok,QoS}|SRT], Acc) ->
     combine_results(ART,SRT,[QoS|Acc]);
 
-combine_results([ok|ART], [{error,_} |SRT], Acc) ->
+combine_results([ok|ART], [{error,_}|SRT], Acc) ->
     combine_results(ART,SRT,[?SUBSCRIPTION_FAILURE|Acc]).

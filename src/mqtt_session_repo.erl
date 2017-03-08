@@ -29,12 +29,13 @@
 
 
 save(ClientId,Session) ->
-    Fun = fun() -> mnesia:dirty_write(#mqtt_session{client_id = ClientId, session = Session}) end,
+    SessionRec = #mqtt_session{client_id = ClientId, session = Session},
+    Fun = fun() -> mnesia:dirty_write(SessionRec) end,
     mnesia_do(Fun).
 
 load(ClientId) ->
     case mnesia:dirty_read(?SESSION_RECORD,ClientId) of
-        [#mqtt_session{session = SO}] -> SO;
+        [#mqtt_session{session = SO}] -> {ok,SO};
         []       -> {error,not_found}
     end.
 
