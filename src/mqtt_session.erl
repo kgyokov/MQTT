@@ -76,10 +76,10 @@ subscribe(NewSubs,S = #outgoing{subs = Subs}) ->
 maybe_add_sub({Filter,QoS},Subs) ->
     NewSub =
         case orddict:find(Filter,Subs) of
-            {ok,{_,Seq}} -> {QoS,Seq};
-            error        -> {QoS,pending}
+            {ok,{_,Seq}} -> {pending,QoS,Seq};
+            error        -> {pending,QoS,undefined}
         end,
-    {QoS1,Seq1} = NewSub,
+    {_,QoS1,Seq1} = NewSub,
     {{Filter,QoS1,Seq1},orddict:store(Filter,NewSub,Subs)}.
 
 set_seq(FiltersSeq,S = #outgoing{subs = Subs}) ->
@@ -87,7 +87,7 @@ set_seq(FiltersSeq,S = #outgoing{subs = Subs}) ->
 
 set_seq_for_filter({Filter,Seq},Subs) ->
     case orddict:find(Filter,Subs) of
-        {ok,{QoS,_}} -> orddict:store(Filter,{QoS,Seq},Subs);
+        {ok,{pending,QoS,CurSeq}}   -> orddict:store(Filter,{QoS,mqtt_seq:max(CurSeq,Seq)},Subs);
         _ -> Subs
     end.
 
@@ -141,10 +141,12 @@ pop(S = #outgoing{queue = Q,window_size = WSize}) ->
 
 set_actual_qos(Subs,Packet = #packet{topic = Topic,
                                      qos = MsgQoS}) ->
-    SubL = [{SubFilter,SubQoS} || {SubFilter,{SubQoS,_}} <-orddict:to_list(Subs)],
+    Packet#packet{qos = get_actual_qos(Subs,Topic,MsgQoS)}.
+
+get_actual_qos(Subs,Topic,MsgQoS) ->
+    SubL = [{SubFilter,SubQoS} || {SubFilter,{SubQoS,_}} <- orddict:to_list(Subs)],
     {ok,{_,SubQos}} = mqtt_topic:best_match(SubL,Topic),
-    ActualQoS = min(MsgQoS,SubQos),
-    Packet#packet{qos = ActualQoS}.
+    min(MsgQoS,SubQos).
 
 push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
     Pub = to_publish(Packet),
