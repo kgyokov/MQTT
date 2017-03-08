@@ -9,5 +9,12 @@
 -module(accumulator_seq).
 -author("Kalin").
 
+-behavior(gen_accumulator).
+
 %% API
--export([]).
+-export([acc/2, id/0]).
+
+
+acc(El, _) -> El.
+
+id() -> 0.
