@@ -27,7 +27,7 @@
 -type msg_seq() :: {ret|q,Seq::non_neg_integer()}.
 
 %% API
--export([is_new_msg/2, bottom/0, new/2, compare/2, inc_retained/1, inc_queued/1, make_seq/2]).
+-export([is_new_msg/2, bottom/0, new/2, inc_retained/1, inc_queued/1, make_seq/2, compare/2, max/2, min/2]).
 
 %% @doc
 %% Compares the sequence number of a message to that of a subscription.
@@ -57,13 +57,13 @@ new(RetSeq,QSeq) -> {RetSeq,QSeq}.
 
 -spec compare(subscription_seq(),subscription_seq()) -> gt|eq|lt|unknown.
 
-compare({RetSeq1,QSeq1},{RetSeq2,QSeq2}) ->
-    Diff1 = compare_num(RetSeq1,RetSeq2),
-    Diff2 = compare_num(QSeq1,QSeq2),
-    case Diff1 =:= Diff2 of
-        true  -> Diff1;
-        false -> unknown
-    end.
+%%compare({RetSeq1,QSeq1},{RetSeq2,QSeq2}) ->
+%%    Diff1 = compare_num(RetSeq1,RetSeq2),
+%%    Diff2 = compare_num(QSeq1,QSeq2),
+%%    case Diff1 =:= Diff2 of
+%%        true  -> Diff1;
+%%        false -> unknown
+%%    end.
 
 compare_num(Seq1,Seq2) when Seq1 > Seq2     -> gt;
 compare_num(Seq1,Seq2) when Seq1 =:= Seq2   -> eq;
@@ -74,5 +74,22 @@ compare_num(Seq1,Seq2) when Seq1 < Seq2     -> lt.
 make_seq(_IsRetained = true,Seq)  -> {ret,Seq};
 make_seq(_IsRetained = false,Seq) -> {q,Seq}.
 
+compare(Seq1,Seq1)           -> eq;
+compare(_,undefined)         -> gt;
+compare(undefined,_)         -> lt;
 
+compare({_,QSeq1},{_,QSeq2})             when QSeq1 > QSeq2                        -> gt;
+compare({RetSeq1,QSeq1},{RetSeq2,QSeq2}) when QSeq1 =:= QSeq2, RetSeq1 > RetSeq2   -> gt;
+compare(_,_)                                                                       -> lt.
 
+max(Seq1,Seq2) ->
+    case compare(Seq1,Seq2) of
+        gt -> Seq1;
+        _ -> Seq2
+    end.
+
+min(Seq1,Seq2) ->
+    case compare(Seq1,Seq2) of
+        gt -> Seq2;
+        _ -> Seq1
+    end.

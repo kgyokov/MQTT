@@ -264,34 +264,6 @@ terminate(_Reason, S = #state{filter = Filter}) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%%%===================================================================
-%%% Handling Packets and Acks
-%%%===================================================================
-
--type(order() :: gt | lt | eq).
--type(partial_order() :: order() | undefined).
--type(client_seq():: undefined
-                    | non_neg_integer()
-                    | complete).
-
--spec(is_less_than(client_seq(),client_seq()) -> boolean()).
-is_less_than(A,B) -> compare(A,B) =:= lt.
-
--spec(compare(client_seq(),client_seq())-> order()).
-
-compare(A,A)               -> eq;
-compare(complete,_)        -> gt;
-compare(_,complete)        -> lt;
-compare(undefined,_)       -> lt;
-compare(_,undefined)       -> gt;
-compare(A,B) when is_integer(A),
-                  is_integer(B) ->
-    case A > B of
-        true -> gt;
-        _    -> lt
-    end.
-
-
 handle_push(Packet,S = #state{filter = Filter}) ->
     error_logger:info_msg("handle_push for packet ~p~n",[Packet]),
     {SendTo,S1} = process_push(Packet,S),
