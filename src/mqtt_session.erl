@@ -88,7 +88,7 @@ set_seq(FiltersSeq,S = #outgoing{subs = Subs}) ->
 set_seq_for_filter({Filter,Seq},Subs) ->
     case orddict:find(Filter,Subs) of
         {ok,{pending,QoS,CurSeq}}   -> orddict:store(Filter,{QoS,mqtt_seq:max(CurSeq,Seq)},Subs);
-        _ -> Subs
+        {ok,{QoS,CurSeq}}           -> orddict:store(Filter,{QoS,mqtt_seq:max(CurSeq,Seq)},Subs)
     end.
 
 %% @doc
@@ -126,9 +126,9 @@ send_or_enqueue(Msg,S = #outgoing{window_size = WSize}) when WSize > 0 ->
 send_or_enqueue(Msg,S = #outgoing{queue = Q})->
     {[],S#outgoing{queue = queue:cons(Msg,Q)}}.
 
-do_send(Packet,SO = #outgoing{subs = Subs}) ->
-    Packet1 = set_actual_qos(Subs,Packet),
-    push_to_session(Packet1,SO).
+do_send(Packet,SO) ->
+    %%Packet1 = set_actual_qos(Subs,Packet),
+    push_to_session(Packet,SO).
 
 pop(S = #outgoing{queue = Q,window_size = WSize}) ->
     case queue:is_empty(Q) of
@@ -139,14 +139,14 @@ pop(S = #outgoing{queue = Q,window_size = WSize}) ->
             do_send(Msg,S1)
     end.
 
-set_actual_qos(Subs,Packet = #packet{topic = Topic,
-                                     qos = MsgQoS}) ->
-    Packet#packet{qos = get_actual_qos(Subs,Topic,MsgQoS)}.
-
-get_actual_qos(Subs,Topic,MsgQoS) ->
-    SubL = [{SubFilter,SubQoS} || {SubFilter,{SubQoS,_}} <- orddict:to_list(Subs)],
-    {ok,{_,SubQos}} = mqtt_topic:best_match(SubL,Topic),
-    min(MsgQoS,SubQos).
+%%set_actual_qos(Subs,Packet = #packet{topic = Topic,
+%%                                     qos = MsgQoS}) ->
+%%    Packet#packet{qos = get_actual_qos(Subs,Topic,MsgQoS)}.
+%%
+%%get_actual_qos(Subs,Topic,MsgQoS) ->
+%%    SubL = [{SubFilter,SubQoS} || {SubFilter,{SubQoS,_}} <- orddict:to_list(Subs)],
+%%    {ok,{_,SubQos}} = mqtt_topic:best_match(SubL,Topic),
+%%    min(MsgQoS,SubQos).
 
 push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
     Pub = to_publish(Packet),

@@ -45,12 +45,16 @@ take_any(Q,Sub) ->
 %% - The Client has consumed one or more package and has increased its window size
 %% - There may be new messages to send
 %% @end
-take(ToTake,Q,Sub) ->
-        take_all(ToTake,Q,Sub,
-        [
-            fun take_retained/3,
-            fun take_queued/3
-        ]).
+take(ToTake,Q,Sub = #sub{qos = Sub_QoS}) ->
+    {Packets,Sub1} =
+            take_all(ToTake,Q,Sub,
+            [
+                fun take_retained/3,
+                fun take_queued/3
+            ]),
+    Packets1 = [P#packet{qos = min(P_QoS,Sub_QoS)} || P = #packet{qos = P_QoS} <- Packets],
+    {Packets1,Sub1}.
+
 
 
 take_retained(ToTake,_Q,Sub = #sub{idx = Idx,
