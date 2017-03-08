@@ -48,7 +48,7 @@
     live_subs       ::dict(),    %% dictionary of {ClientId::binary(),#client_reg{}}
     %% packet_seq      ::non_neg_integer(),%% A sequence number assigned to each Message from a topic covered by this filter.
                                     %% This process assigns incremental integers to each new message
-    client_seqs     ::min_val_tree:tree(client_id(),fun()),
+    client_offsets ::min_val_tree:tree(client_id(),fun()),
     queue           ::any(),    %% Shared queue of messages
     %%retained =      versioned_gb_tree:new() :: versioned_gb_tree:set(),   %% Dictionary of retained messages
     garbage         ::any()     %% garbage stats from the queue
@@ -149,10 +149,11 @@ init([Filter, _Repo]) ->
     self() ! async_init,
     mqtt_sub_repo:claim_filter(Filter,self()),
     Seq = 0,
-    {ok,#state{filter = Filter,
-               live_subs = dict:new(),
-               queue = shared_queue:new(Seq),
-               garbage = ?MONOID:id()}}.
+    {ok,#state{filter         = Filter,
+               live_subs      = dict:new(),
+               queue          = shared_queue:new(Seq),
+               client_offsets = min_val_tree:new(),
+               garbage        = ?MONOID:id()}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -291,9 +292,7 @@ compare(A,B) when is_integer(A),
     end.
 
 
-handle_push(Packet,S = #state{filter = Filter,
-                              live_subs = Subs,
-                              queue = Q}) ->
+handle_push(Packet,S = #state{filter = Filter}) ->
     error_logger:info_msg("handle_push for packet ~p~n",[Packet]),
     {SendTo,S1} = process_push(Packet,S),
     send_packets_to_clients(Filter,SendTo),
@@ -303,7 +302,6 @@ process_push(Packet,S = #state{filter = Filter,
                                live_subs = Subs,
                                queue = Q}) ->
     SQ1 = shared_queue:pushr(Packet,Q),
-    %%NewSeq = shared_queue:max_offset(SQ1),
     {SendTo,Subs1} = dict:fold(update_waiting_subs(SQ1),{[],Subs},Subs),
     error_logger:info_msg("About to send packet ~p for filter ~p to ~p out of subs ~p~n",[Packet,Filter,SendTo,dict:to_list(Subs)]),
     {SendTo,S#state{live_subs = Subs1,queue = SQ1}}.
@@ -337,10 +335,25 @@ process_pull(WSize,ClientId,S = #state{live_subs = Subs,
             error -> {[],S}
         end.
 
-handle_ack(ClientId,{_RetAck,QAck},S = #state{queue = Q,
-                                              garbage = Garbage}) ->
-    {MoreGarbage,Q1} = shared_queue:forward(ClientId,QAck,Q),
-    S#state{queue = Q1,garbage = ?MONOID:as(Garbage,MoreGarbage)}.
+%%with_sub(ClientId,Fun,S = #state{live_subs = Subs}) ->
+%%    {Packets,S1} =
+%%        case dict:find(ClientId,Subs) of
+%%            {ok,SubInfo} ->
+%%                case Fun(SubInfo) of
+%%                    {new,Packets,NewSubInfo} -> S1 = S#state{live_subs = dict:store(ClientId,NewSubInfo,Subs)};
+%%                    {old,Packets} -> {Packets,S}
+%%                end;
+%%            error -> {[],S}
+%%        end.
+
+handle_ack(ClientId,{_RetAck,QAck},S = #state{queue          = Q,
+                                              client_offsets = Offsets,
+                                              garbage        = Garbage}) ->
+    Offsets1 = min_val_tree:store(ClientId,QAck,Offsets),
+    {MoreGarbage,Q1} = shared_queue:truncate(QAck,Q),
+    S#state{queue = Q1,
+            garbage = ?MONOID:as(Garbage,MoreGarbage),
+            client_offsets = Offsets1}.
 
 %% handle_ack(_ClientId,{ret,_QAck},S) -> S. %% We don't do anything with ack-ed retained messages
 
@@ -409,10 +422,14 @@ handle_unsub(ClientId,CSeq, S = #state{filter = Filter,
 
 process_unsub(ClientId,S = #state{live_subs = Subs,
                                  queue = SQ,
-                                 garbage = Garbage}) ->
-    {MoreGarbage,SQ1} = shared_queue:remove(ClientId,SQ),
+                                 garbage = Garbage,
+                                 client_offsets = Offsets}) ->
+    Offsets1 = min_val_tree:remove(ClientId,Offsets),
+    MinVal = min_val_tree:min(Offsets),
+    {MoreGarbage,SQ1} = shared_queue:truncate(MinVal,SQ),
     S#state{live_subs = dict:erase(ClientId,Subs),
             queue = SQ1,
+            client_offsets = Offsets1,
             garbage = ?MONOID:as(Garbage,MoreGarbage)}.
 
 handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S = #state{filter = Filter,
@@ -435,14 +452,26 @@ handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S = #state{filter = Filte
             {reply,duplicate,S}
     end.
 
+%%process_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S = #state{filter = Filter,
+%%                                                                   live_subs = Subs,
+%%                                                                   queue = SQ}) ->
+%%    {ResumingFrom,Sub1} = mqtt_sub_state:new(CSeq,QoS,ResumeFrom,SQ),
+%%    {Packets,Sub2} = mqtt_sub_state:take(WSize,SQ,Sub1),
+%%    error_logger:info_msg("Resuming existing sub from ~p, sending messages for filter ~p ~p ,queue = ~p retained = ~p~n",[ResumeFrom,Filter,Packets,SQ]),
+%%    S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub2},Subs)},
+%%    {Packets,ResumingFrom,S1}.
+
 insert_new_sub({ClientId,CSeq,QoS,Pid},WSize,S = #state{filter = Filter,
                                                         live_subs = Subs,
+                                                        client_offsets = Offsets,
                                                         queue = Q}) ->
     {ResumingFrom,Sub} = mqtt_sub_state:new(CSeq,QoS,Q),
     {Packets,Sub1} = mqtt_sub_state:take(WSize,Q,Sub),
+    ActualSeq = max(shared_queue:get_current_seq(Q),
+                    min_val_tree:min(Offsets)),
     error_logger:info_msg("Subscribed to new sub ~p with window size ~p, sending retained messages for filter ~p ~p from ~p~n",[Sub,WSize,Filter,Packets]),
     S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs),
-                 queue = shared_queue:add_client(ClientId,Q)},
+                 client_offsets = min_val_tree:store(ClientId,ActualSeq,Offsets)},
     send_packets_to_client(Pid,Filter,Packets),
     {reply,{ok,ResumingFrom},S1}.
 
@@ -464,12 +493,12 @@ resubscribe(ClientId,QoS,Pid,Sub,S = #state{filter = Filter,
 %% so we default it to 0. The client will "forward" its subscription to the appropriate Seq number once
 %% it comes back online
 %% @end
-recover_sub({ClientId,_QoS,_CSeq,_ClientPid},Q) ->
-    shared_queue:add_client(ClientId,0,Q).
+recover_sub({ClientId,_QoS,_CSeq,_ClientPid},Offsets) ->
+    min_val_tree:store(ClientId,0,Offsets).
 
-recover(SubL,RetL,S) ->
+recover(SubL,RetL,S = #state{client_offsets = Offsets}) ->
     Acc = lists:foldl(fun accumulator_gb_tree:acc/2,accumulator_gb_tree:id(),RetL),
     Q = shared_queue:new(0,Acc),
-    Q1 = lists:foldl(fun recover_sub/2,Q,SubL),
+    Q1 = lists:foldl(fun recover_sub/2,Offsets,SubL),
     S#state{queue = Q1}.
 
