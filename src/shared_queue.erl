@@ -49,14 +49,7 @@ split_by_seq(Fun,{Seq,AccF,AccB,Q}) ->
                 {_,_,LastAcc} = monoid_sequence:headr(First),
                 LastAcc
         end,
-    Seq1 =
-        case monoid_sequence:is_empty(Second) of
-           true -> Seq;
-           false ->
-               {LastSeq,_,_} = monoid_sequence:headl(Second),
-               LastSeq - 1
-       end,
-
+    Seq1 = get_inner_min_offset(Seq,Q),
     {{Seq1,AccF,AccB1,First},{Seq,AccB1,AccB,Second}}.
 
 take(AfterSeq,Num,SQ) ->
@@ -108,12 +101,17 @@ get_back_acc({_,_,AccB,_})  -> AccB.
 
 get_current_seq({Seq,_,_,_}) -> Seq.
 get_min_offset({Seq,_,_,Q}) ->
+    get_inner_min_offset(Seq,Q).
+
+get_inner_min_offset(Seq,Q) ->
     case monoid_sequence:is_empty(Q) of
         true -> Seq;
         false ->
             {SeqFirst,_,_} = monoid_sequence:headl(Q),
             SeqFirst-1
     end.
+
+
 
 take_values(AfterSeq,Num,{_,_,_,Q}) ->
     {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq end, Q),
