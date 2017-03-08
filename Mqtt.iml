@@ -12,8 +12,7 @@
       <sourceFolder url="file://$MODULE_DIR$/include" type="erlang-include" />
       <sourceFolder url="file://$MODULE_DIR$/test" isTestSource="true" />
     </content>
-    <orderEntry type="jdk" jdkName="Unknown Erlang version at C:/erlang/erl6.1" jdkType="Erlang SDK" />
+    <orderEntry type="jdk" jdkName="Erlang 18" jdkType="Erlang SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>
-

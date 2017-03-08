@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% Handles incoming messages and the various
 %%% @end
 %%% Created : 18. Dec 2014 8:13 PM
 %%%-------------------------------------------------------------------
@@ -42,14 +42,14 @@ qos0(Msg,Session = #session_in{packet_seq = Seq}) ->
 
 qos1(Msg,Session = #session_in{packet_seq = Seq}) ->
     NewSeq = Seq + 1,
-    fwd_message(Msg,Seq),
+    fwd_message(Msg,NewSeq),
     Session#session_in{packet_seq = NewSeq}.
 
 %% --------------------------------------------------------------------------------------
 %% Storing Packet Identifier and Forwarding the message need to be atomic operations
 %% --------------------------------------------------------------------------------------
 qos2_phase1(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
-                    Session = #session_in{packet_seq = Seq, qos2_rec = Qos2Rec})  ->
+            Session = #session_in{qos2_rec = Qos2Rec})  ->
     case gb_sets:is_element(PacketId,Qos2Rec) of
         false ->
             NewSession = log_pending_message(Msg,Session),
@@ -78,15 +78,13 @@ maybe_publish_will(Session = #session_in{will = Will,
                   topic = Topic} = Will,
 
     NewSeq = Seq +1,
-    Msg = #mqtt_message{
-        client_id = ClientId,
-        seq = NewSeq,
-        dup = false,
-        content = Content,
-        qos = Qos,
-        retain = Retain,
-        topic = Topic
-    },
+    Msg = #mqtt_message{client_id = ClientId,
+                        seq = NewSeq,
+                        dup = false,
+                        content = Content,
+                        qos = Qos,
+                        retain = Retain,
+                        topic = Topic},
     fwd_message(Msg,NewSeq),
     Session.
 
@@ -112,10 +110,9 @@ log_pending_message(Msg = #mqtt_message{packet_id = PacketId, qos = ?QOS_2},
     %% so it can be easily de-duplicated at the receiver
     NewSeq = Seq + 1,
     MsgToSend = Msg#mqtt_message{seq = NewSeq},
-    NewSession = Session#session_in{
-        packet_seq = NewSeq,
-        msg_in_flight = MsgToSend,
-        qos2_rec = NewRec},
+    NewSession = Session#session_in{packet_seq = NewSeq,
+                                    msg_in_flight = MsgToSend,
+                                    qos2_rec = NewRec},
     maybe_persist(NewSession).
 
 send_pending_message(Session = #session_in{packet_seq = Seq, msg_in_flight = Msg}) ->

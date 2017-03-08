@@ -69,7 +69,6 @@ get_matching_topics(Filters) ->
             ['$2']
         }|| Filter <- Filters],
     mnesia:dirty_select(?IDX_TABLE,Ms).
-    %%mnesia:dirty_select(?IDX_TABLE,[{#mqtt_filter_idx{filter = Filter, topic = '$1'},[],['$1']}]).
 
 
 %% ======================================================================
@@ -90,7 +89,7 @@ create_tables(Nodes,_NFragments) ->
     end.
 
 wait_for_tables() ->
-    mnesia:wait_for_tables(?IDX_TABLE,5000).
+    ok = mnesia:wait_for_tables([?IDX_TABLE],5000).
 
 -ifdef(TEST).
 

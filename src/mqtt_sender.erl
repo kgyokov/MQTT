@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% gen_server for sending messages out through the socket
 %%% @end
 %%% Created : 08. Dec 2014 1:29 AM
 %%%-------------------------------------------------------------------
@@ -12,9 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2,
-    send_packet/2
-]).
+-export([start_link/2,send_packet/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -162,6 +160,4 @@ code_change(_OldVsn, State, _Extra) ->
 
 send_as_binary(Packet, #state{socket = Socket, transport = Transport})  ->
     Binary = mqtt_builder:build_packet(Packet),
-    error_logger:info_msg("Sending packet ~p~n",[Packet]),
-    error_logger:info_msg("Binary ~p~n",[Binary]),
     Transport:send(Socket,Binary).

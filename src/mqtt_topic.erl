@@ -18,15 +18,9 @@
 %% e.g. [ /A/B/+ , /A/B/C ] can be reduced to [/A/B/+]
 %% @end
 min_cover(Filters) ->
-    min_cover([],Filters).
+    lists:foldl(fun maybe_add_new_max/2,[],Filters).
 
-min_cover(Maximals,[]) ->
-    Maximals;
-
-min_cover(Maximals,[H|T]) ->
-    min_cover(merge_max(Maximals,H),T).
-
-merge_max(Maximals,NewMax) ->
+maybe_add_new_max(NewMax,Maximals) ->
     DedupL = [ Max || Max <- Maximals, not is_covered_by(Max,NewMax) ],
     case lists:any(fun(Max) -> is_covered_by(NewMax,Max) end, DedupL) of
         true    -> DedupL;
@@ -35,15 +29,35 @@ merge_max(Maximals,NewMax) ->
 
 
 %% @doc
-%% Picks the filter with highest QoS. Breaks ties by checking if one filter
-%% covers the other
+%% Picks a the best matching Sub with highest QoS.
+%% Best means one that:
+%%      - matches the Topic
+%%      - has the highest QoS
+%%      - Plus some arbitrary criteria
 %% @end
 best_match(Subs,Topic) ->
-    lists:filter(fun({Filter,_}) -> is_covered_by(Topic,Filter) end, Subs),
-    case lists:sort(fun({_,QoS1},{_,QoS2}) -> QoS1 > QoS2 end, Topic) of
-        [H|_] -> {ok,H};
-        []   -> error
+    Matches = lists:filter(fun({Filter,_}) -> is_covered_by(Topic,Filter) end, Subs),
+    case Matches of
+        [_|_] -> {ok, match_with_max_qos(Matches)};
+        []    -> error
     end.
+
+match_with_max_qos(Subs = [H|_]) ->
+    lists:foldl(fun(El,Acc) ->
+                    case is_better_match(El,Acc) of
+                        true  -> El;
+                        false -> Acc
+                    end
+                end,H,Subs).
+
+is_better_match({Filter,QoS},{MinFilter,MaxQoS}) ->
+    QoS > MaxQoS
+        orelse (QoS == MaxQoS andalso
+        (is_covered_by(Filter,MinFilter)
+            orelse (not is_covered_by(MinFilter,Filter)
+                andalso Filter < MinFilter)
+        )
+    ).
 
 %% normalize(<<Pattern/binary>>) ->
 %%     LPattern = split(Pattern),
@@ -73,7 +87,7 @@ is_covered_by({Pattern1,QoS1},{Pattern2,QoS2}) ->
     is_covered_by(Pattern1,Pattern2) andalso QoS2 >= QoS1;
 
 %% @doc
-%% Tells us if the 2nd topic pattern covers the 1st one.
+%% Tells us if the Cover covers the Pattern.
 %% Examples
 %% /user/+/location covers /user/123/location
 %% /user/# covers /user/123/location

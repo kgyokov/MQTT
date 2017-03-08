@@ -1,162 +1,165 @@
 %%%-------------------------------------------------------------------
 %%% @author Kalin
-%%% @copyright (C) 2015, <COMPANY>
+%%% @copyright (C) 2016, <COMPANY>
 %%% @doc
 %%%
 %%% @end
-%%% Created : 24. Mar 2015 12:43 AM
+%%% Created : 23. Mar 2016 10:04 PM
 %%%-------------------------------------------------------------------
 -module(mqtt_session_test).
 -author("Kalin").
 
--compile(export_all).
-
--include("mqtt_internal_msgs.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-%% {_Topic,_Content,_Retain,_Dup,Ref},
+-include("mqtt_internal_msgs.hrl").
 
-setup_msg() ->
-    Session = mqtt_session:new(),
-    Ref = make_ref(),
-    Packet = {<<"Topic1">>, <<"Content">>, Ref},
-    [Session,Packet].
 
-setup_sub() ->
-    Session = mqtt_session:new(),
-    NewSubs = [{<<"Filter1",1>>,<<"Filter2",2>>}],
-    [Session,NewSubs].
+setup_session() ->
+    TestPacket = #packet{content = <<1>>,
+                         retain = false,
+                         topic = <<"TestFilter">>,
+                         seq = {q,1},
+                         qos = ?QOS_1},
+    [mqtt_session:new(2),TestPacket].
 
 msg_test_() ->
     {
-        foreach, fun setup_msg/0, fun(_) -> ok end,
+        foreach, fun setup_session/0, fun(_) -> ok end,
         [
-            fun msg_in_flight_qos0/1,
-            fun msg_in_flight_qos1/1,
-            fun msg_in_flight_qos1_flow_complete/1,
-            fun msg_in_flight_qos2_phase1/1,
-            fun msg_in_flight_qos2_phase2/1,
-            fun msg_in_flight_qos2_flow_complete/1
+            %% Buffer
+            fun push_from_unknown_filter_drops_packet/1,
+            fun push_on_no_subscriptions_drops_packet/1,
+            fun push_of_duplicate_packet_drops_packet/1,
+            fun push_from_matching_filter_emits_packet/1,
+
+            fun push_emits_packet_w_correct_values/1,
+
+            fun push_on_half_full_buffer_emits_packet/1,
+            fun push_on_full_buffer_queues_packet/1,
+            fun push_on_empty_buffer_emits_packet/1,
+
+            %% Session
+            fun ack_on_full_session_emits_next_packet/1,
+            fun rec_on_full_session_emits_next_packet/1
+%%            fun push_on_empty_session_emits_packet_2/1
+%%            fun msg_in_flight_qos1/1,
+%%            fun msg_in_flight_qos1_flow_complete/1,
+%%            fun msg_in_flight_qos2_phase1/1,
+%%            fun msg_in_flight_qos2_phase2/1,
+%%            fun msg_in_flight_qos2_flow_complete/1
         ]
     }.
 
-msg_in_flight_test_() ->
-    {
-        foreach, fun setup_msg/0, fun(_) -> ok end,
-        [
-            fun msg_in_flight_qos0/1,
-            fun msg_in_flight_qos1/1,
-            fun msg_in_flight_qos1_flow_complete/1,
-            fun msg_in_flight_qos2_phase1/1,
-            fun msg_in_flight_qos2_phase2/1,
-            fun msg_in_flight_qos2_flow_complete/1
-        ]
-    }.
+push_on_no_subscriptions_drops_packet([SO,Packet]) ->
+    Result = mqtt_session:push(<<"TestFilter">>,Packet,SO),
+    ?_assertMatch({[],SO},Result).
 
-sub_test_() ->
-    {
-        foreach, fun setup_sub/0, fun(_) -> ok end,
-        [
-            fun subscribe_new/1,
-            fun subscribe_existing/1,
-            fun unsubscribe_existing/1,
-            fun unsubscribe_non_existing/1
-        ]
-    }.
+push_from_unknown_filter_drops_packet([SO,Packet]) ->
+    Sub = {<<"TestFilter">>,?QOS_1},
+    SO1 = mqtt_session:subscribe([Sub],SO),
+    Result = mqtt_session:push(<<"Not_TestFilter">>,Packet,SO1),
+    ?_assertMatch({[],SO1},Result).
 
-ok_on_qos0([Session,Packet]) ->
-    ?_assertMatch({ok,_, undefined}, mqtt_session:append_msg(Session,Packet,?QOS_0)).
+push_of_duplicate_packet_drops_packet([SO,Packet]) ->
+    Sub = {<<"TestFilter">>,?QOS_1},
+    SO1 = mqtt_session:subscribe([Sub],SO),
+    {_,SO2} = mqtt_session:push(<<"Not_TestFilter">>,Packet,SO1),
+    Result = mqtt_session:push(<<"Not_TestFilter">>,Packet,SO2),
+    ?_assertMatch({[],SO1},Result).
 
-ok_on_qos1([Session,Packet]) ->
-    %%?_assertMatch(({ok,_, PacketId} when is_integer(PacketId)), mqtt_session:append_msg(Session,Packet,?QOS_1)
-    ?_test(
-    begin
-        {ok,_, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
-        ?assert(is_integer(PacketId))
-    end
-    ).
+push_from_matching_filter_emits_packet([SO,Packet]) ->
+    Sub = {<<"TestFilter/+">>,?QOS_1},
+    SO1 = mqtt_session:subscribe([Sub],SO),
+    Packet1 = Packet#packet{topic = <<"TestFilter/A">>},
+    Result = mqtt_session:push(<<"TestFilter/+">>,Packet1,SO1),
+    ?_assertMatch({[#'PUBLISH'{}],_SO2},Result).
 
-ok_on_qos2([Session,Packet]) ->
-    ?_test(
-        begin
-            {ok,_, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
-            ?assert(is_integer(PacketId))
-        end
-    ).
+push_on_empty_buffer_emits_packet([SO,Packet]) ->
+    Sub = {<<"TestFilter">>,?QOS_2},
+    SO1 = mqtt_session:subscribe([Sub],SO),
+    Result = mqtt_session:push(<<"TestFilter">>,Packet,SO1),
+    ?_assertMatch(
+        {[#'PUBLISH'{}],_SO2},
+        Result).
 
-qos1_flow_double_append([Session,Packet]) ->
-    {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
-    ?_assertMatch(duplicate, mqtt_session:append_msg(NewSession,Packet,?QOS_1)).
+push_on_half_full_buffer_emits_packet([SO,Packet1]) ->
+    Sub = {<<"TestFilter">>,?QOS_2},
+    SO1 = mqtt_session:subscribe([Sub],SO),
+    Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
+    {_,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
+    Result  = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
+    ?_assertMatch(
+        {[#'PUBLISH'{content = <<2>>}],_SO3},
+        Result).
 
-qo2_flow_double_append([Session,Packet]) ->
-    {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
-    ?_assertMatch(duplicate, mqtt_session:append_msg(NewSession,Packet,?QOS_2)).
+push_on_full_buffer_queues_packet([SO,Packet1]) ->
+    Sub = {<<"TestFilter">>,?QOS_2},
+    SO1 = mqtt_session:subscribe([Sub],SO),
+    Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
+    Packet3 = Packet2#packet{content = <<3>>, seq = {q,3}},
+    {_,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
+    {_,SO3} = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
+    Result  = mqtt_session:push(<<"TestFilter">>,Packet3,SO3),
+    ?_assertMatch(
+        {[],_SO4},
+        Result).
 
-qos1_flow_double_ack([Session,Packet]) ->
-    {ok, S1, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
-    {ok, S2} = mqtt_session:message_ack(S1,PacketId),
-    ?_assertMatch(duplicate, mqtt_session:message_ack(S2,PacketId)).
+%% =====================================================================================
+%% == SESSION ==
+%% =====================================================================================
 
-qos2_flow([S0,Packet]) ->
-    ?_test(
-    begin
-        {ok, S1, PacketId} = mqtt_session:append_msg(S0,Packet,?QOS_2),
-        {ok, S2} = mqtt_session:message_pub_rec(S1,PacketId),
-        %% Test duplicate PUBREC packets
-        ?assertMatch(duplicate, mqtt_session:message_pub_rec(S2,PacketId)),
-        %% Test duplicate PUBCOMP packets
-        {ok,S3} = mqtt_session:message_pub_comp(S2,PacketId),
-        ?assertMatch(duplicate,mqtt_session:message_pub_comp(S3 ,PacketId))
-    end).
+ack_on_full_session_emits_next_packet([SO,Packet1]) ->
+    Sub = {<<"TestFilter">>,?QOS_2},
+    SO1 = mqtt_session:subscribe([Sub],SO),
 
-msg_in_flight_qos0([Session,Packet]) ->
-    {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_0),
-    ?_assertMatch([], mqtt_session:msg_in_flight(NewSession)).
+    Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
+    Packet3 = Packet2#packet{content = <<3>>, seq = {q,3}},
 
-msg_in_flight_qos1([Session,Packet]) ->
-    {ok, S1, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
-    ?_assertMatch([_], mqtt_session:msg_in_flight(S1)).
+    {[Pub1],SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
+    {_,SO3}    = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
+    {_,SO4}    = mqtt_session:push(<<"TestFilter">>,Packet3,SO3),
 
-msg_in_flight_qos1_flow_complete([Session,Packet]) ->
-    {ok, S1, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_1),
-    {ok, S2} = mqtt_session:message_ack(S1,PacketId),
-    ?_assertMatch([], mqtt_session:msg_in_flight(S2)).
+    Result = mqtt_session:pub_ack(Pub1#'PUBLISH'.packet_id,SO4),
+    ?_assertMatch(
+        {[#'PUBLISH'{content = <<3>>}],_SO5},
+        Result).
 
-msg_in_flight_qos2_phase1([Session,Packet]) ->
-    {ok, NewSession, _PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
-    ?_assertMatch([_], mqtt_session:msg_in_flight(NewSession)).
+rec_on_full_session_emits_next_packet([SO,Packet1]) ->
+    Sub = {<<"TestFilter">>,?QOS_2},
+    SO1 = mqtt_session:subscribe([Sub],SO),
 
-msg_in_flight_qos2_phase2([Session,Packet]) ->
-    {ok, NewSession, PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
-    mqtt_session:message_pub_rec(NewSession,PacketId),
-    ?_assertMatch([_], mqtt_session:msg_in_flight(NewSession)).
+    Packet2 = Packet1#packet{content = <<2>>, seq = {q,2}},
+    Packet3 = Packet2#packet{content = <<3>>, seq = {q,3}},
 
-msg_in_flight_qos2_flow_complete([Session,Packet]) ->
-    {ok,S1,PacketId} = mqtt_session:append_msg(Session,Packet,?QOS_2),
-    {ok,S2} = mqtt_session:message_pub_rec(S1,PacketId),
-    {ok,S3} = mqtt_session:message_pub_comp(S2,PacketId),
-    ?_assertMatch([], mqtt_session:msg_in_flight(S3)).
+    {[Pub1],SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
+    {_,SO3}    = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
+    {_,SO4}    = mqtt_session:push(<<"TestFilter">>,Packet3,SO3),
 
+    Result = mqtt_session:pub_ack(Pub1#'PUBLISH'.packet_id,SO4),
+    ?_assertMatch(
+        {[#'PUBLISH'{content = <<3>>}],_SO5},
+        Result).
 
-subscribe_new([Session,NewSubs]) ->
-    S1 = mqtt_session:subscribe(Session,NewSubs),
-    ?_assertMatch(NewSubs,mqtt_session:get_subs(S1)).
+push_emits_packet_w_correct_values([SO,Packet]) ->
+    Sub = {<<"TestFilter">>,?QOS_2},
+    SO1 = mqtt_session:subscribe([Sub],SO),
+    Result= mqtt_session:push(<<"TestFilter">>,Packet,SO1),
+    ?_assertMatch(
+        {[#'PUBLISH'{qos = ?QOS_1,
+                     topic = <<"TestFilter">>,
+                     retain = false,
+                     dup = false,
+                     packet_id = _,
+                     content = <<1>>}],
+            _SO2},
+        Result).
 
-subscribe_existing([Session,NewSubs]) ->
-    S1 = mqtt_session:subscribe(Session,NewSubs),
-    S2 = mqtt_session:subscribe(S1,NewSubs),
-    ?_assertMatch(NewSubs,mqtt_session:get_subs(S2)).
-
-unsubscribe_existing([Session,NewSubs]) ->
-    S1 = mqtt_session:subscribe(Session,NewSubs),
-    Filters = [Filter || {Filter,_Qos} <- NewSubs],
-    S2 = mqtt_session:unsubscribe(S1,Filters),
-    ?_assertMatch([],mqtt_session:get_subs(S2)).
-
-unsubscribe_non_existing([Session,NewSubs]) ->
-    S1 = mqtt_session:subscribe(Session,NewSubs),
-    S2 = mqtt_session:unsubscribe(S1,[<<"NonExisting">>]),
-    ?_assertMatch(NewSubs,mqtt_session:get_subs(S2)).
-
+fill_session(SO1,Packet1) ->
+    Packet2 = Packet1#packet{content = <<"Packet2">>, seq = {q,2}},
+    Packet3 = Packet2#packet{content = <<"Packet2">>, seq = {q,3}},
+    {_,SO2} = mqtt_session:push(<<"TestFilter">>,Packet1,SO1),
+    {_,SO3} = mqtt_session:push(<<"TestFilter">>,Packet2,SO2),
+    {_,SO4} = mqtt_session:push(<<"TestFilter">>,Packet3,SO3),
+    SO4.
 
 

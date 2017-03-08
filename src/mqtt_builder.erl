@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% Build MQTT packages
 %%% @end
 %%% Created : 15. Dec 2014 9:34 PM
 %%%-------------------------------------------------------------------
@@ -46,7 +46,7 @@ build_packet_type(Packet)->
         #'UNSUBSCRIBE'{}-> ?UNSUBSCRIBE;
         #'UNSUBACK'{}   -> ?UNSUBACK;
         #'PINGREQ'{}    -> ?PINGREQ;
-        #'PINGRESP'{}   ->?PINGRESP;
+        #'PINGRESP'{}   -> ?PINGRESP;
         #'DISCONNECT'{} -> ?DISCONNECT
     end.
 
@@ -149,7 +149,7 @@ build_rest(#'PUBREL'{packet_id = PacketId})->
 build_rest(#'PUBCOMP'{packet_id = PacketId})->
     <<PacketId:16>>;
 
-%%% TODO: maybe build binaries more efficiently than lists:map)
+%%% @todo: maybe build binaries more efficiently than lists:map)
 
 %%--------------------------------------------------------
 %% Subscriptions
@@ -170,7 +170,7 @@ build_rest(#'SUBACK'{packet_id = PacketId, return_codes = ReturnCodes})->
 build_rest(#'UNSUBSCRIBE'{packet_id = PacketId, topic_filters = TopicFilters})->
     <<
     PacketId:16,
-    (list_to_binary(lists:map(fun(Filter)-> <<(build_string(Filter))/binary>> end, TopicFilters)))/binary
+    (list_to_binary(lists:map(fun build_string/1, TopicFilters)))/binary
     >>;
 
 build_rest(#'UNSUBACK'{packet_id = PacketId}) ->

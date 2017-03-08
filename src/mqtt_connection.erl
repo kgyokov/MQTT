@@ -2,7 +2,7 @@
 %%% @author Kalin
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% gen_server to manage a connection
 %%% @end
 %%% Created : 06. Dec 2014 6:14 PM
 %%%-------------------------------------------------------------------
@@ -278,63 +278,21 @@ handle_packet(Packet = #'CONNECT'{client_id = <<>>,clean_session = true}, S) ->
 
 
 %% Valid complete packet!
-handle_packet(#'CONNECT'{client_id = ClientId,keep_alive = KeepAliveTimeout,
-                         clean_session = CleanSession,will = Will,
-                         password = Password,username = Username},
-              S = #state{connect_state = connecting,
-                         security = {Security,SecConf}}) ->
-
-    %%=======================================================================
-    %% @todo: validate connect packet
-    %%=======================================================================
-
-    %%=======================================================================
-    %% @todo: authorize Will?!?!?
-    %%=======================================================================
-
-    case Security:authenticate(SecConf,ClientId,Username,Password) of
-        {error,Reason} ->
-            Code = case Reason of
-                       bad_credentials -> ?CONNACK_BAD_USERNAME_OR_PASSWORD;
-                       _ -> ?CONNACK_UNAUTHORIZED
-                   end,
-            send_to_client(S,#'CONNACK'{session_present = false,return_code = Code}),
-            prevent_connection(S,bad_auth);
-        {ok, AuthCtx} ->
-            S1 = S#state{auth_ctx = AuthCtx},
-            %%=======================================================================
-            %% @todo: determine session state
-            %%=======================================================================
-%% 			SessionPresent = if(CleanSession) ->
-%% 				mqtt_session_repo:clear(ClientId);
-%% 				                 false,
-%% 				                 true ->
-%% 					                 true  %% @todo: determine session state
-%% 			                 end,
-
-            %register_self(ClientId,CleanSession),
-
-            SessionPresent =
-            case CleanSession of
-                false  -> true;%%error({not_supported,persistent_session});
-                true   -> false
+handle_packet(Packet = #'CONNECT'{},
+              S = #state{connect_state = connecting}) ->
+    NewState =
+            try
+                S1 = authorize(Packet,S),
+                S2 = establish_session(Packet,S1),
+                S3 = maybe_start_keep_alive(S2, Packet#'CONNECT'.keep_alive * 1000),
+                S3#state{connect_state = connected}
+            catch
+                throw:{Reason,NewS}-> prevent_connection(NewS,Reason)
             end,
-            S2 = S1#state{clean_session = CleanSession,
-                          client_id = ClientId,
-                          session_in = mqtt_publish:new(ClientId,Will),
-                          session_out = new_session(S1,ClientId,CleanSession)},
-
-            %% @todo:  Determine session present
-            send_to_client(S2, #'CONNACK'{return_code = ?CONNACK_ACCEPTED,
-                                          session_present = SessionPresent}),
-
-            S4 = maybe_start_keep_alive(S2, KeepAliveTimeout * 1000),
-            S5 = S4#state{connect_state = connected},
-            {noreply,S5}
-    end;
+    {noreply,NewState};
 
 %% Catch- all case
-handle_packet(Packet, S = #state{ connect_state = connecting})
+handle_packet(Packet, S = #state{connect_state = connecting})
     when not is_record(Packet, 'CONNECT') ->
     prevent_connection(S, 'CONNECT_expected');
 
@@ -351,16 +309,16 @@ handle_packet(Packet = #'PUBLISH'{topic = Topic},
 
 
 handle_packet(#'PUBACK'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-     mqtt_session_out:message_ack(SessionOut,PacketId),
+     mqtt_session_out:pub_ack(SessionOut,PacketId),
     {noreply,S};
 
 handle_packet(#'PUBREC'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-    mqtt_session_out:message_pub_rec(SessionOut,PacketId),
+    mqtt_session_out:pub_rec(SessionOut,PacketId),
 %%     send_to_client(SenderPid,#'PUBREL'{packet_id = PacketId}),
     {noreply,S};
 
 handle_packet(#'PUBCOMP'{packet_id = PacketId}, S = #state{session_out = SessionOut}) ->
-     mqtt_session_out:message_pub_comp(SessionOut,PacketId),
+     mqtt_session_out:pub_comp(SessionOut,PacketId),
     {noreply,S};
 
 handle_packet(#'PUBREL'{packet_id = PacketId}, S = #state{session_in = SessionIn}) ->
@@ -378,7 +336,7 @@ handle_packet(#'SUBSCRIBE'{packet_id = PacketId,subscriptions = Subs},
     %% Which subscriptions are we authorized to create?
     AuthResults = [{Security:authorize(AuthCtx,subscribe,Sub),Sub} || Sub  <- Subs],
     %% Actual subscriptions we are going to create
-    AuthSubs = [Sub || {Result,Sub} <- AuthResults, Result =:= ok],
+    AuthSubs = [Sub || {ok,Sub} <- AuthResults],
     SubResults = mqtt_session_out:subscribe(SessionOut, AuthSubs),
     %% Combine actual Subscription results with Authroization error results
     Results = combine_results([ Result || {Result,_} <- AuthResults],SubResults),
@@ -408,6 +366,44 @@ handle_packet(_, S) ->
 
 
 %% =================================================
+%% Connect
+%% =================================================
+
+authorize(#'CONNECT'{client_id = ClientId,
+                     password = Password,
+                     username = Username},
+          S = #state{security = {Security,SecConf}}) ->
+    %%=======================================================================
+    %% @todo: authorize Will?!?!?
+    %%=======================================================================
+    case Security:authenticate(SecConf,ClientId,Username,Password) of
+        {error,Reason} ->
+            Code = case Reason of
+                       bad_credentials -> ?CONNACK_BAD_USERNAME_OR_PASSWORD;
+                       _               -> ?CONNACK_UNAUTHORIZED
+                   end,
+            send_to_client(S,#'CONNACK'{session_present = false,return_code = Code}),
+            throw({bad_auth,S});
+        {ok, AuthCtx} ->
+            S#state{auth_ctx = AuthCtx}
+    end.
+
+establish_session(#'CONNECT'{client_id = ClientId,
+                             clean_session = CleanSession,
+                             will = Will},
+                  S) ->
+    SessionPresent = not CleanSession,
+    NewState = S#state{clean_session = CleanSession,
+                       client_id = ClientId,
+                       session_in = mqtt_publish:new(ClientId,Will),
+                       session_out = new_session(S,ClientId,CleanSession)},
+
+    %% @todo:  Determine session present
+    send_to_client(NewState, #'CONNACK'{return_code = ?CONNACK_ACCEPTED,
+                                        session_present = SessionPresent}),
+    NewState.
+
+%% =================================================
 %% Publish
 %% =================================================
 
@@ -415,7 +411,7 @@ handle_publish(Packet,S) ->
     S#state{session_in = publish(Packet,S)}.
 
 publish(Packet = #'PUBLISH'{packet_id = PacketId,
-                            qos       = QoS},
+                            qos = QoS},
         #state{client_id     = ClientId,
                session_in    = SessionIn,
                sender_pid    = SenderPid}) ->
@@ -450,21 +446,6 @@ map_publish_to_msg(#'PUBLISH'{packet_id = PacketId,
                   qos       = Qos,
                   retain    = Retain,
                   topic     = Topic}.
-
-%% map_msg_to_publish(#mqtt_message{packet_id = PacketId,
-%%                                  client_id = ClientId,
-%%                                  content = Content,
-%%                                  dup = Dup,
-%%                                  qos = Qos,
-%%                                  retain = Retain,
-%%                                  topic = Topic}) ->
-%%     #'PUBLISH'{packet_id = PacketId,
-%%                retain = Retain,
-%%                qos = Qos,
-%%                content = Content,
-%%                dup = Dup,
-%%                topic = Topic}.
-
 
 
 %%%===================================================================
@@ -626,7 +607,8 @@ disconnect_client(_S,_Reason) ->
 %% ==========================================================
 
 auto_generate_client_id() ->
-    base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>).
+    StrId = base64:encode_to_string(<<"__",(crypto:rand_bytes(24))/binary>>),
+    list_to_binary(StrId).
 
 combine_results(AuthResults, SubResults) ->
     lists:reverse(combine_results(AuthResults,SubResults,[])).
@@ -634,15 +616,11 @@ combine_results(AuthResults, SubResults) ->
 combine_results([], [], Acc) ->
     Acc;
 
-combine_results([AR|ART], SubResults = [SR|SRT], Acc) ->
-    case AR of
-        ok  ->
-            Result =
-                case SR of
-                    {ok,QoS}  -> QoS;
-                    {error,_} -> ?SUBSCRIPTION_FAILURE
-                end,
-            combine_results(ART,SRT,[Result|Acc]);
-        {error,_} ->
-            combine_results(ART,SubResults,[?SUBSCRIPTION_FAILURE|Acc])
-    end.
+combine_results([{error,_}|ART], SubResults, Acc) ->
+    combine_results(ART,SubResults,[?SUBSCRIPTION_FAILURE|Acc]);
+
+combine_results([ok|ART], [{ok,QoS}|SRT], Acc) ->
+    combine_results(ART,SRT,[QoS|Acc]);
+
+combine_results([ok|ART], [{error,_}|SRT], Acc) ->
+    combine_results(ART,SRT,[?SUBSCRIPTION_FAILURE|Acc]).

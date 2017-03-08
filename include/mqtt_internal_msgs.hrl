@@ -9,12 +9,10 @@
 -author("Kalin").
 -include("mqtt_packets.hrl").
 
--type subscription() :: {Topic::binary(),QoS::qos()}.
-
 -record(mqtt_message,{
-	topic           ::binary(),
+	topic           ::topic(),
 	content         ::binary(),
-	client_id       ::binary(),
+	client_id       ::client_id(),
 	qos = ?QOS_0    ::qos(),
 	dup = false     ::boolean(),
 	retain = false  ::boolean(),
@@ -23,11 +21,19 @@
 }).
 
 -record(msg, {
-    client_id,
-    client_seq,
-    timestamp,
-    topic,
-    content,
-    qos
+    client_id   ::client_id(),
+    client_seq  ::non_neg_integer(),
+    timestamp   ::term(),
+    topic       ::topic(),
+    content     ::binary(),
+    qos         ::qos()
+}).
+
+-record(packet,{
+    topic       ::topic(),
+    content     ::content(),
+    retain      ::boolean(),
+    qos         ::qos(),
+    seq         ::any()
 }).
 

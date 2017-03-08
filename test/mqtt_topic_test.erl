@@ -279,8 +279,18 @@ is_covered_by_test_()->
     ?_assertNot(mqtt_topic:is_covered_by(<<"/A//">>,<<"/A///">>)),
     ?_assertNot(mqtt_topic:is_covered_by(<<"/A//">>,<<"/A/">>)),
     ?_assertNot(mqtt_topic:is_covered_by(<<"/A/">>,<<"/A//#">>))
-  ]
-.
+  ].
+
+best_match_test_() ->
+    Subs = [{<<"A/B">>,1},
+            {<<"A/B">>,2},
+            {<<"A/+">>,1},
+            {<<"+/+">>,2}],
+    [
+    ?_assertEqual({ok,{<<"+/+">>,2}},mqtt_topic:best_match(Subs,<<"A/C">>)),
+    ?_assertEqual({ok,{<<"A/B">>,2}},mqtt_topic:best_match(Subs,<<"A/B">>)),
+    ?_assertEqual(error,mqtt_topic:best_match(Subs,<<"A/B/C">>))
+].
 
 lists_are_equal(List1,List2)->
   ?assertEqual([],(List1 -- List2) ++ (List2 -- List1)).

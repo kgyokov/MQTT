@@ -18,7 +18,7 @@
 -author("Kalin").
 
 %% API
--export([register/2, unregister/2, get_registration/1, create_tables/2, wait_for_tables/0, register/1, unregister/1]).
+-export([register/2, unregister/2, get_registration/1, create_tables/2, wait_for_tables/0, register_self/1, unregister/1]).
 
 
 -record(client_reg, {
@@ -72,13 +72,13 @@ create_tables(Nodes,NFragments) ->
     end.
 
 wait_for_tables()->
-    mnesia:wait_for_tables(?REG_TABLE,5000).
+    ok = mnesia:wait_for_tables([?REG_TABLE],5000).
 
 
 %% @doc
 %% Call register/2 for the current process
 %% @end
-register(ClientId) ->
+register_self(ClientId) ->
     ?MODULE:register(self(),ClientId).
 
 %%

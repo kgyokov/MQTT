@@ -23,12 +23,11 @@
                       claims_dict() | {error, any()}.
 authenticate(Configuration, ClientId, Username, Password) ->
     try
-        [
-            case ClaimsGenerator:get_claims(Options,ClientId,Username,Password) of
-                {ok,Claims}     ->  Claims;
-                not_applicable  ->  [];
-                {error,Reason}  ->  throw({auth_error,Reason})
-            end
+        [case ClaimsGenerator:get_claims(Options,ClientId,Username,Password) of
+            {ok,Claims}     ->  Claims;
+            {error,Reason}  ->  throw({auth_error,Reason});
+            not_applicable  ->  []
+         end
             || {ClaimsGenerator,Options} <- Configuration
         ] of ClaimsLists ->
         acc_all_claims(ClaimsLists)
@@ -50,13 +49,13 @@ authorize(AuthCtx, Action, Resource) ->
 
 acc_all_claims(ClaimsLists) ->
     AllClaims = lists:concat(ClaimsLists),
-    lists:foldr(
+    lists:foldl(
         fun({ClaimType,ClaimVal},Dict)-> dict:append_list(ClaimType,ClaimVal,Dict) end,
         dict:new(), AllClaims
     ).
 
 
-is_covered_by_claim(AuthCtx,ClaimType,Topic)->
+is_covered_by_claim(AuthCtx,ClaimType,Topic) ->
     case dict:find(ClaimType,AuthCtx) of
         {ok,Claims} ->
             lists:any(fun(ClaimVal)-> mqtt_topic:is_covered_by(Topic,ClaimVal) end,Claims);
