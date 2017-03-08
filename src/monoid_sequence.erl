@@ -12,7 +12,7 @@
 -behavior(gen_monoid).
 
 -export([id/0, as/2, ms/1]).
--export([get_monoid_val/2, split_by_seq/2, extract_val/1]).
+-export([get_monoid_val/2, split_by_seq/2]).
 
 -include("mqtt_internal_msgs.hrl").
 -include("finger_tree.hrl").
@@ -37,4 +37,4 @@ get_monoid_val(not_qos0,[_,Val]) -> Val.
 split_by_seq(Fun,Q) ->
     split(fun([Seq,_]) -> Fun(Seq) end,Q).
 
-extract_val([_,Val]) -> Val.
+%%extract_val([_,Val]) -> Val.

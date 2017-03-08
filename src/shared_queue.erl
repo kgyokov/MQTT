@@ -10,7 +10,7 @@
 -author("Kalin").
 
 %% API
--export([new/0, new/1, pushr/2, get_max_offset/1, take/3, split_by_seq/2, get_queue/1, get_front_acc/1, get_back_acc/1, take_values/3, truncate/2]).
+-export([new/0, new/1, pushr/2, get_current_seq/1, take/3, split_by_seq/2, get_queue/1, get_front_acc/1, get_back_acc/1, take_values/3, truncate/2, get_min_offset/1]).
 
 -define(DEFAULT_SEQ,0).
 -define(ACCUMULATORS,accumulator_gb_tree).
@@ -38,8 +38,7 @@ new(Seq,StartAcc) ->
 pushr(El,{Seq,AccF,AccB,Q}) ->
     Seq1 = Seq + 1,
     AccB1 = ?ACCUMULATORS:acc(El,AccB),
-    {Seq1, AccF,AccB1,monoid_sequence:pushr(Q,{Seq1,El,AccB1})}.
-
+    {Seq1,AccF,AccB1,monoid_sequence:pushr(Q,{Seq1,El,AccB1})}.
 
 split_by_seq(Fun,{Seq,AccF,AccB,Q}) ->
     {First,Second} = monoid_sequence:split_by_seq(Fun,Q),
@@ -59,8 +58,8 @@ take(AfterSeq,Num,SQ) ->
     Interval.
 
 truncate(AfterSeq,SQ) ->
-    {_,Rest} = split_by_seq(fun(Seq) -> Seq  > AfterSeq end,SQ),
-    Rest.
+    {{_,_,_,QF},Rest} = split_by_seq(fun(Seq) -> Seq  > AfterSeq end,SQ),
+    {monoid_sequence:ms(QF),Rest}.
 
 %%forward(ClientId,ToSeq,SQ = #shared_q{offsets = Offsets}) ->
 %%    Offsets1 = min_val_tree:store(ClientId,ToSeq,Offsets),
@@ -98,7 +97,17 @@ get_queue({_,_,_,Q})        -> Q.
 get_front_acc({_,AccF,_,_}) -> AccF.
 get_back_acc({_,_,AccB,_})  -> AccB.
 
-get_max_offset({Seq,_,_,_}) -> Seq.
+%% @todo: Maybe use accumulators for the min and max Sequence numbers?!
+
+get_current_seq({Seq,_,_,_}) -> Seq.
+get_min_offset({Seq,_,_,Q}) ->
+    case monoid_sequence:is_empty(Q) of
+        true -> Seq;
+        false ->
+            {SeqFirst,_,_} = monoid_sequence:headl(Q),
+            SeqFirst
+    end
+.
 
 take_values(AfterSeq,Num,{_,_,_,Q}) ->
     {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq end, Q),

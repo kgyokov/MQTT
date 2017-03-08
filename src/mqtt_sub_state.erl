@@ -55,13 +55,13 @@ take(ToTake,Q,Sub) ->
 
 take_retained(ToTake,_Q,Sub = #sub{idx = Idx,
                                    retained_iter = RetIter}) ->
-    {Taken,RetRest} = iter:to_list(iter:take(ToTake,RetIter)),
+    {Taken,RetRest} = take_gb_tree(ToTake,RetIter),
     {RetPs,Idx1} = enumerate(true,Idx,Taken),
     {RetPs,Sub#sub{retained_iter = RetRest,
                    idx = Idx1}}.
 
 take_queued(ToTake,Q,Sub = #sub{idx = {_,QSeq} = Idx}) ->
-    Taken = shared_queue:take(QSeq,ToTake,Q),
+    Taken = shared_queue:take_values(QSeq,ToTake,Q),
     {QPs,Idx1} = enumerate(false,Idx,Taken),
     {QPs,Sub#sub{idx = Idx1}}.
 
@@ -77,25 +77,27 @@ concat(Gen,{ToTakeAcc,TakenAcc,Q,S}) ->
 enumerate(IsRetained,Seq,Packets) ->
     IncFun = inc_fun(IsRetained,Seq),
     error_logger:info_msg("enumerating ~p~n",[Packets]),
-    lists:mapfoldl(fun(P,Seq1) -> {P#packet{retain = IsRetained, seq = Seq1},IncFun(Seq1)} end,Seq,Packets).
+    lists:mapfoldl(fun(P,Seq1) -> {P#packet{seq = Seq1},IncFun(Seq1)} end,Seq,Packets).
 
-inc_fun(false,{_,QSeq})  ->  fun({RetSeq1,_}) -> {RetSeq1 + 1,QSeq} end;
-inc_fun(true,{RetSeq,_}) ->  fun({_,QSeq1})   -> {RetSeq,QSeq1 + 1} end.
+inc_fun(true,{_,QSeq})    ->  fun({RetSeq1,_}) -> {RetSeq1 + 1,QSeq} end;
+inc_fun(false,{RetSeq,_}) ->  fun({_,QSeq1})   -> {RetSeq,QSeq1 + 1} end.
 
 %% @doc
 %% Picking a subscription back up from where we left off
 %% @end
 iterator_from(undefined,Q,Sub) ->
-    iterator_from({0,shared_queue:max_offset(Q)},Q,Sub);
+    iterator_from({0,shared_queue:get_current_seq(Q)},Q,Sub);
 
 iterator_from({RetSeq,QSeq},Q,Sub) ->
-    ActualQSeq = max(QSeq,shared_queue:min_offset(Q)),
+    ActualQSeq = max(QSeq,shared_queue:get_min_offset(Q)),
     resume_retained({RetSeq,ActualQSeq},Q,Sub).
 
-take_gb_tree(Num,Iter) -> take_gb_tree1(Num,gb_trees:next(Iter),[]).
+take_gb_tree(_,none) -> {[],none};
+take_gb_tree(Num,Iter) -> take_gb_tree1(Num,gb_trees:next(Iter),{[],Iter}).
+
 take_gb_tree1(0,_,Acc) -> Acc;
 take_gb_tree1(_,none,Acc) -> Acc;
-take_gb_tree1(Take,{El,Iter1},Acc) -> take_gb_tree1(Take-1,gb_trees:next(Iter1),[El|Acc]).
+take_gb_tree1(Take,{_,V,Iter1},{L,_}) -> take_gb_tree1(Take-1,gb_trees:next(Iter1),{[V|L],Iter1}).
 
 %% @doc
 %% Re-subscribing to existing subscription
@@ -105,9 +107,10 @@ reset(QoS,Q,Sub = #sub{idx = {_,QSeq}}) ->
     resume_retained({0,QSeq},Q,Sub1).
 
 resume_retained(Seq = {RetSeq,QSeq},Q,Sub) ->
-    {First,_} = shared_queue:split_by_seq(fun(Seq) -> Seq > QSeq end,Q),
-    Tree = shared_queue:get_back_acc(First),
-    RetIter = iter:gb_tree_to_iter(gb_trees:iterator_from(RetSeq,Tree)),
+    {_,Second} = shared_queue:split_by_seq(fun(ElSeq) -> ElSeq > QSeq end,Q),
+    Tree = shared_queue:get_front_acc(Second),
+    GbIter = gb_trees:iterator(Tree),
+    {_,RetIter} = take_gb_tree(RetSeq,GbIter),
     {Seq, Sub#sub{retained_iter = RetIter,
                   idx = Seq}}.
 
