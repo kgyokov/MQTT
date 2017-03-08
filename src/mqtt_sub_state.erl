@@ -81,7 +81,7 @@ concat(Gen,{ToTakeAcc,TakenAcc,Q,S}) ->
 enumerate(IsRetained,Seq,Packets) ->
     IncFun = inc_fun(IsRetained,Seq),
     error_logger:info_msg("enumerating ~p~n",[Packets]),
-    lists:mapfoldl(fun(P,Seq1) -> {P#packet{seq = Seq1},IncFun(Seq1)} end,Seq,Packets).
+    lists:mapfoldl(fun(P,Seq1) -> Seq2 = IncFun(Seq1), {P#packet{seq = Seq2 },Seq2} end,Seq,Packets).
 
 inc_fun(true,{_,QSeq})    ->  fun({RetSeq1,_}) -> {RetSeq1 + 1,QSeq} end;
 inc_fun(false,{RetSeq,_}) ->  fun({_,QSeq1})   -> {RetSeq,QSeq1 + 1} end.
