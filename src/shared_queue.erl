@@ -42,24 +42,31 @@ pushr(El,{Seq,AccF,AccB,Q}) ->
 
 split_by_seq(Fun,{Seq,AccF,AccB,Q}) ->
     {First,Second} = monoid_sequence:split_by_seq(Fun,Q),
-    {Seq2,AccB2} =
+    AccB1 =
         case monoid_sequence:is_empty(First) of
-            true -> {Seq,AccF};
+            true -> AccF;
             false ->
-                {LastSeq,_,LastAcc} = monoid_sequence:headr(First),
-                {LastSeq,LastAcc}
+                {_,_,LastAcc} = monoid_sequence:headr(First),
+                LastAcc
         end,
+    Seq1 =
+        case monoid_sequence:is_empty(Second) of
+           true -> Seq;
+           false ->
+               {LastSeq,_,_} = monoid_sequence:headl(Second),
+               LastSeq - 1
+       end,
 
-    {{Seq,AccF,AccB2,First},{Seq2,AccB2,AccB,Second}}.
+    {{Seq1,AccF,AccB1,First},{Seq,AccB1,AccB,Second}}.
 
 take(AfterSeq,Num,SQ) ->
-    {_,Rest} = split_by_seq(fun(Seq) -> Seq  > AfterSeq end,SQ),
+    {_,Rest}     = split_by_seq(fun(Seq) -> Seq > AfterSeq end,SQ),
     {Interval,_} = split_by_seq(fun(Seq) -> Seq > AfterSeq + Num end,Rest),
     Interval.
 
 truncate(AfterSeq,SQ) ->
     {{_,_,_,QF},Rest} = split_by_seq(fun(Seq) -> Seq  > AfterSeq end,SQ),
-    {monoid_sequence:ms(QF),Rest}.
+    {monoid_sequence:measure(QF),Rest}.
 
 %%forward(ClientId,ToSeq,SQ = #shared_q{offsets = Offsets}) ->
 %%    Offsets1 = min_val_tree:store(ClientId,ToSeq,Offsets),
@@ -105,9 +112,8 @@ get_min_offset({Seq,_,_,Q}) ->
         true -> Seq;
         false ->
             {SeqFirst,_,_} = monoid_sequence:headl(Q),
-            SeqFirst
-    end
-.
+            SeqFirst-1
+    end.
 
 take_values(AfterSeq,Num,{_,_,_,Q}) ->
     {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq end, Q),

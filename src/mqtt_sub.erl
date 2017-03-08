@@ -331,7 +331,7 @@ process_pull(WSize,ClientId,S = #state{live_subs = Subs,
                 error_logger:info_msg("Found sub ~p client '~p', contents of queue = ~p ~n",[Sub,ClientId,SQ]),
                 {Packets,Sub1} = mqtt_sub_state:take(WSize,SQ,Sub),
                 S1 = S#state{live_subs = dict:store(ClientId,{Pid,Sub1},Subs)},
-                {[{Pid,P}|| P <- Packets],S1};
+                {[{Pid,Packets}],S1};
             error -> {[],S}
         end.
 
