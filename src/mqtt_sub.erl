@@ -13,8 +13,7 @@
 -author("Kalin").
 
 -include("mqtt_internal_msgs.hrl").
-
--define(MONOID,monoid_sequence).
+-include("mqtt_filter_structures.hrl").
 
 -behaviour(gen_server).
 
@@ -148,9 +147,9 @@ init([Filter, _Repo]) ->
     Seq = 0,
     {ok,#state{filter         = Filter,
                live_subs      = dict:new(),
-               queue          = shared_queue:new(Seq),
+               queue          = shared_queue:new(Seq,?FILTER_MONOID,?FILTER_ACCUMULATOR),
                client_offsets = min_val_tree:new(),
-               garbage        = ?MONOID:id()}}.
+               garbage        = ?FILTER_MONOID:id()}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -321,7 +320,7 @@ handle_ack(ClientId,{_RetAck,QAck},S = #state{queue          = Q,
     Offsets1 = min_val_tree:store(ClientId,QAck,Offsets),
     {MoreGarbage,Q1} = shared_queue:truncate(QAck,Q),
     S#state{queue = Q1,
-            garbage = ?MONOID:as(Garbage,MoreGarbage),
+            garbage = ?FILTER_MONOID:as(Garbage,MoreGarbage),
             client_offsets = Offsets1}.
 
 %% handle_ack(_ClientId,{ret,_QAck},S) -> S. %% We don't do anything with ack-ed retained messages
@@ -399,7 +398,7 @@ process_unsub(ClientId,S = #state{live_subs = Subs,
     S#state{live_subs = dict:erase(ClientId,Subs),
             queue = SQ1,
             client_offsets = Offsets1,
-            garbage = ?MONOID:as(Garbage,MoreGarbage)}.
+            garbage = ?FILTER_MONOID:as(Garbage,MoreGarbage)}.
 
 handle_resume({ClientId,CSeq,QoS,ResumeFrom,WSize},Pid,S = #state{filter = Filter,
                                                                   live_subs = Subs,

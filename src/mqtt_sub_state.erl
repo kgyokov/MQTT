@@ -10,6 +10,7 @@
 -author("Kalin").
 
 -include("mqtt_internal_msgs.hrl").
+-include("mqtt_filter_structures.hrl").
 
 %% API
 -export([take/3,
@@ -111,8 +112,8 @@ reset(QoS,Q,Sub = #sub{idx = {_,QSeq}}) ->
     resume_retained({0,QSeq},Q,Sub1).
 
 resume_retained(Seq = {RetSeq,QSeq},Q,Sub) ->
-    {_,Second} = shared_queue:split_by_seq(fun(ElSeq) -> ElSeq > QSeq end,Q),
-    Tree = shared_queue:get_front_acc(Second),
+    {_,QRest} = shared_queue:truncate(QSeq,Q),
+    Tree = shared_queue:get_front_acc(QRest),
     GbIter = gb_trees:iterator(Tree),
     {_,RetIter} = take_gb_tree(RetSeq,GbIter),
     {Seq, Sub#sub{retained_iter = RetIter,
