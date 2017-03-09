@@ -18,7 +18,7 @@
 ).
 
 -define(ACCUMULATORS,accumulator_gb_tree).
--define(MONOID,monoid_sequence).
+-define(MONOID,monoid_packets).
 
 take_from_empty_queue_returns_empty_list_test() ->
     Q = new_queue(0),

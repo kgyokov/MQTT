@@ -13,7 +13,7 @@
 -include("test_packages.hrl").
 
 -define(ACCUMULATORS,accumulator_gb_tree).
--define(MONOID,monoid_sequence).
+-define(MONOID,monoid_packets).
 
 
 no_packets_test() ->

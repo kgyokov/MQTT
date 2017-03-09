@@ -9,4 +9,4 @@
 -author("Kalin").
 
 -define(FILTER_ACCUMULATOR,accumulator_gb_tree).
--define(FILTER_MONOID,monoid_sequence).
+-define(FILTER_MONOID,monoid_packets).
