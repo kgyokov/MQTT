@@ -10,113 +10,82 @@
 -author("Kalin").
 
 %% API
--export([new/0, new/1,new/2, pushr/2, get_current_seq/1, take/3, split_by_seq/2, get_queue/1, get_front_acc/1, get_back_acc/1, take_values/3, truncate/2, get_min_offset/1]).
+-export([new/2,new/3,new/4, pushr/2, get_current_seq/1, take/3, split_by_seq/2, get_queue/1,
+    get_front_acc/1, get_back_acc/1, take_values/3, truncate/2, get_min_offset/1]).
 
--define(DEFAULT_SEQ,0).
--define(ACCUMULATORS,accumulator_gb_tree).
--define(MONOID,monoid_sequence).
+-record(sq,{
+    accmod :: module(),
+    monoidmod ::module(),
+    seq :: non_neg_integer(),
+    accf :: any(),
+    accb :: any(),
+    q :: any()
+}).
 
-%%-record(shared_q,{
-%%    last_seq :: non_neg_integer(),       %% Sequence number of the latest item added to the queue
-%%                                        %% incremented with each new item
-%%                                        %% (represented as the corresponding item's Sequence number)
-%%    queue   :: {any(),any(),any()}                %% the actual queue
-%%}).
-
-new() -> new(?DEFAULT_SEQ).
+new(MonMod,AccMod) -> new(0,MonMod,AccMod).
 
 %% @doc
 %% Creates a new shared queue starting from Seq, using the
 %% Comp comparison function
 %% @end
-new(Seq) ->
-    new(Seq,?ACCUMULATORS:id()).
+new(Seq,MonMod,AccMod) ->
+    new(Seq,AccMod:id(),MonMod,AccMod).
 
-new(Seq,StartAcc) ->
-    {Seq,StartAcc,StartAcc,monoid_sequence:empty()}.
+new(Seq,StartAcc,MonMod,AccMod) ->
+    #sq{monoidmod = MonMod,accmod = AccMod,
+        seq = Seq,accf = StartAcc,accb = StartAcc,q = MonMod:empty()}.
 
-pushr(El,{Seq,AccF,AccB,Q}) ->
+pushr(El,SQ = #sq{accmod = AccMod,monoidmod = MonMod,
+                  seq = Seq,accb = AccB,q = Q}) ->
     Seq1 = Seq + 1,
-    AccB1 = ?ACCUMULATORS:acc(El,AccB),
-    {Seq1,AccF,AccB1,monoid_sequence:pushr(Q,{Seq1,El,AccB1})}.
+    AccB1 = AccMod:acc(El,AccB),
+    SQ#sq{seq = Seq1,accb = AccB1,q = MonMod:pushr(Q,{Seq1,El,AccB1})}.
 
-split_by_seq(Fun,{Seq,AccF,AccB,Q}) ->
-    {First,Second} = monoid_sequence:split_by_seq(Fun,Q),
+split_by_seq(Fun,SQ = #sq{monoidmod = MonMod,
+                          seq = Seq,accf = AccF,q = Q}) ->
+    {First,Second} = MonMod:split_by_seq(Fun,Q),
     AccB1 =
-        case monoid_sequence:is_empty(First) of
+        case MonMod:is_empty(First) of
             true -> AccF;
             false ->
-                {_,_,LastAcc} = monoid_sequence:headr(First),
+                {_,_,LastAcc} = MonMod:headr(First),
                 LastAcc
         end,
-    Seq1 = get_inner_min_offset(Seq,Q),
-    {{Seq1,AccF,AccB1,First},{Seq,AccB1,AccB,Second}}.
+    Seq1 = get_inner_min_offset(MonMod,Seq,Q),
+    {SQ#sq{seq = Seq1,accb = AccB1,q = First},
+     SQ#sq{accf = AccB1,q = Second}}.
 
 take(AfterSeq,Num,SQ) ->
     {_,Rest}     = split_by_seq(fun(Seq) -> Seq > AfterSeq end,SQ),
     {Interval,_} = split_by_seq(fun(Seq) -> Seq > AfterSeq + Num end,Rest),
     Interval.
 
-truncate(AfterSeq,SQ) ->
-    {{_,_,_,QF},Rest} = split_by_seq(fun(Seq) -> Seq  > AfterSeq end,SQ),
-    {monoid_sequence:measure(QF),Rest}.
+truncate(AfterSeq,SQ = #sq{monoidmod = MonMod}) ->
+    {#sq{q = QF},Rest} = split_by_seq(fun(Seq) -> Seq  > AfterSeq end,SQ),
+    {MonMod:measure(QF),Rest}.
 
-%%forward(ClientId,ToSeq,SQ = #shared_q{offsets = Offsets}) ->
-%%    Offsets1 = min_val_tree:store(ClientId,ToSeq,Offsets),
-%%    maybe_truncate(Offsets1,SQ).
-%%
-%%remove(ClientId,SQ = #shared_q{offsets = Offsets}) ->
-%%    Offsets1 = min_val_tree:remove(ClientId,Offsets),
-%%    maybe_truncate(Offsets1,SQ).
-%%
-%%add_client(ClientId,SQ = #shared_q{last_seq = CurSeq}) ->
-%%    add_client(ClientId,CurSeq,SQ).
-%%
-%%add_client(ClientId,AtSeq,SQ = #shared_q{offsets = Offsets}) ->
-%%    MinSeq = min_offset(SQ),
-%%    ActualSeq = max(MinSeq,AtSeq),
-%%    SQ#shared_q{offsets = min_val_tree:store(ClientId,ActualSeq,Offsets)}.
-%%
-%%maybe_truncate(NewOffsets, SQ = #shared_q{queue = Q}) ->
-%%    MinSeq = min_offset(SQ),
-%%    {{_,_,Garbage},Q1} = split_by_seq(fun(Seq) -> Seq >= MinSeq end,Q),
-%%    {monoid_sequence:measure(Garbage),
-%%        SQ#shared_q{queue = Q1, offsets = NewOffsets}}.
-%%
-%%%% @doc
-%%%% Returns the minimum sequence number being referenced by the clients
-%%%% @end
-%%min_offset(#shared_q{offsets = Offsets, last_seq = LastSeq}) ->
-%%    case min_val_tree:min(Offsets) of
-%%        none -> LastSeq + 1;
-%%        {ok,Seq}  -> Seq
-%%    end.
-
-
-get_queue({_,_,_,Q})        -> Q.
-get_front_acc({_,AccF,_,_}) -> AccF.
-get_back_acc({_,_,AccB,_})  -> AccB.
+get_queue(#sq{q = Q})        -> Q.
+get_front_acc(#sq{accf = AccF}) -> AccF.
+get_back_acc(#sq{accb = AccB})  -> AccB.
 
 %% @todo: Maybe use accumulators for the min and max Sequence numbers?!
 
-get_current_seq({Seq,_,_,_}) -> Seq.
-get_min_offset({Seq,_,_,Q}) ->
-    get_inner_min_offset(Seq,Q).
+get_current_seq(#sq{seq = Seq}) -> Seq.
+get_min_offset(#sq{seq = Seq,q = Q,monoidmod = MonMod}) ->
+    get_inner_min_offset(MonMod,Seq,Q).
 
-get_inner_min_offset(Seq,Q) ->
-    case monoid_sequence:is_empty(Q) of
+get_inner_min_offset(MonMod,Seq,Q) ->
+    case MonMod:is_empty(Q) of
         true -> Seq;
         false ->
-            {SeqFirst,_,_} = monoid_sequence:headl(Q),
+            {SeqFirst,_,_} = MonMod:headl(Q),
             SeqFirst-1
     end.
 
-
-
-take_values(AfterSeq,Num,{_,_,_,Q}) ->
-    {_,Rest}     = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq end, Q),
-    {Interval,_} = monoid_sequence:split_by_seq(fun(Seq) -> Seq > AfterSeq + Num end, Rest),
-    lists:map(fun({_,Val,_}) -> Val end, monoid_sequence:to_list(Interval)).
+take_values(AfterSeq,Num,#sq{monoidmod = MonMod, q = Q}) ->
+    {_,Rest}     = MonMod:split_by_seq(fun(Seq) -> Seq > AfterSeq end, Q),
+    {Interval,_} = MonMod:split_by_seq(fun(Seq) -> Seq > AfterSeq + Num end, Rest),
+    lists:map(fun({_,Val,_}) -> Val end, MonMod:to_list(Interval)).
 
 
 

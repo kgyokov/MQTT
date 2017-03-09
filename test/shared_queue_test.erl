@@ -12,8 +12,12 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("test_packages.hrl").
 
+-define(ACCUMULATORS,accumulator_gb_tree).
+-define(MONOID,monoid_sequence).
+
+
 no_packets_test() ->
-    SQ = shared_queue:new(),
+    SQ = new_queue(0),
 
     assert_shared_queue_contents(
         [],
@@ -98,7 +102,7 @@ take_in_middle_of_queue_test() ->
         ?QOS_0_PACKET_TOPIC2,
         ?RETAINED_PACKET_TOPIC1,
         ?RETAINED_PACKET_TOPIC2],
-        shared_queue:new(0)),
+        new_queue(0)),
 
     SQ1 = shared_queue:take(2,1,SQ),
 
@@ -115,7 +119,7 @@ take_end_of_queue_test() ->
         ?QOS_0_PACKET_TOPIC2,
         ?RETAINED_PACKET_TOPIC1,
         ?RETAINED_PACKET_TOPIC2],
-        shared_queue:new(0)),
+        new_queue(0)),
 
     SQ1 = shared_queue:take(3,1,SQ),
 
@@ -132,7 +136,7 @@ take_beyond_end_of_queue_test() ->
         ?QOS_0_PACKET_TOPIC2,
         ?RETAINED_PACKET_TOPIC1,
         ?RETAINED_PACKET_TOPIC2],
-        shared_queue:new(0)),
+        new_queue(0)),
 
     SQ1 = shared_queue:take(4,1,SQ),
 
@@ -149,7 +153,7 @@ take_before_beginning_of_queue_test() ->
         ?QOS_0_PACKET_TOPIC2,
         ?RETAINED_PACKET_TOPIC1,
         ?RETAINED_PACKET_TOPIC2],
-        shared_queue:new(1)),
+        new_queue(1)),
 
     SQ1 = shared_queue:take(0,1,SQ),
 
@@ -164,7 +168,7 @@ take_0_of_queue_test() ->
     SQ = push_packets([
         ?RETAINED_PACKET_TOPIC1,
         ?RETAINED_PACKET2_TOPIC1],
-        shared_queue:new(3)),
+        new_queue(3)),
 
     SQ1 = shared_queue:take(4,0,SQ),
 
@@ -178,7 +182,7 @@ take_0_of_queue_test() ->
 
 
 push_packets(Packets) ->
-    push_packets(Packets,shared_queue:new(0)).
+    push_packets(Packets,new_queue(0)).
 
 push_packets(Packets,SQ) when is_list(Packets) ->
     lists:foldl(fun shared_queue:pushr/2,SQ,Packets);
@@ -197,3 +201,6 @@ assert_shared_queue_contents(AccF,AccB,Q,SQ) ->
 
 acc_to_list(Acc) ->
     [ V|| {_,V} <- gb_trees:to_list(Acc)].
+
+new_queue(Seq) ->
+    shared_queue:new(Seq,?MONOID,?ACCUMULATORS).
