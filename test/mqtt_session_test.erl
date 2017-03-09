@@ -56,7 +56,7 @@ push_on_no_subscriptions_drops_packet([SO,Packet]) ->
 
 push_from_unknown_filter_drops_packet([SO,Packet]) ->
     Sub = {<<"TestFilter">>,?QOS_1},
-    SO1 = mqtt_session:subscribe([Sub],SO),
+    {_,SO1} = mqtt_session:subscribe([Sub],SO),
     Result = mqtt_session:push(<<"Not_TestFilter">>,Packet,SO1),
     ?_assertMatch({[],SO1},Result).
 
