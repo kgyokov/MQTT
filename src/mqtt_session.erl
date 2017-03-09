@@ -25,7 +25,7 @@
     new/0,
     new/1,
     find_sub/2,
-    set_seq/2]).
+    set_seq/2, take_any/1]).
 
 -define(DEFAULT_MAX_WINDOW,20).
 
@@ -117,49 +117,41 @@ push(Filter,Packet = #packet{seq = Seq},SO = #outgoing{subs = Subs}) ->
         false -> {[],SO};
         true ->
             SO1 = SO#outgoing{subs = set_seq_for_filter({Filter,Seq},Subs)},
-            send_or_enqueue(Packet,SO1)
+            process_or_enqueue(Packet,SO1)
     end.
 
-send_or_enqueue(Msg,S = #outgoing{window_size = WSize}) when WSize > 0 ->
-    do_send(Msg,S#outgoing{window_size = WSize - 1});
+process_or_enqueue(Msg = #packet{qos = QoS},S = #outgoing{window_size = WSize})
+    when WSize > 0; QoS =:= ?QOS_0  ->
+    maybe_save_in_session(Msg,S);
 
-send_or_enqueue(Msg,S = #outgoing{queue = Q})->
+process_or_enqueue(Msg,S = #outgoing{queue = Q})->
     {[],S#outgoing{queue = queue:cons(Msg,Q)}}.
 
-do_send(Packet,SO) ->
-    %%Packet1 = set_actual_qos(Subs,Packet),
-    push_to_session(Packet,SO).
+take_any(S) -> take(0,S).
 
-pop(S = #outgoing{queue = Q,window_size = WSize}) ->
-    case queue:is_empty(Q) of
-        true -> {[],S#outgoing{window_size = WSize+1}};
-        false ->
-            S1 = S#outgoing{queue = queue:tail(Q)},
-            Msg = queue:head(Q),
-            do_send(Msg,S1)
-    end.
+take(Num,S = #outgoing{queue = Q,window_size = WSize}) ->
+    CanTake = Num + WSize,
+    {F,B} = queue:split(CanTake,Q),
+    Taken = queue:len(F),
+    {[ to_publish(El)|| El <- queue:to_list(F)],
+        S#outgoing{window_size = CanTake - Taken,queue = B}}.
 
-%%set_actual_qos(Subs,Packet = #packet{topic = Topic,
-%%                                     qos = MsgQoS}) ->
-%%    Packet#packet{qos = get_actual_qos(Subs,Topic,MsgQoS)}.
-%%
-%%get_actual_qos(Subs,Topic,MsgQoS) ->
-%%    SubL = [{SubFilter,SubQoS} || {SubFilter,{SubQoS,_}} <- orddict:to_list(Subs)],
-%%    {ok,{_,SubQos}} = mqtt_topic:best_match(SubL,Topic),
-%%    min(MsgQoS,SubQos).
-
-push_to_session(Packet = #packet{qos =?QOS_0},SO) ->
+maybe_save_in_session(Packet = #packet{qos =?QOS_0},SO) ->
     Pub = to_publish(Packet),
-    {ToSend,SO1} = pop(SO),
-    {[Pub|ToSend],SO1};
+    {[Pub],SO};
 
-push_to_session(Packet = #packet{qos = QoS},SO) when QoS =:= ?QOS_1;
+maybe_save_in_session(Packet = #packet{qos = QoS},SO) when QoS =:= ?QOS_1;
                                                      QoS =:= ?QOS_2  ->
-    #outgoing{packet_seq = PSeq} = SO,
+    #outgoing{packet_seq = PSeq,
+              window_size = WSize} = SO,
+
     PSeq1 = PSeq + 1,
-    SO1 = add_to_outgoing(PSeq1,Packet,SO),
-    SO2 = SO1#outgoing{packet_seq = PSeq1},
     Pub = to_publish(Packet,PSeq1,false),
+
+    WSize1 = WSize - 1,
+    SO1 = add_to_outgoing(PSeq1,Packet,SO),
+    SO2 = SO1#outgoing{packet_seq = PSeq1,
+                       window_size = WSize1},
     {[Pub],SO2}.
 
 add_to_outgoing(PSeq,Packet = #packet{qos = ?QOS_1},SO) ->
@@ -183,7 +175,7 @@ pub_ack(PacketId,SO = #outgoing{packet_seq = PSeq,
     case orddict:find(AckSeq,QoS1Msgs) of
         {ok,_} ->
             SO1 = SO#outgoing{qos1 = orddict:erase(AckSeq,QoS1Msgs)},
-            pop(SO1);
+            take(1,SO1);
         error ->
             {[],SO}
     end.
@@ -212,13 +204,8 @@ pub_rec(PacketId,SO) ->
 pub_comp(PacketId,SO = #outgoing{packet_seq = PSeq,
                                  qos2_rec = Ack}) ->
     AckSeq = get_ack_seq(PacketId,PSeq),
-    case ordsets:is_element(AckSeq,Ack) of
-        true ->
-            SO1 = SO#outgoing{qos2_rec = ordsets:del_element(AckSeq,Ack)},
-            pop(SO1);
-        false ->
-            {[],SO}
-    end.
+    SO1 = SO#outgoing{qos2_rec = ordsets:del_element(AckSeq,Ack)},
+    take(1,SO1).
 
 %% =========================================================================
 %% RECOVERY
