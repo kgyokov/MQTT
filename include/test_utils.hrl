@@ -11,4 +11,4 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(lists_are_equal(List1,List2),
-    ?assertEqual([],(List1 -- List2) ++ (List2 -- List1))).
+    ?assertEqual([],((List1) -- (List2)) ++ ((List2) -- (List1)))).
