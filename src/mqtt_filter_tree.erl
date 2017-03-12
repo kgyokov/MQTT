@@ -153,7 +153,7 @@ next_filter_match({[{_,Val}|TSol],Stack}) -> {Val,{TSol,Stack}};
 next_filter_match({[],Stack}) ->
     case next_filter_node_match(Stack) of
         nil -> nil;
-        {[{_,Val}|TSol],Stack1} -> {Val,{TSol,Stack1}}
+        Iter -> next_filter_match(Iter)
     end.
 
 

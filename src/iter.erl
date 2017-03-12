@@ -12,7 +12,8 @@
 -define(LAZY(T),fun() -> T end).
 
 %% API
--export([head/1, tail/1, take/2, concat/1, foldl/3, seq/1, to_list/1, map/2, from_list/1, to_iter/4, to_iter/2, take_while/2, gb_tree_to_iter/1]).
+-export([head/1, tail/1, take/2, concat/1, foldl/3, seq/1, to_list/1, map/2,
+    from_list/1, to_iter/4, to_iter/2, take_while/2, gb_tree_to_iter/1, flatten/1]).
 
 head({H,_})  -> H.
 tail({_,T}) -> T().
@@ -46,6 +47,17 @@ foldl({H,T},Fun,Acc) ->
 
 map(_,  nil)   -> nil;
 map(Fun,{H,T}) -> {Fun(H),?LAZY(map(Fun,T()))}.
+
+
+
+flatten(nil) -> nil;
+flatten({{HIn,TIn},TOut}) ->{HIn,?LAZY(flatten({TIn(),TOut}))};
+
+flatten({nil,TOut}) ->
+    case TOut() of
+        nil -> nil;
+        NewIter -> flatten(NewIter)
+    end.
 
 %%to_iter(none,Fun,_Mod) -> nil;
 %%to_iter(BasicIter,Fun,_Mod) ->

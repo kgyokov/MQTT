@@ -22,3 +22,14 @@ simple_test() ->
     Seq2 = iter:concat(Seq1),
     Seq3 = iter:map(fun(El) -> El + 20 end, Seq2),
     ?assertEqual(lists:seq(21,40),iter:to_list(Seq3)).
+
+flatten_test() ->
+    List = [
+        iter:take(5,iter:seq(1)),
+        iter:take(5,iter:seq(6)),
+        iter:take(5,iter:seq(11)),
+        iter:from_list([])
+    ],
+    ListIter= iter:from_list(List),
+    FLatIter = iter:flatten(ListIter),
+    ?assertEqual(lists:seq(1,15), iter:to_list(FLatIter)).
