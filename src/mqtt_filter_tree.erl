@@ -12,6 +12,8 @@
 %% API
 -export([]).
 
+-define('|'(H,T),maybe_cons(H,T)).
+
 -type branches()::any().
 -type val()::any().
 -type measure()::any().
@@ -28,48 +30,23 @@
 -record('/',{'/' :: {'/'(),_,_}|nil, '#'::{'#',_,_}|nil, branches :: branches()}).
 
 
-get_vals_for(RawPath,Tree) ->
-    LensesPath = map_raw_to_lenses(RawPath),
-    LPath = fold_path_to_lense(LensesPath),
+get_vals_for_filter(RawPath,Tree) ->
+    LPath = get_lense_from_raw_path(RawPath),
+    Node = view(LPath)(Tree),
+    view(innerval())(Node).
+
+get_vals_for_matching_filters(RawPath,Tree) ->
+    LPath = get_lense_from_raw_path(RawPath),
     view(LPath)(Tree).
 
-get_node_val({Children,Val}) -> Val.
+update_raw_path(RawPath,Tree,Fun) ->
+    LPath = get_lense_from_raw_path(RawPath),
+    update(LPath,Fun)(Tree).
 
-%%plus (nil,                   T,      Fun) -> plus({'+',nil,nil,nil},T,Fun);
-%%plus ({'+',Slash,Val,Ms},    ['/'],  Fun) -> {'+',Slash,Fun(Val),Ms};
-%%plus ({'+',Slash,Val,Ms},    ['/'|T],Fun) -> {'+',slash(Slash,T,Fun),Val,Ms}.
-%%
-%%txt  (nil,                   T,      Fun) -> txt({txt,nil,nil,nil},T,Fun);
-%%txt  ({txt,Slash,Val,Ms},    ['/'],  Fun) -> {txt,Slash,Fun(Val),Ms};
-%%txt  ({txt,Slash,Val,Ms},    ['/'|T],Fun) -> {txt,slash(Slash,T,Fun),Val,Ms}.
-%%
-%%slash(nil,                    T      ,Fun) -> slash({'/',nil,dict:new(),nil,nil},T,Fun);
-%%slash({'/',Hash,Txts,Val,Ms}, [],     Fun) -> {'/',Hash,Txts,Fun(Val),Ms};
-%%slash({'/',Hash,Txts,Val,Ms}, ['#']  ,Fun) -> {'/',Fun(Hash),Txts,Val,Ms};
-%%slash({'/',Hash,Txts,Val,Ms}, [<<Text>>|T]  ,Fun) ->
-%%    Branches1 =
-%%        case dict:find(Text,Txts) of
-%%            {ok,TextNode} ->
-%%                dict:store(Text,txt(TextNode,T,Fun),Txts);
-%%            error ->
-%%                NewNode = {{txt,nil,Text},nil,nil},
-%%                dict:store(Text,txt(NewNode,T,Fun),Txts)
-%%        end,
-%%    {'/',Hash,Branches1,Val,Ms}.
-
-
-%%map_path('/','#')       -> fun({'#',X},Fun) -> {'#',Fun(X)} end;
-%%map_path('/','+')       -> fun({'/',Plus,Branches},Fun) -> {'/',Fun(Plus),Branches} end;
-%%map_path('/',<<Txt>>)   -> fun({'/',Plus,Branches},Fun) -> {'/',Fun(Plus),Branches} end;
-%%map_path('/',nil)       -> fun({'/',Plus,Branches},Fun) -> {'/',Fun(Plus),Branches} end;
-%%
-%%map_path('+','/')       -> fun({'+',Slash},Fun) -> {'+',Fun(Slash)} end;
-%%map_path('+',nil)       -> fun({'/',Plus,Branches}) -> Plus end;
-%%
-%%map_path(<<Txt>>,slash) -> fun({txt,Slash},Fun) -> {txt,Fun(Slash)} end;
-%%map_path(<<Txt>>,nil)   -> ok;
-%%map_path('#',nil) -> ok.
-
+get_lense_from_raw_path(RawPath) ->
+    LenseList = map_raw_to_lenses(RawPath),
+    PathLenses = lists:foldr(fun(Lense,Acc) -> [children(),Lense|Acc] end, [innerval()], LenseList),
+    compose(PathLenses).
 
 %%
 %% LENSES (If that's the appropriate name?!. Probably not)
@@ -80,7 +57,7 @@ lense('/','#')       -> {fun({'/',_,Hash,_}) -> Hash end,
 lense('/','+')       -> {fun({'/',Plus,_,_}) -> Plus end,
                          fun({'/',_,Hash,Txts},Plus) -> {'/',Plus,Hash,Txts} end};
 lense('/',<<Txt>>)   -> {fun({'/',_,Txts}) -> in_dict_or_nil(Txt,Txts)  end,
-                         fun({'/',Plus,Txts},Node)  -> {'/',Plus,dict:store(Txt,Node,Txts)} end};
+                         fun({'/',Plus,Txts},Node)  -> {'/',Plus, store_if_not_nil(Txt,Node,Txts)} end};
 lense('+','/')       -> {fun({'+',Slash}) -> Slash end,
                          fun({'+',_},Slash) -> {'+',Slash} end};
 lense(<<Txt>>,'/')   -> {fun({txt,Slash})  -> Slash end,
@@ -90,25 +67,15 @@ lense(root,'/')      -> {fun({root,Slash,_}) -> Slash end,
 lense(root,'#')      -> {fun({root,_,Hash}) -> Hash end,
                          fun({root,Slash,_},Hash) -> {root,Slash,Hash} end}.
 
-lense2('/','#')       -> {fun({'/',Plus,Hash,Txts},T) -> [Plus,Hash|T] end,
-                          fun([Plus,Hash|T],{'/',_,_})  -> {{'/',Plus,Hash},T} end};
-lense2('/','+')       -> {fun({'/',Plus,Txts},T) -> [Plus,Txts|T] end,
-                          fun({'/',_,Hash},[Plus,Txts|T]) -> {'/',Plus,Hash} end};
-lense2('/',<<Txt>>)   -> {fun({'/',_,_,Txt}) -> [Txt]  end,
-                          fun(S,{'/',Plus,Txt})  -> {'/',Plus,Txt ++ Txt} end};
-lense2('+','/')       -> {fun({'+',Slash}) -> [Slash] end,
-                          fun(S,Val1,_) -> {'+',Val1} end};
-lense2(<<Txt>>,'/')   -> {fun({txt,Slash})  -> [Slash] end,
-                          fun(S,Val,_) -> {txt,Val} end};
-lense2(root,'/')      -> {fun({root,Slash,_},T) -> [Slash|T] end,
-                          fun({root,_,Hash},[Slash|T]) -> {{root,Slash,Hash},T} end};
-lense2(root,'#')      -> {fun({root,Slash,Hash},T) -> [Slash,Hash|T] end,
-                          fun({root,_,_},[Slash,Hash|T]) -> {{root,Slash,Hash},T} end}.
 
 default('#')       -> {'#',nil};
 default('+')       -> {'+',nil};
-default(<<Txt>>)   -> {'txt',nil};
+default(<<_Txt>>)   -> {'txt',nil};
 default('/')       -> {'/',nil,nil}.
+
+children() -> {fun({Children,_}) -> Children end, fun(Val,{_,InnerVal}) -> {Val,InnerVal} end}.
+innerval() -> {fun({_,InnerVal}) -> InnerVal end, fun(Val,{Children,_}) -> {Children,Val} end}.
+
 
 in_dict_or_nil(Txt,Txts) ->
     case dict:find(Txt,Txts) of
@@ -116,12 +83,111 @@ in_dict_or_nil(Txt,Txts) ->
         error -> nil
     end.
 
+store_if_not_nil(nil,_,Txts) -> Txts;
+store_if_not_nil(Txt,Node,Txts) -> dict:store(Txt,Node,Txts).
 
-lense_children() -> {fun({Children,_}) -> Children end, fun(Val,{_,InnerVal}) -> {Val,InnerVal} end}.
-lense_innerval() -> {fun({_,InnerVal}) -> InnerVal end, fun(Val,{Children,_}) -> {Children,Val} end}.
+map_raw_to_lenses(Path) ->
+    {Lenses,_} = lists:mapfoldl(fun(Seg,PrevSeg) -> {lense(PrevSeg,Seg),Seg} end,root,Path),
+    Defaults = lists:map(fun default/1,Path),
+    lists:zipwith(fun wrap_view_in_nil_check/2,Lenses,Defaults).
 
-lense2_fold([H|T],LastSeg,Stack) ->
-    Stack1 = [lense2(LastSeg,H)++Stack].
+
+
+mappend_txt(A,B) -> error(not_implemented).
+
+mappend(nil,A) -> A;
+mappend(A,nil) -> A;
+
+mappend({'/',Plus1,Hash1,Txt1},{'/',Plus2,Hash2,Txt2}) ->
+    {'/',mappend(Plus1,Plus2),mappend(Hash1,Hash2),mappend_txt(Txt1,Txt2)};
+mappend({'+',Slash1},{'+',Slash2}) ->
+    {'+',mappend(Slash1,Slash2)};
+mappend({txt,Slash1,Hash1},{txt,Slash2,Hash2}) ->
+    {txt,mappend(Slash1,Slash2),mappend(Hash1,Hash2)};
+mappend({root,Slash1,Hash1},{'root',Slash2,Hash2}) ->
+    {'root',mappend(Slash1,Slash2),mappend(Hash1,Hash2)}.
+
+
+%% ====================================================================================
+%%
+%% EXTENDING LENSE IMPLEMENTATION
+%%
+%% ====================================================================================
+
+
+lense2('/',<<Txt>>)   -> {fun({'/',Plus,Hash,Txts},S) -> {[Plus,{dict,Txt,in_dict_or_nil(Txt,Txts)}],[Hash|S]} end,
+    fun({'/',_,Hash,Txts},[Plus,{dict,Txt,Node}|T]) ->
+        {{'/',Plus,Hash,store_if_not_nil(Txt,Node,Txts)},T}  end};
+
+lense2('+','/')       -> {fun({'+',Slash},S)  -> {[Slash],S} end,
+    fun({'+',_},[Slash|T])  -> {{'+',Slash},T} end};
+
+lense2(<<Txt>>,'/')   -> {fun({txt,Slash},S)  -> {[Slash],S} end,
+    fun({txt,_},[Slash|T])  -> {{txt,Slash},T} end};
+
+lense2(root,'/')      -> {fun({root,Slash,_},S) -> {[Slash],S} end,
+    fun({root,_,Hash},[Slash|T]) -> {{root,Slash,Hash},T} end};
+
+lense2(root,'#')      -> {fun({root,Slash,Hash},S) -> {[Slash,Hash],S} end,
+    fun({root,_,_},[Slash,Hash|T]) -> {{root,Slash,Hash},T} end};
+
+lense2(_,nil)         -> {fun(N,S) -> {[],[N|S]}  end,
+    fun(N,T) -> {N,T} end}.
+
+
+filter_lense2_step({[{Node,[HL|TLs]}|TStack],S}) ->
+    {Nodes,S1} = HL(Node,S),
+    Stack2 = lists:mapfoldl(fun(Node2,Stack1) -> [{Node2,TLs}|Stack1] end,TStack,Nodes),
+    {Stack2,S1};
+
+filter_lense2_step({[{Node,[]}|TStack],S}) ->
+    {TStack,[Node|S]};
+
+filter_lense2_step({[],S}) -> {[],S}.
+
+compose_view_funs2(ViewFuns) ->
+    fun(Root,S) ->
+        Stack = [{Root,ViewFuns}],
+        compose_view_funs2_r({Stack,S})
+    end.
+
+compose_view_funs2_r({[],S}) -> {[],S};
+compose_view_funs2_r(R)      -> compose_view_funs2_r(filter_lense2_step(R)).
+
+
+%% ===========================================================================================
+%%
+%%  GENERIC LENSE(Maybe??) IMPLEMENTATION
+%% ===========================================================================================
+
+%%compose_lense2(L1,L2) ->
+%%    fun(Node,T) ->
+%%        T1 = lense2(Node,T),
+%%        fold2(T1)
+%%    end.
+
+
+%% Applicative's sequenceA
+%%fold_lenses({GetSeq,SetSeq}) ->
+%%    {fun(Arg) -> lists:foldl(fun(Fun,Acc) -> Fun(Acc) end,Arg,GetSeq) end,
+%%     fun(Arg) -> lists:foldr(fun(Fun,Acc) -> Fun(Acc) end,Arg,SetSeq) end}.
+
+
+maybe_cons(nil,T) -> T;
+maybe_cons(H,T) -> [H|T].
+
+fold_path_lenses2(ViewFuns) ->
+    fun(Node,T,S) -> lists:foldl(
+        fun(ViewFun,{Level,Acc}) ->
+            lists:foldl(ViewFun,{[],Acc},Level)
+        end,{T,S},ViewFuns)
+    end.
+
+fold2(ViewFun,Acc,[]) -> Acc;
+
+fold2(ViewFun,Acc,[H|T]) ->
+    Acc1 = ViewFun(H,Acc),
+    fold2(T,ViewFun,Acc1).
 
 
 view({FunView,_}) -> FunView.
@@ -138,36 +204,12 @@ default_or_fun(FunView,Default) ->
         end
     end.
 
-%% Applicative's sequenceA
-fold_path_to_lense({GetSeq,SetSeq}) ->
+compose(Lenses) ->
+    GetSeq = [FunView || {FunView,_ } <- Lenses],
+    SetSeq = [FunSet || {_,FunSet} <- Lenses],
     {fun(Arg) -> lists:foldl(fun(Fun,Acc) -> Fun(Acc) end,Arg,GetSeq) end,
      fun(Arg) -> lists:foldr(fun(Fun,Acc) -> Fun(Acc) end,Arg,SetSeq) end}.
 
-map_raw_to_lenses(Path) ->
-    {Lenses,_} = lists:mapfoldl(fun(Seg,PrevSeg) -> {lense(PrevSeg,Seg),Seg} end,root,Path),
-    Defaults = lists:map(fun default/1,Path),
-    lists:zipwith(fun wrap_view_in_nil_check/2,Lenses,Defaults).
-
 wrap_view_in_nil_check({FunView,FunSet},Default) ->
     {default_or_fun(FunView,Default),FunSet}.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
