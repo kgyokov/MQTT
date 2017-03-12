@@ -136,9 +136,8 @@ map_raw_to_next_funs(Path) ->
 
 get_filter_match_iterator1(NextFuns,Root) -> {[],[{Root,NextFuns}]}.
 
-next_filter_node_match([]) -> {[],[]};
+next_filter_node_match([]) -> nil;
 next_filter_node_match([{Node,[]}|TStack]) -> {[Node],TStack};
-next_filter_node_match([{nil,_}|TStack]) -> next_filter_node_match(TStack);
 next_filter_node_match([{Node,[HPath|TPath]}|TStack]) ->
     {NewNodes,Solutions} = HPath(Node),
     Stack1 = [{N,TPath} || N <- NewNodes,N =/= nil] ++ TStack,
@@ -152,10 +151,9 @@ next_filter_node_match([{Node,[HPath|TPath]}|TStack]) ->
 next_filter_match({[{_,Val}|TSol],Stack}) -> {Val,{TSol,Stack}};
 
 next_filter_match({[],Stack}) ->
-    {Solutions,Stack1} = next_filter_node_match(Stack),
-    case Solutions of
-        [] -> nil;
-        [{_,Val}|TSol] -> {Val,{TSol,Stack1}}
+    case next_filter_node_match(Stack) of
+        nil -> nil;
+        {[{_,Val}|TSol],Stack1} -> {Val,{TSol,Stack1}}
     end.
 
 
