@@ -59,30 +59,6 @@ is_better_match({Filter,QoS},{MinFilter,MaxQoS}) ->
         )
     ).
 
-%% normalize(<<Pattern/binary>>) ->
-%%     LPattern = split(Pattern),
-%%     list_to_binary(normalize(LPattern));
-%%
-%% normalize(Ptn) when is_list(Ptn) ->
-%%     RPtn = lists:reverse(Ptn),
-%%     NPtn = lists:reverse(normalize_r(RPtn)),
-%%     case NPtn of
-%%         ["/","#"|T2] -> ["#",T2];
-%%         _           -> NPtn
-%%     end.
-
-normalize_r(RPtn) ->
-    case RPtn of
-        ["#"|T1] -> ["#" | eliminate_w(T1)];
-        _       -> RPtn
-    end.
-
-eliminate_w(["/","+"|T]) ->
-    eliminate_w(T);
-
-eliminate_w(T) ->
-    T.
-
 is_covered_by({Pattern1,QoS1},{Pattern2,QoS2}) ->
     is_covered_by(Pattern1,Pattern2) andalso QoS2 >= QoS1;
 
@@ -100,18 +76,18 @@ is_covered_by(Pattern,Cover)->
     CL = split(Cover),
     seg_is_covered_by(PL,CL).
 
-seg_is_covered_by(_,["/","#"])  -> true;  %%  '/#' definitely covers '_' (everything)
-seg_is_covered_by(_,["#"])      -> true;  %%  '#' definitely covers '_' (everything)
+seg_is_covered_by(_,['/','#'])  -> true;  %%  '/#' definitely covers '_' (everything)
+seg_is_covered_by(_,['#'])      -> true;  %%  '#' definitely covers '_' (everything)
 seg_is_covered_by([],[_|_])     -> false; %% else if the pattern is longer than the potential match, there is no match
-seg_is_covered_by([_|_],[])     -> false; %% else if the patter is shorter than the potential match
+seg_is_covered_by([_|_],[])     -> false; %% else if the pattern is shorter than the potential match
 seg_is_covered_by([],[])        -> true;  %% if the pattern is as long as the potential match, THIS IS a match
 
 %% # > + > char
 seg_is_covered_by([PH|PT],[CH|CT])->
     case {PH,CH} of
-        {_,"#"} -> true;
-        {"#",_} -> false;
-        {_,"+"} -> seg_is_covered_by(PT,CT);
+        {_,'#'} -> true;
+        {'#',_} -> false;
+        {_,'+'} -> seg_is_covered_by(PT,CT);
         {PH,PH} -> seg_is_covered_by(PT,CT);
         _       -> false
     end.
@@ -142,22 +118,29 @@ explode(<<TopicLevels/binary>>)->
     explode(split(TopicLevels));
 
 explode(TopicLevels) when is_list(TopicLevels) ->
-    RawList = [ list_to_binary(lists:reverse(RL)) || RL <- explode([],TopicLevels)],
+    RawList = [topic_list_to_binary(lists:reverse(RL)) || RL <- explode([],TopicLevels)],
     Set = sets:from_list(RawList),
     [<<"#">>|sets:to_list(Set)].
 
-explode(ParentLevels,["/"|T]) ->
+explode(ParentLevels,['/'|T]) ->
     [
-        ["#","/"|ParentLevels] |
-        explode(["/"|ParentLevels],T)
+        ['#','/'|ParentLevels] |
+        explode(['/'|ParentLevels],T)
     ];
 
 explode(ParentLevels,[Level|T]) ->
     explode([Level|ParentLevels],T) ++
-    explode(["+"|ParentLevels],T);
+    explode(['+'|ParentLevels],T);
 
 explode(ParentLevels,[])->
     [ParentLevels].
+
+topic_list_to_binary(TList) -> list_to_binary(lists:map(fun seg_to_binary/1,TList)).
+
+seg_to_binary('/') -> <<"/">>;
+seg_to_binary('+') -> <<"+">>;
+seg_to_binary('#') -> <<"#">>;
+seg_to_binary(<<Txt>>) -> Txt.
 
 %% @doc
 %% Splits a topic pattern based on delimiter
@@ -170,14 +153,14 @@ split(Pattern) ->
 split(Acc,<<>>) ->
     Acc;
 
-split(["#"|_],_Rest) ->
+split(['#'|_],_Rest) ->
     throw({error,invalid_wildcard});
 
 split(Acc,<<"/">>) ->
-    ["/"|Acc];
+    ['/'|Acc];
 
 split(Acc,<<"/",Rest/binary>>) ->
-    Acc1 = ["/"|Acc],
+    Acc1 = ['/'|Acc],
     {NextLevel,Rest1} = consume_level(Rest),
     split([NextLevel|Acc1],Rest1);
 
@@ -189,9 +172,9 @@ split(Acc,<<Rest/binary>>) ->
 consume_level(Binary) ->
     consume_level(<<>>,Binary).
 
-consume_level(<<>>,  <<"#">>)                       ->  {"#",<<>>};
+consume_level(<<>>,  <<"#">>)                       ->  {'#',<<>>};
 consume_level(_,     <<"#",_/binary>>)              ->  throw({error,unexpected_wildcard});
-consume_level(<<>>,  <<"+",Rest/binary>>)           ->  {"+",Rest};
+consume_level(<<>>,  <<"+",Rest/binary>>)           ->  {'+',Rest};
 consume_level(Level, Rest = <<"/",_/binary>>)       ->  {Level,Rest};
 consume_level(Level, <<>>)                          ->  {Level,<<>>};
 consume_level(Level, <<NextCh/utf8,Rest/binary>>)   ->  consume_level(<<Level/binary,NextCh/utf8>>,Rest).
