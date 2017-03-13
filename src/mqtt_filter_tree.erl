@@ -13,11 +13,23 @@
 -export([next_filter_match/1, get_vals_for_filter/2, get_iterator_for_matching_filters/2,
     update_raw_filter/3, mappend/2, new/0]).
 
--define('|'(H,T),maybe_cons(H,T)).
+-export_type([filter_tree/1, filter_tree/0]).
 
--type branches()::any().
--type val()::any().
--type measure()::any().
+-type root(T) :: {root,filter_node(),filter_node()}.
+-type '/'(T) ::  {'/',filter_node(),filter_node()}.
+-type '+'(T) ::  {'+',filter_node(),filter_node()}.
+-type '#'(T) ::  {'/',filter_node(),filter_node()}.
+
+-type children(T) :: root(T)|'/'(T)|'+'(T)|'#'(T).
+-type filter_node(T) :: {children(T),T}.
+-type filter_tree(T) :: root(T).
+-type filter_tree() :: filter_tree(_).
+
+%%-define('|'(H,T),maybe_cons(H,T)).
+
+%%-type branches()::any().
+%%-type val()::any().
+%%-type measure()::any().
 
 %%-type nodet():: {Spec::'#'|'/'()|'+'()|txt(),
 %%                Val::val(),Ms::measure()}.
