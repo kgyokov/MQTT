@@ -23,7 +23,7 @@
     unclaim_filter/2,
     claim_filter/2,
     load/1,
-    get_filter_claim/1]).
+    get_filter_claim/1, foldl/2]).
 
 -ifdef(TEST).
     -export([clear_tables/0,delete_tables/0]).
@@ -146,6 +146,10 @@ load(Filter) ->
             qlc:e(Q)
         end,
     mnesia_do(Fun).
+
+foldl(Fun,Acc) ->
+    MapRecord = fun(#mqtt_sub_reg{filter = Filter,pid = Pid},Acc1) -> Fun({Filter,Pid},Acc1) end,
+    mnesia:foldl(MapRecord,Acc,?SUB_REG_RECORD).
 
 %% @doc
 %% Gets the Pids of the Subs matching the given topic
