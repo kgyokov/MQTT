@@ -20,7 +20,7 @@ start(_StartType, _StartArgs) ->
     init(),
 
     TransOpts = [
-        {port,1884}
+        {port,1883}
     ],
     _SslTransOpts = [
         {port,5556},
