@@ -97,13 +97,10 @@ process_unexpected_disconnect(Pid,Reason) ->
 %%    {stop, Reason :: term()} | ignore).
 init([ReceiverPid,SenderPid,SupPid,Options]) ->
     process_flag(trap_exit,true),
+    link(ReceiverPid),
     {Security,SecConf} = proplists:get_value(security,Options,{gen_auth_default,undefined}),
     ConnectTimeOut = proplists:get_value(connect_timeout,Options,?CONNECT_DEFAULT_TIMEOUT),
-
     set_connect_timer(ConnectTimeOut),
-
-    self() ! async_init,
-
     {ok, #state{
         connect_state = connecting,
         sender_pid =  SenderPid,
@@ -178,10 +175,6 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-
-handle_info(async_init, S = #state{receiver_pid = ReceiverPid}) ->
-    link(ReceiverPid),
-    {noreply,S};
 
 handle_info({'EXIT',ReceiverPid,Reason}, S = #state{receiver_pid = ReceiverPid,
                                                     connect_state = connected}) ->
