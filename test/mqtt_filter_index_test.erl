@@ -22,7 +22,8 @@ setup()->
     mqtt_filter_index:wait_for_tables().
 
 teardown()->
-    mqtt_filter_index:delete_tables().
+    mqtt_filter_index:delete_tables(),
+    application:stop(mnesia).
 
 filter_index_test_() ->
     {foreach,

@@ -23,7 +23,8 @@ setup()->
     ok = mqtt_sub_repo:wait_for_tables().
 
 teardown()->
-    mqtt_sub_repo:delete_tables().
+    mqtt_sub_repo:delete_tables(),
+    application:stop(mnesia).
 
 sub_persistence_test_() ->
         {foreach,

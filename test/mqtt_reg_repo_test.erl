@@ -21,7 +21,8 @@ setup()->
     mqtt_reg_repo:wait_for_tables().
 
 teardown()->
-    mqtt_reg_repo:delete_tables().
+    mqtt_reg_repo:delete_tables(),
+    application:stop(mnesia).
 
 reg_repo_test_() ->
         {foreach,
