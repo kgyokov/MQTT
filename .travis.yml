@@ -1,4 +1,24 @@
 language: erlang
+install:
+  - wget https://s3.amazonaws.com/rebar3/rebar3 && chmod +x rebar3
+script:
+  - ./rebar3 eunit
+  - ./rebar3 as prod tar
 otp_release:
   - 18.3
   - 19.0
+after_success:
+  - mkdir latest
+  - cp ./_build/prod/rel/mqtt/mqtt-*.tar.gz latest/
+deploy:
+    provider: s3
+    access_key_id: "$AWS_IAM_DEPLOY_KEY_ID"
+    secret_access_key: "$AWS_IAM_DEPLOY_SECRET_ACCESS_KEY"
+    bucket: "mqtt.builds"
+    region: us-west-1
+    local_dir: latest
+    skip_cleanup: true
+    key: latest/*
+    on:
+      all_branches: true
+
